@@ -1,0 +1,1 @@
+export const appDiagnosticsSource = "  function diagCard(label,value,extra=''){ return `<div class=\"diag-card ${extra}\"><b>${esc(label)}</b><span>${esc(value ?? '-')}</span></div>`; }\n\n  // Note: Centralizes footer visibility so Preferences can hide items without removing existing status logic.";

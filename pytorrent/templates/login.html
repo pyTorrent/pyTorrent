@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>pyTorrent login</title>
+  <link rel="icon" href="{{ static_url('favicon.svg') }}" type="image/svg+xml">
+  <link rel="shortcut icon" href="{{ static_url('favicon.svg') }}" type="image/svg+xml">
+  <link href="{{ bootstrap_theme_url('default') }}" rel="stylesheet">
+  <link href="{{ frontend_asset_url('fontawesome_css') }}" rel="stylesheet">
+  <link href="{{ frontend_asset_url('font_css') }}" rel="stylesheet">
+  <link href="{{ static_url('styles.css') }}" rel="stylesheet">
+</head>
+<body class="auth-page">
+  <main class="initial-loader-card auth-card">
+    <div class="initial-loader-brand"><i class="fa-solid fa-robot"></i> pyTorrent</div>
+    <div class="auth-lock" aria-hidden="true"><i class="fa-solid fa-lock"></i></div>
+    <h1 class="initial-loader-title">Sign in</h1>
+    {% if external_provider %}
+    <p class="initial-loader-text">External authentication is enabled through {{ external_provider }}.</p>
+    {% if error %}<div class="alert alert-warning auth-alert">{{ error }}</div>{% endif %}
+    <div class="auth-provider-note">
+      pyTorrent expects trusted reverse-proxy identity headers. If you are already signed in, check provider headers and user mapping.
+    </div>
+    {% else %}
+    <p class="initial-loader-text">Authentication is enabled for this pyTorrent instance.</p>
+    {% if error %}<div class="alert alert-danger auth-alert">{{ error }}</div>{% endif %}
+    <form class="auth-form" method="post">
+      <label class="form-label" for="username">User</label>
+      <input id="username" class="form-control" name="username" autocomplete="username" autofocus>
+      <label class="form-label" for="password">Password</label>
+      <input id="password" class="form-control" name="password" type="password" autocomplete="current-password">
+      <button class="btn btn-primary w-100" type="submit"><i class="fa-solid fa-right-to-bracket"></i> Log in</button>
+    </form>
+    {% endif %}
+  </main>
+</body>
+</html>

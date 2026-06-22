@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtualenv
+venv/
+.env
+.venv
+
+# App data
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Tests / cache
+.pytest_cache/
+.mypy_cache/
+
+# Build
+dist/
+build/
+*.egg-info/
+
+storage/*
+*.zip
+
+*.sqlite3-shm
+*.sqlite3
+data/*
+!data/tracker_favicons
+data/tracker_favicons/*.ico
+data/logs/*
+!data/logs/
+!data/logs/README.md
+
+todo.txt
+!pytorrent/static/libs/pytorrent-themes/
+!pytorrent/static/libs/pytorrent-themes/**
+*/static/libs/
+smart_queue_scoring_todo.md
+data/mock_rtorrent_state.json

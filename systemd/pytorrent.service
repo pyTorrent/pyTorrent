@@ -1,0 +1,25 @@
+[Unit]
+Description=pyTorrent Web UI
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+#User=root
+#Group=root
+User=pytorrent
+Group=pytorrent
+WorkingDirectory=/opt/pyTorrent
+Environment="PYTHONUNBUFFERED=1"
+EnvironmentFile=/opt/pyTorrent/.env
+# Note: threaded Gunicorn preserves Flask-SocketIO background tasks without running Werkzeug in production.
+ExecStart=/opt/pyTorrent/.venv/bin/gunicorn -c /opt/pyTorrent/gunicorn.conf.py --worker-class gthread --workers 1 --threads 32 --bind ${PYTORRENT_HOST}:${PYTORRENT_PORT} wsgi:app
+Restart=always
+RestartSec=3
+KillSignal=SIGINT
+TimeoutStopSec=20
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

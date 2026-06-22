@@ -1,0 +1,1 @@
+export const mobileSelectEventsSource = "  document.addEventListener('change',e=>{ const sort=e.target.closest('#mobileSortSelect'); if(sort){ setMobileSortValue(sort.value); return; } const sel=e.target.closest('#mobileFilterSelect'); if(!sel) return; setMobileFilterValue(sel.value); });\n  ";
