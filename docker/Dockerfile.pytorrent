@@ -1,0 +1,59 @@
+# syntax=docker/dockerfile:1
+# Note: Build pyTorrent on Alpine by default. Set PYTORRENT_BASE_IMAGE=python:3.14-slim for Debian slim.
+ARG PYTORRENT_BASE_IMAGE=python:3.14-alpine
+FROM ${PYTORRENT_BASE_IMAGE}
+
+ARG PYTORRENT_UID=1000
+ARG PYTORRENT_GID=1000
+ARG PYTORRENT_HOME=/app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTORRENT_HOST=0.0.0.0 \
+    PYTORRENT_PORT=8090 \
+    PYTORRENT_DB_PATH=/data/pytorrent.sqlite3 \
+    PYTORRENT_LOG_DIR=/data/logs \
+    PYTORRENT_GEOIP_DB=/data/GeoLite2-City.mmdb \
+    PYTORRENT_USE_OFFLINE_LIBS=true \
+    PYTORRENT_LOG_ENABLE=true \
+    PYTORRENT_AUTH_ENABLE=false \
+    PYTORRENT_CONFIGURE_PROFILE=true \
+    PYTORRENT_BASE_URL=http://127.0.0.1:8090 \
+    PYTORRENT_RTORRENT_PROFILE_NAME="Local rTorrent" \
+    PYTORRENT_RTORRENT_SCGI_URL=scgi://rtorrent:5000 \
+    PYTORRENT_RTORRENT_TIMEOUT=10 \
+    PYTORRENT_API_WAIT_SECONDS=90
+
+WORKDIR ${PYTORRENT_HOME}
+
+RUN set -eux; \
+    if command -v apk >/dev/null 2>&1; then \
+        apk add --no-cache bash ca-certificates curl gcc g++ libffi-dev linux-headers musl-dev su-exec; \
+        addgroup -g "${PYTORRENT_GID}" -S pytorrent; \
+        adduser -u "${PYTORRENT_UID}" -S -D -H -G pytorrent pytorrent; \
+    else \
+        apt-get update; \
+        apt-get install -y --no-install-recommends bash ca-certificates curl gcc g++ gosu; \
+        rm -rf /var/lib/apt/lists/*; \
+        groupadd --gid "${PYTORRENT_GID}" --system pytorrent; \
+        useradd --uid "${PYTORRENT_UID}" --gid pytorrent --system --no-create-home --home-dir "${PYTORRENT_HOME}" pytorrent; \
+    fi
+
+COPY requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+# Note: The application validates offline frontend assets during startup when
+# PYTORRENT_USE_OFFLINE_LIBS=true. The Linux installers download these assets,
+# so the container image must do the same during build.
+RUN python scripts/download_frontend_libs.py
+COPY docker/scripts/entrypoint-pytorrent.sh /usr/local/bin/entrypoint-pytorrent
+COPY docker/scripts/configure-pytorrent-profile.py /usr/local/bin/configure-pytorrent-profile
+RUN chmod +x /usr/local/bin/entrypoint-pytorrent /usr/local/bin/configure-pytorrent-profile \
+    && mkdir -p /data/logs \
+    && chown -R pytorrent:pytorrent /app /data
+
+VOLUME ["/data"]
+EXPOSE 8090
+ENTRYPOINT ["/usr/local/bin/entrypoint-pytorrent"]
+CMD ["sh", "-c", "exec gunicorn --worker-class gthread --workers 1 --threads ${PYTORRENT_GUNICORN_THREADS:-32} --bind ${PYTORRENT_HOST:-0.0.0.0}:${PYTORRENT_PORT:-8090} --access-logfile - --error-logfile - wsgi:app"]

@@ -499,6 +499,27 @@ systemd/                   systemd service files
 data/                      Runtime data directory
 ```
 
+## Docker / Podman
+
+Container deployment files are available in [`docker/`](docker/). They include:
+
+- pyTorrent-only mode for an existing rTorrent SCGI endpoint.
+- Full pyTorrent + rTorrent stack on a private container network.
+- Alpine-first images with optional Debian slim variants.
+- rTorrent stable-source build using upstream `v0.16.11`, plus optional Alpine/Debian package modes.
+
+Quick full-stack start:
+
+```bash
+cd docker && cp -n .env.stack.example .env && docker compose --env-file .env -f docker-compose.stack.yml up -d --build
+```
+
+Quick pyTorrent-only start:
+
+```bash
+cd docker && cp -n .env.pytorrent.example .env && docker compose --env-file .env -f docker-compose.pytorrent.yml up -d --build
+```
+
 ## License
 
 AGPL-3
