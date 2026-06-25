@@ -22,6 +22,7 @@ def operation_logs_list():
         event_type=str(request.args.get("type") or "").strip(),
         q=str(request.args.get("q") or "").strip(),
         hide_jobs=str(request.args.get("hide_jobs") or "").lower() in {"1", "true", "yes", "on"},
+        hide_automations=str(request.args.get("hide_automations") or "").lower() in {"1", "true", "yes", "on"},
     )
     data["settings"] = operation_logs.get_settings(int(profile["id"]))
     if str(request.args.get("stats") or "").lower() in {"1", "true", "yes", "on"}:

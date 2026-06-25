@@ -4752,7 +4752,8 @@ body,
 .operation-log-toolbar,
 .operation-log-toolbar-main,
 .operation-log-settings-grid,
-.operation-log-view-settings {
+.operation-log-default-filter-row,
+.operation-log-switches {
   align-items: flex-end;
   display: flex;
   flex-wrap: wrap;
@@ -4777,6 +4778,7 @@ body,
 }
 
 .operation-log-hide-jobs,
+.operation-log-hide-automations,
 .operation-log-show-details {
   align-items: center;
   margin-bottom: 0;
@@ -4784,11 +4786,34 @@ body,
 }
 
 .operation-log-view-settings {
-  align-items: center;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(240px, 1fr) minmax(280px, 1.4fr);
 }
 
-.operation-log-view-settings > div:first-child {
+.operation-log-view-card {
+  border: 1px solid var(--bs-border-color-translucent);
+  border-radius: 0.75rem;
+  padding: 0.85rem;
+}
+
+.operation-log-view-card h6 {
+  font-size: 0.9rem;
+  font-weight: 700;
+  margin: 0 0 0.2rem;
+}
+
+.operation-log-default-filter-row {
+  align-items: flex-end;
+}
+
+.operation-log-default-filter-row .form-field {
   flex: 1 1 220px;
+}
+
+.operation-log-switches {
+  align-items: flex-start;
+  flex-direction: column;
 }
 
 .operation-log-view-settings small {
@@ -4955,7 +4980,8 @@ body,
   .operation-log-toolbar,
   .operation-log-toolbar-main,
   .operation-log-toolbar-toggle,
-  .operation-log-view-settings {
+  .operation-log-default-filter-row,
+  .operation-log-switches {
     align-items: stretch;
     flex-direction: column;
   }
@@ -4965,9 +4991,13 @@ body,
     margin-left: 0;
   }
 
+  .operation-log-view-settings {
+    grid-template-columns: 1fr;
+  }
+
   .operation-log-toolbar-main > .btn,
   .operation-log-settings-actions > .btn,
-  .operation-log-view-settings > .btn {
+  .operation-log-default-filter-row > .btn {
     width: 100%;
   }
 }

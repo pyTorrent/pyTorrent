@@ -402,7 +402,7 @@ def record_cache_diff(profile_id: int, added: list[dict], removed: list[str], up
             record(profile_id, "torrent_completed", f"Torrent completed: {old.get('name') or h}", source="poller", torrent_hash=h, torrent_name=old.get("name"), details={"ratio": patch.get("ratio", old.get("ratio")), "size": old.get("size"), "path": old.get("path"), "label": old.get("label"), "tracker": old.get("tracker")})
 
 
-def list_logs(profile_id: int, *, limit: int = 200, offset: int = 0, event_type: str = "", q: str = "", hide_jobs: bool = False) -> dict:
+def list_logs(profile_id: int, *, limit: int = 200, offset: int = 0, event_type: str = "", q: str = "", hide_jobs: bool = False, hide_automations: bool = False) -> dict:
     """Return operation logs with searchable messages, torrents, actions and detail JSON."""
     limit = max(1, min(int(limit or 200), 1000))
     offset = max(0, int(offset or 0))
@@ -413,6 +413,9 @@ def list_logs(profile_id: int, *, limit: int = 200, offset: int = 0, event_type:
         params.append(event_type)
     if hide_jobs:
         where.append("COALESCE(source, '') NOT IN ('job', 'worker') AND event_type NOT LIKE 'job_%'")
+    if hide_automations:
+        # Note: Keeps automatic background automation entries out of the default log view without deleting them.
+        where.append("COALESCE(action, '') != 'background_automation' AND event_type NOT LIKE 'background_automation_%' AND COALESCE(details_json, '') NOT LIKE '%\"source\": \"automation\"%'")
     if q:
         where.append("(message LIKE ? OR torrent_name LIKE ? OR torrent_hash LIKE ? OR action LIKE ? OR details_json LIKE ?)")
         like = f"%{q}%"
