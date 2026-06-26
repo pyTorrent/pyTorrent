@@ -47,7 +47,10 @@ COPY . .
 # PYTORRENT_USE_OFFLINE_LIBS=true. The Linux installers download these assets,
 # so the container image must do the same during build.
 RUN python scripts/download_frontend_libs.py
-RUN bash scripts/download_geoip.sh
+RUN bash scripts/download_geoip.sh \
+    && mkdir -p /data \
+    && cp data/GeoLite2-City.mmdb /data/GeoLite2-City.mmdb
+
 COPY docker/scripts/entrypoint-pytorrent.sh /usr/local/bin/entrypoint-pytorrent
 COPY docker/scripts/configure-pytorrent-profile.py /usr/local/bin/configure-pytorrent-profile
 RUN chmod +x /usr/local/bin/entrypoint-pytorrent /usr/local/bin/configure-pytorrent-profile \

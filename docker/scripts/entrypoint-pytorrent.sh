@@ -12,6 +12,11 @@ run_as_app_user() {
 }
 
 mkdir -p /data/logs
+
+if [[ ! -f /data/GeoLite2-City.mmdb && -f /app/data/GeoLite2-City.mmdb ]]; then
+    cp /app/data/GeoLite2-City.mmdb /data/GeoLite2-City.mmdb
+fi
+
 chown -R pytorrent:pytorrent /data
 
 if [[ ! -f /app/.env && -f /app/.env.example ]]; then

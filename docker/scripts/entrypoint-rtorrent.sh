@@ -41,4 +41,17 @@ if [[ -f /usr/local/share/rtorrent-package-warning.txt ]]; then
     cat /usr/local/share/rtorrent-package-warning.txt >&2
 fi
 
+if [ -f "${RTORRENT_SESSION_DIR}/rtorrent.lock" ]; then
+    rm -f "${RTORRENT_SESSION_DIR}/rtorrent.lock"
+fi
+
+# new rtorrent need
+RTORRENT_VERSION="$(rtorrent -h 2>&1 | head -n1 || true)"
+
+if echo "$RTORRENT_VERSION" | grep -Eq '0\.1[0-9]\.|0\.16\.'; then
+    if ! grep -q '^network.bind_address.set' /config/rtorrent.rc; then
+        printf '\n# Force IPv4 listen for newer rTorrent.\nnetwork.bind_address.set = 0.0.0.0\n' >> /config/rtorrent.rc
+    fi
+fi
+
 run_as_rtorrent_user "$@"
