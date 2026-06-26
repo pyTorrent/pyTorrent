@@ -45,10 +45,12 @@ if [ -f "${RTORRENT_SESSION_DIR}/rtorrent.lock" ]; then
     rm -f "${RTORRENT_SESSION_DIR}/rtorrent.lock"
 fi
 
-# new rtorrent need
+# Newer rTorrent may try IPv6 listen; force IPv4 bind only.
 RTORRENT_VERSION="$(rtorrent -h 2>&1 | head -n1 || true)"
 
 if echo "$RTORRENT_VERSION" | grep -Eq '0\.1[0-9]\.|0\.16\.'; then
+    sed -i '/^network.local_address.set[[:space:]]*=/d' /config/rtorrent.rc
+
     if ! grep -q '^network.bind_address.set' /config/rtorrent.rc; then
         printf '\n# Force IPv4 listen for newer rTorrent.\nnetwork.bind_address.set = 0.0.0.0\n' >> /config/rtorrent.rc
     fi
