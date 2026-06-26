@@ -12,7 +12,7 @@ services:
     env_file:
       - .env
     environment:
-      PYTORRENT_RTORRENT_SCGI_URL: ${PYTORRENT_RTORRENT_SCGI_URL:-scgi://host.docker.internal:5000}
+      PYTORRENT_RTORRENT_SCGI_URL: ${PYTORRENT_RTORRENT_SCGI_URL:-scgi://127.0.0.1:5000}
     ports:
       - "${PYTORRENT_HTTP_PORT:-8090}:8090"
     volumes:

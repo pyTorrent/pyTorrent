@@ -46,3 +46,6 @@ todo.txt
 */static/libs/
 smart_queue_scoring_todo.md
 data/mock_rtorrent_state.json
+docker/rtorrent-data/*/*
+!docker/rtorrent-data/downloads/.downloads_dir
+!docker/rtorrent-data/watch/.watch_dir

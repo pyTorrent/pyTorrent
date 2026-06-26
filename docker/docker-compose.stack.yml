@@ -21,8 +21,8 @@ services:
       - rtorrent-session:/session
       - rtorrent-config:/config
       - rtorrent-logs:/logs
-      - ${RTORRENT_DOWNLOADS_PATH:-./data/downloads}:/downloads
-      - ${RTORRENT_WATCH_PATH:-./data/watch}:/watch
+      - ${RTORRENT_DOWNLOADS_PATH:-./rtorrent-data/downloads}:/downloads
+      - ${RTORRENT_WATCH_PATH:-./rtorrent-data/watch}:/watch
     networks:
       pytorrent-net:
         ipv4_address: ${RTORRENT_IPV4:-10.89.90.10}

@@ -21,8 +21,8 @@ This directory contains isolated container files. Existing application files and
 
 | Item | Note |
 | --- | --- |
-| `PYTORRENT_IMAGE=localhost/pytorrent:local` | Keeps the pyTorrent image local and avoids Podman short-name registry lookup. |
-| `RTORRENT_IMAGE=localhost/pytorrent-rtorrent:local` | Keeps the rTorrent image local and lets copied `.env.stack.example` start without manual image edits. |
+| `PYTORRENT_IMAGE=pyTorrent/pytorrent:local` | Keeps the pyTorrent image local and avoids Podman short-name registry lookup. |
+| `RTORRENT_IMAGE=pyTorrent/pytorrent-rtorrent:local` | Keeps the rTorrent image local and lets copied `.env.stack.example` start without manual image edits. |
 
 The example `.env` files are ready to copy. For the full stack, `cp .env.stack.example .env` is enough before running compose.
 
@@ -98,8 +98,8 @@ Default full-stack behavior:
 | rTorrent | Debian package | Uses the selected distribution package. No source compilation. |
 | SCGI | `scgi://rtorrent:5000` | Private Docker network only. |
 | BitTorrent port | `51300/tcp` and `51300/udp` | Published to the host. |
-| Downloads | `./data/downloads` | Host bind mount. |
-| Watch dir | `./data/watch` | Drop `.torrent` files here. |
+| Downloads | `./rtorrent-data/downloads` | Host bind mount. |
+| Watch dir | `./rtorrent/watch` | Drop `.torrent` files here. |
 
 ## rTorrent image variants
 
