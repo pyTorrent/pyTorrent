@@ -879,8 +879,22 @@ def transfer_profile(source_profile: dict, target_profile: dict, torrent_hashes:
             "move_data_requested": bool(payload.get("move_data_requested")),
             "move_data_downgraded": bool(payload.get("move_data_downgraded")),
         }
-        data, exported = _read_exported_torrent_bytes(source_profile, h)
+        try:
+            data, exported = _read_exported_torrent_bytes(source_profile, h)
+        except RuntimeError as export_exc:
+            if "Cannot find torrent source file in rTorrent" not in str(export_exc):
+                raise
+            item["ok"] = False
+            item["error"] = str(export_exc)
+            item["skipped"] = "missing_torrent_metadata"
+            item["hint"] = "rTorrent did not expose a readable .torrent source and could not save one from its session."
+            results.append(item)
+            mark_done(h, results)
+            continue
         item["exported_from"] = exported.get("path")
+        if exported.get("session_saved_by"):
+            # Note: This identifies transfers recovered from rTorrent session state rather than an original watch/source file.
+            item["metadata_recovered_by"] = exported.get("session_saved_by")
         limit = validate_torrent_upload_size(target_profile, data, False, target_path, "")
         if not limit.get("ok"):
             raise RuntimeError(f"Target profile XML-RPC limit is too small for {h}: {limit.get('request_h')} > {limit.get('limit_h')}")
@@ -936,7 +950,9 @@ def transfer_profile(source_profile: dict, target_profile: dict, torrent_hashes:
         item["post_action"] = post_action
         results.append(item)
         mark_done(h, results)
-    return {"ok": True, "count": len(torrent_hashes), "move_data": move_data, "target_profile_id": int(target_profile.get("id") or 0), "target_path": target_path, "label": label_value, "post_action": post_action, "results": results}
+    errors = [item for item in results if item.get("error")]
+    moved_count = len([item for item in results if not item.get("error")])
+    return {"ok": True, "count": moved_count, "requested_count": len(torrent_hashes), "move_data": move_data, "target_profile_id": int(target_profile.get("id") or 0), "target_path": target_path, "label": label_value, "post_action": post_action, "results": results, "errors": errors}
 
 def action(profile: dict, torrent_hashes: list[str], name: str, payload: dict | None = None, checkpoint=None, resume_state: dict | None = None) -> dict:
     payload = payload or {}

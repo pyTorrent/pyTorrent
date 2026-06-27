@@ -685,6 +685,7 @@ def _torrent_source_file_candidates(c: ScgiRtorrentClient, torrent_hash: str) ->
     for h in dict.fromkeys(hash_values):
         if session_path:
             candidates.append(_remote_join(session_path, f"{h}.torrent"))
+            candidates.append(_remote_join(session_path, h))
         candidates.append(f"/tmp/{h}.torrent")
     result = []
     for item in candidates:
@@ -701,6 +702,17 @@ def _torrent_source_file(c: ScgiRtorrentClient, torrent_hash: str) -> str:
     return ""
 
 
+def _save_torrent_session_source(c: ScgiRtorrentClient, torrent_hash: str) -> list[str]:
+    saved_methods: list[str] = []
+    for method in ("d.save_full_session", "d.save_resume"):
+        try:
+            c.call(method, torrent_hash)
+            saved_methods.append(method)
+        except Exception:
+            continue
+    return saved_methods
+
+
 def export_torrent_file(profile: dict, torrent_hash: str) -> dict:
     c = client_for(profile)
     name = str(c.call("d.name", torrent_hash) or torrent_hash).strip() or torrent_hash
@@ -709,6 +721,12 @@ def export_torrent_file(profile: dict, torrent_hash: str) -> dict:
     if source:
         # Note: Stream the existing .torrent source directly instead of copying it to a temporary staged file first.
         return {"path": source, "download_name": filename, "local": False}
+    saved_methods = _save_torrent_session_source(c, torrent_hash)
+    if saved_methods:
+        # Note: Metadata-only profile transfers can recover missing tied .torrent files by asking rTorrent to persist its in-memory session first.
+        source = _torrent_source_file(c, torrent_hash)
+        if source:
+            return {"path": source, "download_name": filename, "local": False, "session_saved_by": saved_methods}
     raw = _torrent_raw_from_method(c, torrent_hash)
     if raw:
         target = LocalPath(download_tmp_dir()) / f"pytorrent-download-{uuid.uuid4().hex}.torrent"
