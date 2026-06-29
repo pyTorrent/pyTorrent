@@ -164,14 +164,18 @@
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title"><i class="fa-solid fa-server"></i> Choose rTorrent</h5>
-        <button class="btn-close" data-bs-dismiss="modal"></button>
+        <div class="profile-picker-header-actions">
+          <button id="profilePickerRefreshBtn" class="btn btn-sm btn-outline-primary" type="button">
+            <i class="fa-solid fa-rotate"></i> Refresh
+          </button>
+          <button class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
       </div>
       <div class="modal-body">
         <!-- Note: Profile selection is click-to-switch; the old Use selected button is no longer needed. -->
         <div id="profileChoiceList" class="profile-choice-list">
-          {% for p in profiles %}<button class="profile-choice-card{% if active_profile and active_profile.id == p.id %} active{% endif %}" type="button" data-profile-id="{{ p.id }}"><span><i class="fa-solid fa-server"></i><b>{{ p.name }}</b></span><small>#{{ p.id }}{% if active_profile and active_profile.id == p.id %} · active{% endif %}</small></button>{% endfor %}
+          {% for p in profiles %}<button class="profile-choice-card{% if active_profile and active_profile.id == p.id %} active{% endif %}" type="button" data-profile-id="{{ p.id }}"><div class="profile-choice-main"><span><i class="fa-solid fa-server"></i><b>{{ p.name }}</b></span><small>#{{ p.id }}{% if active_profile and active_profile.id == p.id %} · active{% endif %}</small></div><div class="profile-choice-version">rTorrent version: <b>not loaded yet</b></div></button>{% endfor %}
         </div>
-        <div class="form-text">Click a profile to switch immediately. Cached profile data is saved only when that profile is opened.</div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal" type="button">Cancel</button>

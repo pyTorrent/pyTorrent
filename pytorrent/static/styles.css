@@ -601,15 +601,19 @@ body.resizing-columns {
   vertical-align: middle;
   color: var(--bs-secondary-color);
 }
+/* Note: The details panel uses flex height so optional tab toolbars cannot clip long tables. */
 .details {
-  grid-row: 3;
+  background: rgba(var(--bs-secondary-bg-rgb), 0.78);
+  display: flex;
+  flex-direction: column;
   grid-column: 1;
+  grid-row: 3;
   min-height: 0;
   overflow: hidden;
-  background: rgba(var(--bs-secondary-bg-rgb), 0.78);
 }
 .detail-pane {
-  height: calc(var(--detail-panel-height, 255px) - 45px);
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
   padding: 0.5rem 0.65rem;
 }
@@ -5837,6 +5841,18 @@ body.compact-torrent-list .mobile-progress .torrent-progress {
 
 
 /* Profile picker and profile transfer cards. */
+
+.profile-picker-header-actions {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.profile-picker-header-actions .btn-close {
+  margin-left: 0.25rem;
+}
+
 .profile-choice-list,
 .profile-transfer-list {
   display: grid;
@@ -5942,6 +5958,19 @@ body.compact-torrent-list .mobile-progress .torrent-progress {
   display: grid;
   gap: 0.25rem;
   min-width: 0;
+}
+
+
+.profile-choice-version {
+  color: var(--bs-secondary-color);
+  font-size: 0.78rem;
+  line-height: 1.25;
+}
+
+.profile-choice-version span {
+  color: var(--bs-tertiary-color);
+  display: inline;
+  margin-left: 0.35rem;
 }
 
 .profile-choice-stats {
