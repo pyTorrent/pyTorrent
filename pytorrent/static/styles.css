@@ -173,9 +173,6 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.profile-select {
-  width: 100%;
-}
 .search {
   width: min(38vw, 420px);
   min-width: clamp(160px, 20vw, 220px);
@@ -2274,7 +2271,6 @@ body.mobile-mode .mobile-filter-bar {
   }
 }
 
-
 .tracker-toolbar,
 .tracker-actions {
   display: flex;
@@ -2446,9 +2442,6 @@ body.mobile-mode .mobile-filter-bar {
     max-width: 230px;
   }
 
-  .tracker-message {
-    max-width: 220px;
-  }
 }
 .text-compact {
   display: inline-block;
@@ -3051,7 +3044,6 @@ body.mobile-mode .mobile-filter-bar {
   outline: 0;
 }
 
-
 .jobs-toolbar,
 .jobs-toolbar-actions,
 .jobs-toolbar-toggle {
@@ -3605,15 +3597,6 @@ body.mobile-mode .mobile-filter-bar {
   display: block;
 }
 
-.planner-history-item {
-  background: rgba(var(--bs-secondary-bg-rgb), 0.45);
-  border: 1px solid var(--bs-border-color);
-  border-radius: 999px;
-  display: inline-block;
-  margin: 0.15rem 0.35rem 0.15rem 0;
-  padding: 0.15rem 0.4rem;
-}
-
 .status-planner {
   align-items: center;
   background: transparent;
@@ -4126,7 +4109,6 @@ body,
   margin-top: 0.15rem;
 }
 
-
 @media (max-width: 576px) {
   .api-token-row {
     align-items: stretch;
@@ -4138,8 +4120,7 @@ body,
   z-index: 1080;
 }
 
-#pathModal + .modal-backdrop,
-.modal-backdrop.path-picker-backdrop {
+#pathModal + .modal-backdrop {
   z-index: 1075;
 }
 
@@ -4358,18 +4339,9 @@ body,
     grid-template-columns: 1fr;
   }
 
-
   #toolsModal .tools-nav {
     grid-template-columns: 1fr;
   }
-}
-
-/* Column manager actions stay separate from the card grid for predictable spacing. */
-.column-manager-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
 }
 
 /* Note: Preference switches use a two-column layout so labels and descriptions never overlap the toggle control. */
@@ -4623,7 +4595,6 @@ body,
   }
 }
 
-
 /* Smart Queue exception picker */
 .smart-exclusion-toolbar {
   align-items: center;
@@ -4745,7 +4716,6 @@ body,
   overflow-wrap: anywhere;
   white-space: normal;
 }
-
 
 /* Operation logs */
 .logs-tools-layout {
@@ -5139,7 +5109,6 @@ body,
   }
 }
 
-
 .file-row-actions {
   align-items: center;
   display: inline-flex;
@@ -5390,12 +5359,6 @@ body,
   margin-top: 0.15rem;
 }
 
-.media-info-download-row {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 1rem;
-}
-
 @media (max-width: 560px) {
   .media-info-pdf-empty {
     grid-template-columns: 1fr;
@@ -5555,8 +5518,6 @@ body,
   padding: 0;
 }
 
-.mobile-details-peer,
-.mobile-details-file,
 .mobile-details-tracker {
   align-items: flex-start;
   background: rgba(var(--bs-body-bg-rgb), 0.65);
@@ -5569,22 +5530,10 @@ body,
   padding: 0.55rem;
 }
 
-.mobile-details-peer div,
-.mobile-details-file div {
-  display: grid;
-  gap: 0.12rem;
-  min-width: 0;
-}
-
-.mobile-details-peer b,
-.mobile-details-file b,
 .mobile-details-tracker b {
   overflow-wrap: anywhere;
 }
 
-.mobile-details-peer span,
-.mobile-details-peer small,
-.mobile-details-file span,
 .mobile-details-tracker span {
   color: var(--bs-secondary-color);
   font-size: 0.78rem;
@@ -5694,7 +5643,6 @@ body.compact-torrent-list .mobile-progress .torrent-progress {
   opacity: 0.85;
   pointer-events: none;
 }
-
 
 /* Note: Mobile sort uses Font Awesome icons instead of text arrows to avoid broken glyph spacing. */
 .mobile-sort-cycle-label {
@@ -5817,7 +5765,6 @@ body.compact-torrent-list .mobile-progress .torrent-progress {
   gap: 0.45rem 0.85rem;
 }
 
-
 .profile-backup-icon {
   align-items: center;
   color: var(--bs-info);
@@ -5838,7 +5785,6 @@ body.compact-torrent-list .mobile-progress .torrent-progress {
   font-size: 0.72rem;
   font-weight: 600;
 }
-
 
 /* Profile picker and profile transfer cards. */
 
@@ -5953,13 +5899,11 @@ body.compact-torrent-list .mobile-progress .torrent-progress {
   min-height: 1.2rem;
 }
 
-
 .profile-choice-main {
   display: grid;
   gap: 0.25rem;
   min-width: 0;
 }
-
 
 .profile-choice-version {
   color: var(--bs-secondary-color);
@@ -6015,3 +5959,381 @@ body.compact-torrent-list .mobile-progress .torrent-progress {
   }
 }
 
+/* Smart Queue dry-run simulation */
+.smart-simulation-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.smart-simulation-controls {
+  align-items: end;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  margin-bottom: 1rem;
+}
+
+.smart-simulation-controls .smart-input-field small {
+  display: none;
+}
+
+.smart-simulation-inline {
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: minmax(0, 1fr) 76px;
+}
+
+.smart-simulation-inline .form-select {
+  min-width: 76px;
+}
+
+.smart-simulation-summary,
+.smart-simulation-timeline {
+  margin-bottom: 0.9rem;
+}
+
+.smart-simulation-cards,
+.smart-simulation-details,
+.smart-simulation-point-list,
+.smart-simulation-point-card > div:nth-of-type(2) {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.smart-simulation-cards {
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+}
+
+.smart-simulation-card,
+.smart-simulation-block,
+.smart-simulation-notes,
+.smart-simulation-point,
+.smart-simulation-point-card {
+  background: var(--card-bg-soft);
+  border: 1px solid var(--border-color);
+  border-radius: 0.85rem;
+}
+
+.smart-simulation-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  padding: 0.6rem 0.7rem;
+}
+
+.smart-simulation-card span,
+.smart-simulation-card small,
+.smart-simulation-horizon,
+.smart-simulation-point small,
+.smart-simulation-point-card small,
+.smart-simulation-point-card p,
+.smart-simulation-toggle {
+  color: var(--muted-color);
+}
+
+.smart-simulation-card span,
+.smart-simulation-card small {
+  font-size: 0.72rem;
+  line-height: 1.2;
+}
+
+.smart-simulation-card b {
+  font-size: 0.98rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.smart-simulation-timeline-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+  margin: 0 0 0.55rem;
+}
+
+.smart-simulation-timeline-head > div {
+  display: grid;
+  gap: 0.05rem;
+}
+
+.smart-simulation-timeline-head small,
+.smart-simulation-horizon {
+  font-size: 0.75rem;
+}
+
+.smart-simulation-timeline-head small {
+  color: var(--muted-color);
+  font-weight: 500;
+}
+
+.smart-simulation-horizon {
+  font-weight: 600;
+}
+
+.smart-simulation-point-list {
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+}
+
+.smart-simulation-point {
+  align-items: start;
+  color: var(--bs-body-color);
+  cursor: pointer;
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+  padding: 0.55rem 0.65rem;
+  text-align: left;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.smart-simulation-point:hover,
+.smart-simulation-point.is-active {
+  border-color: var(--bs-primary);
+  box-shadow: 0 0.45rem 1rem rgba(0, 0, 0, 0.12);
+  transform: translateY(-1px);
+}
+
+.smart-simulation-point:focus-visible {
+  outline: 2px solid var(--bs-primary);
+  outline-offset: 0.15rem;
+}
+
+.smart-simulation-point span,
+.smart-simulation-point b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.smart-simulation-point span {
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.smart-simulation-point small {
+  font-size: 0.68rem;
+  line-height: 1.15;
+}
+
+.smart-simulation-point-progress {
+  background: rgba(var(--bs-primary-rgb), 0.12);
+  border-radius: 999px;
+  display: block;
+  height: 0.28rem;
+  overflow: hidden;
+  width: 100%;
+}
+
+.smart-simulation-point-progress span {
+  background: var(--bs-primary);
+  display: block;
+  height: 100%;
+  min-width: 0.16rem;
+}
+
+.smart-simulation-point-progress.is-empty {
+  background: var(--border-color);
+}
+
+.smart-simulation-point-progress.is-empty span {
+  display: none;
+}
+
+.smart-simulation-point b {
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.smart-simulation-point-detail {
+  margin-top: 0.6rem;
+}
+
+.smart-simulation-point-card {
+  padding: 0.75rem;
+}
+
+.smart-simulation-point-card > div:first-child,
+.smart-simulation-point-actions {
+  align-items: center;
+  display: flex;
+  gap: 0.45rem;
+  justify-content: space-between;
+}
+
+.smart-simulation-point-card strong {
+  font-size: 0.95rem;
+}
+
+.smart-simulation-point-card p {
+  font-size: 0.78rem;
+  margin: 0.25rem 0 0.55rem;
+}
+
+.smart-simulation-point-card > div:nth-of-type(2) {
+  grid-template-columns: repeat(auto-fit, minmax(94px, 1fr));
+}
+
+.smart-simulation-point-card > div:nth-of-type(2) span {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 0.65rem;
+  display: grid;
+  gap: 0.1rem;
+  padding: 0.45rem 0.55rem;
+}
+
+.smart-simulation-point-card > div:nth-of-type(2) b {
+  font-size: 0.84rem;
+}
+
+.smart-simulation-point-actions {
+  border-top: 1px solid var(--border-color);
+  margin-top: 0.65rem;
+  padding-top: 0.55rem;
+}
+
+.smart-simulation-point-actions span {
+  color: var(--muted-color);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.smart-simulation-block {
+  overflow: hidden;
+}
+
+.smart-simulation-block summary {
+  align-items: center;
+  cursor: pointer;
+  display: grid;
+  font-size: 0.86rem;
+  font-weight: 700;
+  gap: 0.45rem;
+  grid-template-columns: minmax(9rem, 1fr) minmax(8rem, auto) auto auto auto;
+  list-style: none;
+  padding: 0.58rem 0.7rem;
+}
+
+.smart-simulation-block summary::-webkit-details-marker {
+  display: none;
+}
+
+.smart-simulation-block summary::after {
+  color: var(--muted-color);
+  content: "\f078";
+  font-family: "Font Awesome 6 Free";
+  font-size: 0.72rem;
+  font-weight: 900;
+  transition: transform 0.15s ease;
+}
+
+.smart-simulation-block[open] summary::after {
+  transform: rotate(180deg);
+}
+
+.smart-simulation-block-title,
+.smart-simulation-block summary span {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.smart-simulation-block-meta {
+  color: var(--muted-color);
+  font-size: 0.72rem;
+  font-weight: 600;
+  justify-content: flex-end;
+  white-space: nowrap;
+}
+
+.smart-simulation-block summary b,
+.smart-simulation-toggle {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  line-height: 1;
+}
+
+.smart-simulation-block summary b {
+  color: var(--muted-color);
+  font-size: 0.72rem;
+  padding: 0.2rem 0.45rem;
+}
+
+.smart-simulation-toggle {
+  align-items: center;
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 700;
+  gap: 0.3rem;
+  padding: 0.22rem 0.48rem;
+}
+
+.smart-simulation-toggle .smart-simulation-toggle-hide,
+.smart-simulation-block[open] .smart-simulation-toggle .smart-simulation-toggle-show {
+  display: none;
+}
+
+.smart-simulation-block[open] .smart-simulation-toggle .smart-simulation-toggle-hide {
+  display: inline;
+}
+
+.smart-simulation-table-wrap {
+  border-top: 1px solid var(--border-color);
+  overflow-x: auto;
+}
+
+.smart-simulation-table {
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+.smart-simulation-table th,
+.smart-simulation-table td {
+  padding: 0.42rem 0.55rem;
+  vertical-align: middle;
+}
+
+.smart-simulation-table td:first-child {
+  min-width: 180px;
+}
+
+.smart-simulation-notes {
+  font-size: 0.82rem;
+  padding: 0.65rem 0.75rem;
+}
+
+.smart-simulation-notes ul {
+  margin: 0.3rem 0 0;
+  padding-left: 1rem;
+}
+
+@media (max-width: 720px) {
+  .smart-simulation-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .smart-simulation-block summary {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .smart-simulation-timeline-head,
+  .smart-simulation-point-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .smart-simulation-block-meta {
+    justify-content: flex-start;
+    white-space: normal;
+  }
+}

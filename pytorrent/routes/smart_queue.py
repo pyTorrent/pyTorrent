@@ -62,6 +62,20 @@ def smart_queue_check():
 
 
 
+@bp.post('/smart-queue/dry-run')
+def smart_queue_dry_run():
+    from ..services import smart_queue
+    profile = request_profile()
+    if not profile:
+        return ok({'result': {'ok': False, 'error': 'No profile'}})
+    try:
+        payload = request.get_json(silent=True) or {}
+        result = smart_queue.dry_run(profile, data=payload)
+        return ok({'result': result})
+    except Exception as exc:
+        return jsonify({'ok': False, 'error': str(exc)}), 500
+
+
 @bp.post('/smart-queue/exclusion')
 def smart_queue_exclusion():
     from ..services import smart_queue
