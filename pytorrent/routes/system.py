@@ -390,7 +390,7 @@ def path_default():
     if not profile:
         return jsonify({"ok": False, "error": "No profile"}), 400
     try:
-        return ok({"path": rtorrent.default_download_path(profile)})
+        return ok({"path": active_default_download_path(profile), "profile_default_path": rtorrent.default_download_path(profile)})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
 

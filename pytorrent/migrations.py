@@ -146,6 +146,24 @@ def migrate_profile_speed_limits_table(conn: sqlite3.Connection) -> bool:
     return existing is None
 
 
+def migrate_speed_limit_profiles_table(conn: sqlite3.Connection) -> bool:
+    existing = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='speed_limit_profiles'").fetchone()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS speed_limit_profiles (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
+          name TEXT NOT NULL,
+          down_limit INTEGER DEFAULT 0,
+          up_limit INTEGER DEFAULT 0,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_speed_limit_profiles_user ON speed_limit_profiles(user_id, lower(name))")
+    return existing is None
+
+
 def migrate_profile_runtime_stats_table(conn: sqlite3.Connection) -> bool:
     existing = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='profile_runtime_stats'").fetchone()
     conn.execute("""
@@ -170,12 +188,32 @@ def migrate_profile_runtime_stats_table(conn: sqlite3.Connection) -> bool:
     return existing is None
 
 
+def migrate_download_location_preferences(conn: sqlite3.Connection) -> bool:
+    columns = _column_names(conn, "user_preferences")
+    changed = False
+    additions = {
+        "default_download_path": "TEXT DEFAULT ''",
+        "download_location_mode": "TEXT DEFAULT 'profile_default'",
+        "download_last_path": "TEXT DEFAULT ''",
+        "download_remember_last_enabled": "INTEGER DEFAULT 0",
+        "drop_location_mode": "TEXT DEFAULT 'default'",
+        "free_space_check_enabled": "INTEGER DEFAULT 0",
+    }
+    for name, ddl in additions.items():
+        if name not in columns:
+            conn.execute(f"ALTER TABLE user_preferences ADD COLUMN {name} {ddl}")
+            changed = True
+    return changed
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     migrate_disk_monitor_preferences_to_profile_scope,
     migrate_profile_preferences_sidebar_columns,
     migrate_operation_log_split_retention,
     migrate_profile_speed_limits_table,
+    migrate_speed_limit_profiles_table,
     migrate_profile_runtime_stats_table,
+    migrate_download_location_preferences,
 )
 
 

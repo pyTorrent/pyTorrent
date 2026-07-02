@@ -1,5 +1,27 @@
 {
   "components": {
+    "parameters": {
+      "ProfileId": {
+        "description": "Optional rTorrent profile id for profile-scoped API operations. If omitted, the user active profile is used for backward compatibility; fallback profile id 1 is used only when no active profile exists and the user can access it.",
+        "in": "query",
+        "name": "profile_id",
+        "required": false,
+        "schema": {
+          "default": 1,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "ProfileName": {
+        "description": "Optional rTorrent profile name for profile-scoped API operations. profile_id has priority when both are supplied.",
+        "in": "query",
+        "name": "profile_name",
+        "required": false,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
     "schemas": {
       "ApiError": {
         "properties": {
@@ -178,19 +200,19 @@
             "nullable": true,
             "type": "string"
           },
-          "retention_days": {
+          "profile_id": {
+            "default": 1,
+            "description": "Optional rTorrent profile id. Overrides active profile for this request.",
             "minimum": 1,
             "type": "integer"
           },
-          "profile_id": {
-            "type": "integer",
-            "default": 1,
-            "minimum": 1,
-            "description": "Optional rTorrent profile id. Overrides active profile for this request."
-          },
           "profile_name": {
-            "type": "string",
-            "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
+            "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+            "type": "string"
+          },
+          "retention_days": {
+            "minimum": 1,
+            "type": "integer"
           }
         },
         "type": "object"
@@ -280,19 +302,19 @@
       },
       "AutomationRule": {
         "additionalProperties": true,
-        "type": "object",
         "properties": {
           "profile_id": {
-            "type": "integer",
             "default": 1,
+            "description": "Optional rTorrent profile id. Overrides active profile for this request.",
             "minimum": 1,
-            "description": "Optional rTorrent profile id. Overrides active profile for this request."
+            "type": "integer"
           },
           "profile_name": {
-            "type": "string",
-            "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
+            "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+            "type": "string"
           }
-        }
+        },
+        "type": "object"
       },
       "AutomationRunResponse": {
         "allOf": [
@@ -354,14 +376,14 @@
             "type": "string"
           },
           "profile_id": {
-            "type": "integer",
             "default": 1,
+            "description": "Optional rTorrent profile id. Overrides active profile for this request.",
             "minimum": 1,
-            "description": "Optional rTorrent profile id. Overrides active profile for this request."
+            "type": "integer"
           },
           "profile_name": {
-            "type": "string",
-            "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
+            "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+            "type": "string"
           }
         },
         "type": "object"
@@ -617,14 +639,14 @@
             "type": "array"
           },
           "profile_id": {
-            "type": "integer",
             "default": 1,
+            "description": "Optional rTorrent profile id. Overrides active profile for this request.",
             "minimum": 1,
-            "description": "Optional rTorrent profile id. Overrides active profile for this request."
+            "type": "integer"
           },
           "profile_name": {
-            "type": "string",
-            "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
+            "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+            "type": "string"
           }
         },
         "required": [
@@ -726,14 +748,14 @@
             "type": "string"
           },
           "profile_id": {
-            "type": "integer",
             "default": 1,
+            "description": "Optional rTorrent profile id. Overrides active profile for this request.",
             "minimum": 1,
-            "description": "Optional rTorrent profile id. Overrides active profile for this request."
+            "type": "integer"
           },
           "profile_name": {
-            "type": "string",
-            "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
+            "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+            "type": "string"
           }
         },
         "type": "object"
@@ -749,14 +771,14 @@
             "type": "string"
           },
           "profile_id": {
-            "type": "integer",
             "default": 1,
+            "description": "Optional rTorrent profile id. Overrides active profile for this request.",
             "minimum": 1,
-            "description": "Optional rTorrent profile id. Overrides active profile for this request."
+            "type": "integer"
           },
           "profile_name": {
-            "type": "string",
-            "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
+            "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+            "type": "string"
           }
         },
         "type": "object"
@@ -868,6 +890,16 @@
       },
       "OperationLogSettingsRequest": {
         "properties": {
+          "profile_id": {
+            "default": 1,
+            "description": "Optional rTorrent profile id. Overrides active profile for this request.",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "profile_name": {
+            "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+            "type": "string"
+          },
           "retention_days": {
             "maximum": 3650,
             "minimum": 1,
@@ -886,16 +918,6 @@
               "manual"
             ],
             "type": "string"
-          },
-          "profile_id": {
-            "type": "integer",
-            "default": 1,
-            "minimum": 1,
-            "description": "Optional rTorrent profile id. Overrides active profile for this request."
-          },
-          "profile_name": {
-            "type": "string",
-            "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
           }
         },
         "type": "object"
@@ -1025,19 +1047,7 @@
           },
           {
             "properties": {
-              "dirs": {
-                "items": {
-                  "$ref": "#/components/schemas/PathDirectoryEntry"
-                },
-                "type": "array"
-              },
-              "parent": {
-                "type": "string"
-              },
-              "path": {
-                "type": "string"
-              },
-              "root": {
+              "access_policy": {
                 "type": "string"
               },
               "allowed_roots": {
@@ -1046,10 +1056,22 @@
                 },
                 "type": "array"
               },
+              "dirs": {
+                "items": {
+                  "$ref": "#/components/schemas/PathDirectoryEntry"
+                },
+                "type": "array"
+              },
               "fallback": {
                 "type": "boolean"
               },
-              "access_policy": {
+              "parent": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "root": {
                 "type": "string"
               }
             },
@@ -1071,6 +1093,92 @@
             "type": "object"
           }
         ]
+      },
+      "PathDirectoryCreateRequest": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "parent": {
+            "type": "string"
+          },
+          "profile_id": {
+            "default": 1,
+            "description": "Optional rTorrent profile id. Overrides active profile for this request.",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "profile_name": {
+            "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "parent",
+          "name"
+        ],
+        "type": "object"
+      },
+      "PathDirectoryEntry": {
+        "additionalProperties": true,
+        "properties": {
+          "can_rename": {
+            "type": "boolean"
+          },
+          "empty": {
+            "type": "boolean"
+          },
+          "has_torrents": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PathDirectoryMutationResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiOk"
+          },
+          {
+            "properties": {
+              "directory": {
+                "$ref": "#/components/schemas/PathDirectoryEntry"
+              }
+            },
+            "type": "object"
+          }
+        ]
+      },
+      "PathDirectoryRenameRequest": {
+        "properties": {
+          "new_name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "profile_id": {
+            "default": 1,
+            "description": "Optional rTorrent profile id. Overrides active profile for this request.",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "profile_name": {
+            "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "new_name"
+        ],
+        "type": "object"
       },
       "PlannerHistoryEntry": {
         "additionalProperties": true,
@@ -1203,6 +1311,10 @@
             ],
             "type": "string"
           },
+          "default_download_path": {
+            "description": "User-level default download path. Empty value falls back to the active rTorrent profile default.",
+            "type": "string"
+          },
           "disk_monitor_mode": {
             "type": "string"
           },
@@ -1210,6 +1322,32 @@
             "type": "string"
           },
           "disk_monitor_selected_path": {
+            "type": "string"
+          },
+          "download_last_path": {
+            "description": "Last download location selected by the user.",
+            "type": "string"
+          },
+          "download_location_mode": {
+            "description": "How the Add torrent dialog chooses its save location.",
+            "enum": [
+              "profile_default",
+              "choose_each_time",
+              "remember_last"
+            ],
+            "type": "string"
+          },
+          "download_remember_last_enabled": {
+            "description": "Whether the Add torrent dialog should remember the last selected location.",
+            "type": "boolean"
+          },
+          "drop_location_mode": {
+            "description": "How drag-and-drop torrent uploads choose their save location.",
+            "enum": [
+              "default",
+              "ask_batch",
+              "ask_each"
+            ],
             "type": "string"
           },
           "font_family": {
@@ -1234,6 +1372,10 @@
             ],
             "type": "string"
           },
+          "free_space_check_enabled": {
+            "description": "When enabled, free space is checked before queueing torrent files.",
+            "type": "boolean"
+          },
           "peers_refresh_seconds": {
             "enum": [
               0,
@@ -1247,8 +1389,26 @@
           "port_check_enabled": {
             "type": "boolean"
           },
+          "profile_id": {
+            "default": 1,
+            "description": "Optional rTorrent profile id. Overrides active profile for this request.",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "profile_name": {
+            "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+            "type": "string"
+          },
           "reverse_dns_enabled": {
             "description": "Enables cached reverse DNS lookups for the Peers tab.",
+            "type": "boolean"
+          },
+          "sidebar_labels_expanded": {
+            "description": "Stores whether the sidebar label group is expanded for the active profile.",
+            "type": "boolean"
+          },
+          "sidebar_shortcuts_expanded": {
+            "description": "Stores whether the sidebar keyboard shortcut help is expanded for the active profile.",
             "type": "boolean"
           },
           "table_columns_json": {
@@ -1264,24 +1424,6 @@
           },
           "tracker_favicons_enabled": {
             "type": "boolean"
-          },
-          "sidebar_labels_expanded": {
-            "description": "Stores whether the sidebar label group is expanded for the active profile.",
-            "type": "boolean"
-          },
-          "sidebar_shortcuts_expanded": {
-            "description": "Stores whether the sidebar keyboard shortcut help is expanded for the active profile.",
-            "type": "boolean"
-          },
-          "profile_id": {
-            "type": "integer",
-            "default": 1,
-            "minimum": 1,
-            "description": "Optional rTorrent profile id. Overrides active profile for this request."
-          },
-          "profile_name": {
-            "type": "string",
-            "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
           }
         },
         "type": "object"
@@ -1325,40 +1467,55 @@
           "name": {
             "type": "string"
           },
+          "profile_id": {
+            "default": 1,
+            "description": "Optional rTorrent profile id. Overrides active profile for this request.",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "profile_name": {
+            "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+            "type": "string"
+          },
           "scgi_url": {
             "type": "string"
           },
           "timeout_seconds": {
             "type": "integer"
-          },
+          }
+        },
+        "type": "object"
+      },
+      "ProfileSelector": {
+        "properties": {
           "profile_id": {
-            "type": "integer",
             "default": 1,
+            "description": "Optional rTorrent profile id for profile-scoped API operations. If omitted, the user active profile is used for backward compatibility; fallback profile id 1 is used only when no active profile exists and the user can access it.",
             "minimum": 1,
-            "description": "Optional rTorrent profile id. Overrides active profile for this request."
+            "type": "integer"
           },
           "profile_name": {
-            "type": "string",
-            "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
+            "description": "Optional rTorrent profile name for profile-scoped API operations. profile_id has priority when both are supplied.",
+            "type": "string"
           }
         },
         "type": "object"
       },
       "RatioGroup": {
         "additionalProperties": true,
-        "type": "object",
         "properties": {
           "profile_id": {
-            "type": "integer",
             "default": 1,
+            "description": "Optional rTorrent profile id. Overrides active profile for this request.",
             "minimum": 1,
-            "description": "Optional rTorrent profile id. Overrides active profile for this request."
+            "type": "integer"
           },
           "profile_name": {
-            "type": "string",
-            "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
+            "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+            "type": "string"
           }
-        }
+        },
+        "type": "object"
       },
       "RssConfigResponse": {
         "allOf": [
@@ -1530,6 +1687,16 @@
             "minimum": 0,
             "type": "integer"
           },
+          "profile_id": {
+            "default": 1,
+            "description": "Optional rTorrent profile id. Overrides active profile for this request.",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "profile_name": {
+            "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+            "type": "string"
+          },
           "protect_active_below_cap": {
             "type": "boolean"
           },
@@ -1552,26 +1719,16 @@
             "minimum": 1,
             "type": "integer"
           },
+          "surge_refill_batch_size": {
+            "minimum": 1,
+            "type": "integer"
+          },
           "surge_refill_enabled": {
             "type": "boolean"
           },
           "surge_refill_interval_minutes": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "surge_refill_batch_size": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "profile_id": {
-            "type": "integer",
-            "default": 1,
             "minimum": 1,
-            "description": "Optional rTorrent profile id. Overrides active profile for this request."
-          },
-          "profile_name": {
-            "type": "string",
-            "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
+            "type": "integer"
           }
         },
         "type": "object"
@@ -1582,19 +1739,19 @@
             "description": "Bytes per second, 0 unlimited",
             "type": "integer"
           },
+          "profile_id": {
+            "default": 1,
+            "description": "Optional rTorrent profile id. Overrides active profile for this request.",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "profile_name": {
+            "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+            "type": "string"
+          },
           "up": {
             "description": "Bytes per second, 0 unlimited",
             "type": "integer"
-          },
-          "profile_id": {
-            "type": "integer",
-            "default": 1,
-            "minimum": 1,
-            "description": "Optional rTorrent profile id. Overrides active profile for this request."
-          },
-          "profile_name": {
-            "type": "string",
-            "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
           }
         },
         "type": "object"
@@ -1669,6 +1826,28 @@
         },
         "type": "object"
       },
+      "TemporaryLinkResponse": {
+        "properties": {
+          "expires_in": {
+            "example": 600,
+            "type": "integer"
+          },
+          "ok": {
+            "example": true,
+            "type": "boolean"
+          },
+          "url": {
+            "example": "/download/r4nd0mTemporaryToken",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "url",
+          "expires_in"
+        ],
+        "type": "object"
+      },
       "Torrent": {
         "additionalProperties": true,
         "properties": {
@@ -1733,14 +1912,14 @@
             "type": "integer"
           },
           "profile_id": {
-            "type": "integer",
             "default": 1,
+            "description": "Optional rTorrent profile id. Overrides active profile for this request.",
             "minimum": 1,
-            "description": "Optional rTorrent profile id. Overrides active profile for this request."
+            "type": "integer"
           },
           "profile_name": {
-            "type": "string",
-            "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
+            "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+            "type": "string"
           }
         },
         "type": "object"
@@ -2108,6 +2287,58 @@
           }
         ]
       },
+      "TorrentSpaceCheck": {
+        "properties": {
+          "directory": {
+            "type": "string"
+          },
+          "disk": {
+            "type": "object"
+          },
+          "free_bytes": {
+            "type": "integer"
+          },
+          "free_h": {
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "properties": {
+                "filename": {
+                  "type": "string"
+                },
+                "info_hash": {
+                  "type": "string"
+                },
+                "required_bytes": {
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "message": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "required_bytes": {
+            "type": "integer"
+          },
+          "required_h": {
+            "type": "string"
+          },
+          "shortfall_bytes": {
+            "type": "integer"
+          },
+          "shortfall_h": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "TorrentSummary": {
         "properties": {
           "cache_ttl_seconds": {
@@ -2282,126 +2513,52 @@
           }
         ]
       },
-      "TemporaryLinkResponse": {
+      "SpeedProfile": {
         "type": "object",
         "properties": {
-          "ok": {
-            "type": "boolean",
-            "example": true
+          "id": {
+            "type": "integer"
           },
-          "url": {
-            "type": "string",
-            "example": "/download/r4nd0mTemporaryToken"
-          },
-          "expires_in": {
-            "type": "integer",
-            "example": 600
-          }
-        },
-        "required": [
-          "ok",
-          "url",
-          "expires_in"
-        ]
-      },
-      "PathDirectoryEntry": {
-        "type": "object",
-        "properties": {
           "name": {
             "type": "string"
           },
-          "path": {
-            "type": "string"
+          "down": {
+            "type": "integer",
+            "description": "Download limit in bytes per second; 0 means unlimited."
           },
-          "empty": {
-            "type": "boolean"
+          "up": {
+            "type": "integer",
+            "description": "Upload limit in bytes per second; 0 means unlimited."
           },
-          "has_torrents": {
-            "type": "boolean"
+          "created_at": {
+            "type": "string",
+            "nullable": true
           },
-          "can_rename": {
-            "type": "boolean"
+          "updated_at": {
+            "type": "string",
+            "nullable": true
           }
-        },
-        "additionalProperties": true
+        }
       },
-      "PathDirectoryCreateRequest": {
+      "SpeedProfileRequest": {
         "type": "object",
         "required": [
-          "parent",
           "name"
         ],
         "properties": {
-          "parent": {
-            "type": "string"
-          },
           "name": {
-            "type": "string"
-          },
-          "profile_id": {
-            "type": "integer",
-            "default": 1,
-            "minimum": 1,
-            "description": "Optional rTorrent profile id. Overrides active profile for this request."
-          },
-          "profile_name": {
             "type": "string",
-            "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
-          }
-        }
-      },
-      "PathDirectoryRenameRequest": {
-        "type": "object",
-        "required": [
-          "path",
-          "new_name"
-        ],
-        "properties": {
-          "path": {
-            "type": "string"
+            "maxLength": 80
           },
-          "new_name": {
-            "type": "string"
-          },
-          "profile_id": {
+          "down": {
             "type": "integer",
-            "default": 1,
-            "minimum": 1,
-            "description": "Optional rTorrent profile id. Overrides active profile for this request."
+            "minimum": 0,
+            "description": "Download limit in bytes per second; 0 means unlimited."
           },
-          "profile_name": {
-            "type": "string",
-            "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
-          }
-        }
-      },
-      "PathDirectoryMutationResponse": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/ApiOk"
-          },
-          {
-            "type": "object",
-            "properties": {
-              "directory": {
-                "$ref": "#/components/schemas/PathDirectoryEntry"
-              }
-            }
-          }
-        ]
-      },
-      "ProfileSelector": {
-        "type": "object",
-        "properties": {
-          "profile_id": {
+          "up": {
             "type": "integer",
-            "default": 1,
-            "minimum": 1,
-            "description": "Optional rTorrent profile id for profile-scoped API operations. If omitted, the user active profile is used for backward compatibility; fallback profile id 1 is used only when no active profile exists and the user can access it."
-          },
-          "profile_name": {
-            "type": "string",
-            "description": "Optional rTorrent profile name for profile-scoped API operations. profile_id has priority when both are supplied."
+            "minimum": 0,
+            "description": "Upload limit in bytes per second; 0 means unlimited."
           }
         }
       }
@@ -2424,28 +2581,6 @@
         "name": "session",
         "type": "apiKey"
       }
-    },
-    "parameters": {
-      "ProfileId": {
-        "name": "profile_id",
-        "in": "query",
-        "required": false,
-        "description": "Optional rTorrent profile id for profile-scoped API operations. If omitted, the user active profile is used for backward compatibility; fallback profile id 1 is used only when no active profile exists and the user can access it.",
-        "schema": {
-          "type": "integer",
-          "default": 1,
-          "minimum": 1
-        }
-      },
-      "ProfileName": {
-        "name": "profile_name",
-        "in": "query",
-        "required": false,
-        "description": "Optional rTorrent profile name for profile-scoped API operations. profile_id has priority when both are supplied.",
-        "schema": {
-          "type": "string"
-        }
-      }
     }
   },
   "info": {
@@ -2456,6 +2591,14 @@
   "paths": {
     "/api/app/status": {
       "get": {
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -2473,7 +2616,11 @@
             "sessionCookie": []
           }
         ],
-        "summary": "pyTorrent application status",
+        "summary": "pyTorrent application status"
+      }
+    },
+    "/api/auth/login": {
+      "post": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -2481,11 +2628,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/auth/login": {
-      "post": {
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -2495,18 +2638,18 @@
                     "format": "password",
                     "type": "string"
                   },
-                  "username": {
-                    "type": "string"
-                  },
                   "profile_id": {
-                    "type": "integer",
                     "default": 1,
+                    "description": "Optional rTorrent profile id. Overrides active profile for this request.",
                     "minimum": 1,
-                    "description": "Optional rTorrent profile id. Overrides active profile for this request."
+                    "type": "integer"
                   },
                   "profile_name": {
-                    "type": "string",
-                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
+                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+                    "type": "string"
+                  },
+                  "username": {
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -2570,7 +2713,11 @@
             "description": "Authentication disabled"
           }
         },
-        "summary": "Log in with username and password",
+        "summary": "Log in with username and password"
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -2578,11 +2725,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/auth/logout": {
-      "post": {
+        ],
         "responses": {
           "200": {
             "content": {
@@ -2610,7 +2753,11 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Log out current user",
+        "summary": "Log out current user"
+      }
+    },
+    "/api/auth/me": {
+      "get": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -2618,11 +2765,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/auth/me": {
-      "get": {
+        ],
         "responses": {
           "200": {
             "content": {
@@ -2665,7 +2808,11 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Get current user",
+        "summary": "Get current user"
+      }
+    },
+    "/api/auth/users": {
+      "get": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -2673,11 +2820,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/auth/users": {
-      "get": {
+        ],
         "responses": {
           "200": {
             "content": {
@@ -2720,7 +2863,9 @@
             "sessionCookie": []
           }
         ],
-        "summary": "List users",
+        "summary": "List users"
+      },
+      "post": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -2728,27 +2873,25 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      },
-      "post": {
+        ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
                 "additionalProperties": true,
-                "type": "object",
                 "properties": {
                   "profile_id": {
-                    "type": "integer",
                     "default": 1,
+                    "description": "Optional rTorrent profile id. Overrides active profile for this request.",
                     "minimum": 1,
-                    "description": "Optional rTorrent profile id. Overrides active profile for this request."
+                    "type": "integer"
                   },
                   "profile_name": {
-                    "type": "string",
-                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
+                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+                    "type": "string"
                   }
-                }
+                },
+                "type": "object"
               }
             }
           },
@@ -2793,15 +2936,7 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Create user",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ProfileId"
-          },
-          {
-            "$ref": "#/components/parameters/ProfileName"
-          }
-        ]
+        "summary": "Create user"
       }
     },
     "/api/auth/users/{user_id}": {
@@ -2888,19 +3023,19 @@
             "application/json": {
               "schema": {
                 "additionalProperties": true,
-                "type": "object",
                 "properties": {
                   "profile_id": {
-                    "type": "integer",
                     "default": 1,
+                    "description": "Optional rTorrent profile id. Overrides active profile for this request.",
                     "minimum": 1,
-                    "description": "Optional rTorrent profile id. Overrides active profile for this request."
+                    "type": "integer"
                   },
                   "profile_name": {
-                    "type": "string",
-                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
+                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+                    "type": "string"
                   }
-                }
+                },
+                "type": "object"
               }
             }
           },
@@ -3031,14 +3166,14 @@
                     "type": "string"
                   },
                   "profile_id": {
-                    "type": "integer",
                     "default": 1,
+                    "description": "Optional rTorrent profile id. Overrides active profile for this request.",
                     "minimum": 1,
-                    "description": "Optional rTorrent profile id. Overrides active profile for this request."
+                    "type": "integer"
                   },
                   "profile_name": {
-                    "type": "string",
-                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
+                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+                    "type": "string"
                   }
                 },
                 "type": "object"
@@ -3159,6 +3294,14 @@
     },
     "/api/automations": {
       "get": {
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -3186,7 +3329,9 @@
             "sessionCookie": []
           }
         ],
-        "summary": "List automation rules and history",
+        "summary": "List automation rules and history"
+      },
+      "post": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -3194,9 +3339,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      },
-      "post": {
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -3234,7 +3377,11 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Create or update automation rule",
+        "summary": "Create or update automation rule"
+      }
+    },
+    "/api/automations/check": {
+      "post": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -3242,11 +3389,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/automations/check": {
-      "post": {
+        ],
         "responses": {
           "200": {
             "content": {
@@ -3284,7 +3427,11 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Run automation check immediately",
+        "summary": "Run automation check immediately"
+      }
+    },
+    "/api/automations/export": {
+      "get": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -3292,11 +3439,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/automations/export": {
-      "get": {
+        ],
         "responses": {
           "200": {
             "content": {
@@ -3324,7 +3467,11 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Export automation rules",
+        "summary": "Export automation rules"
+      }
+    },
+    "/api/automations/history": {
+      "delete": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -3332,11 +3479,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/automations/history": {
-      "delete": {
+        ],
         "responses": {
           "200": {
             "content": {
@@ -3396,15 +3539,7 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Clear automation execution history",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ProfileId"
-          },
-          {
-            "$ref": "#/components/parameters/ProfileName"
-          }
-        ]
+        "summary": "Clear automation execution history"
       }
     },
     "/api/automations/import": {
@@ -3429,19 +3564,19 @@
             "application/json": {
               "schema": {
                 "additionalProperties": true,
-                "type": "object",
                 "properties": {
                   "profile_id": {
-                    "type": "integer",
                     "default": 1,
+                    "description": "Optional rTorrent profile id. Overrides active profile for this request.",
                     "minimum": 1,
-                    "description": "Optional rTorrent profile id. Overrides active profile for this request."
+                    "type": "integer"
                   },
                   "profile_name": {
-                    "type": "string",
-                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
+                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+                    "type": "string"
                   }
-                }
+                },
+                "type": "object"
               }
             }
           },
@@ -3585,6 +3720,14 @@
     },
     "/api/backup": {
       "get": {
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -3602,7 +3745,9 @@
             "sessionCookie": []
           }
         ],
-        "summary": "List backups",
+        "summary": "List backups"
+      },
+      "post": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -3610,9 +3755,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      },
-      "post": {
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -3668,21 +3811,20 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Create backup",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ProfileId"
-          },
-          {
-            "$ref": "#/components/parameters/ProfileName"
-          }
-        ]
+        "summary": "Create backup"
       }
     },
     "/api/backup/app": {
       "post": {
-        "summary": "Create application backup",
         "description": "Creates an application-level backup for admin users. Note: this endpoint is additive and does not change the legacy /api/backup behavior.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -3704,16 +3846,16 @@
                     },
                     {
                       "properties": {
-                        "backup": {
-                          "$ref": "#/components/schemas/Backup"
-                        },
-                        "profile_backups": {
+                        "app_backups": {
                           "items": {
                             "$ref": "#/components/schemas/Backup"
                           },
                           "type": "array"
                         },
-                        "app_backups": {
+                        "backup": {
+                          "$ref": "#/components/schemas/Backup"
+                        },
+                        "profile_backups": {
                           "items": {
                             "$ref": "#/components/schemas/Backup"
                           },
@@ -3754,20 +3896,20 @@
             "sessionCookie": []
           }
         ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ProfileId"
-          },
-          {
-            "$ref": "#/components/parameters/ProfileName"
-          }
-        ]
+        "summary": "Create application backup"
       }
     },
     "/api/backup/profile": {
       "post": {
-        "summary": "Create profile backup",
         "description": "Creates a backup for the currently active rTorrent profile. Note: this endpoint keeps application-level backups separate from profile backups.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -3789,16 +3931,16 @@
                     },
                     {
                       "properties": {
-                        "backup": {
-                          "$ref": "#/components/schemas/Backup"
-                        },
-                        "profile_backups": {
+                        "app_backups": {
                           "items": {
                             "$ref": "#/components/schemas/Backup"
                           },
                           "type": "array"
                         },
-                        "app_backups": {
+                        "backup": {
+                          "$ref": "#/components/schemas/Backup"
+                        },
+                        "profile_backups": {
                           "items": {
                             "$ref": "#/components/schemas/Backup"
                           },
@@ -3829,6 +3971,12 @@
             "sessionCookie": []
           }
         ],
+        "summary": "Create profile backup"
+      }
+    },
+    "/api/backup/profile/settings": {
+      "get": {
+        "description": "Returns automatic backup settings for the active profile. Note: this mirrors the profile-scoped backup UI controls.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -3836,13 +3984,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/backup/profile/settings": {
-      "get": {
-        "summary": "Get profile automatic backup settings",
-        "description": "Returns automatic backup settings for the active profile. Note: this mirrors the profile-scoped backup UI controls.",
+        ],
         "responses": {
           "200": {
             "content": {
@@ -3870,6 +4012,10 @@
             "sessionCookie": []
           }
         ],
+        "summary": "Get profile automatic backup settings"
+      },
+      "post": {
+        "description": "Saves automatic backup settings for the active profile. Note: application backup settings remain unchanged.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -3877,11 +4023,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      },
-      "post": {
-        "summary": "Save profile automatic backup settings",
-        "description": "Saves automatic backup settings for the active profile. Note: application backup settings remain unchanged.",
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -3929,6 +4071,11 @@
             "sessionCookie": []
           }
         ],
+        "summary": "Save profile automatic backup settings"
+      }
+    },
+    "/api/backup/settings": {
+      "get": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -3936,11 +4083,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/backup/settings": {
-      "get": {
+        ],
         "responses": {
           "200": {
             "content": {
@@ -3958,7 +4101,9 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Get automatic backup settings",
+        "summary": "Get automatic backup settings"
+      },
+      "post": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -3966,9 +4111,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      },
-      "post": {
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -4006,15 +4149,7 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Save automatic backup settings",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ProfileId"
-          },
-          {
-            "$ref": "#/components/parameters/ProfileName"
-          }
-        ]
+        "summary": "Save automatic backup settings"
       }
     },
     "/api/backup/{backup_id}": {
@@ -4243,6 +4378,14 @@
     "/api/cleanup/all": {
       "post": {
         "description": "Clears finished job logs, Smart Queue history, active-profile operation logs, Planner action history and automation history. Pending/running jobs, saved rules, settings and torrents are preserved.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -4260,19 +4403,19 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Clear all cleanup-supported history",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ProfileId"
-          },
-          {
-            "$ref": "#/components/parameters/ProfileName"
-          }
-        ]
+        "summary": "Clear all cleanup-supported history"
       }
     },
     "/api/cleanup/automations": {
       "post": {
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -4290,20 +4433,20 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Clear automation execution history",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ProfileId"
-          },
-          {
-            "$ref": "#/components/parameters/ProfileName"
-          }
-        ]
+        "summary": "Clear automation execution history"
       }
     },
     "/api/cleanup/cache": {
       "post": {
         "description": "Clears active profile runtime and database-backed caches without deleting torrents, settings, rules or logs.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -4331,7 +4474,12 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Clear active profile cache",
+        "summary": "Clear active profile cache"
+      }
+    },
+    "/api/cleanup/database/vacuum": {
+      "post": {
+        "description": "Runs SQLite database vacuum/maintenance for admin users. Note: the cleanup summary is returned with the result.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -4339,34 +4487,28 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/cleanup/database/vacuum": {
-      "post": {
-        "summary": "Vacuum application database",
-        "description": "Runs SQLite database vacuum/maintenance for admin users. Note: the cleanup summary is returned with the result.",
+        ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
                 "additionalProperties": false,
                 "properties": {
                   "force": {
                     "type": "boolean"
                   },
                   "profile_id": {
-                    "type": "integer",
                     "default": 1,
+                    "description": "Optional rTorrent profile id. Overrides active profile for this request.",
                     "minimum": 1,
-                    "description": "Optional rTorrent profile id. Overrides active profile for this request."
+                    "type": "integer"
                   },
                   "profile_name": {
-                    "type": "string",
-                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
+                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+                    "type": "string"
                   }
-                }
+                },
+                "type": "object"
               }
             }
           },
@@ -4382,16 +4524,16 @@
                       "$ref": "#/components/schemas/ApiOk"
                     },
                     {
-                      "type": "object",
                       "properties": {
-                        "vacuum": {
-                          "type": "object",
-                          "additionalProperties": true
-                        },
                         "cleanup": {
                           "$ref": "#/components/schemas/CleanupSummary"
+                        },
+                        "vacuum": {
+                          "additionalProperties": true,
+                          "type": "object"
                         }
-                      }
+                      },
+                      "type": "object"
                     }
                   ]
                 }
@@ -4425,6 +4567,11 @@
             "sessionCookie": []
           }
         ],
+        "summary": "Vacuum application database"
+      }
+    },
+    "/api/cleanup/jobs": {
+      "post": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -4432,11 +4579,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/cleanup/jobs": {
-      "post": {
+        ],
         "responses": {
           "200": {
             "content": {
@@ -4454,20 +4597,20 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Clear finished job history",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ProfileId"
-          },
-          {
-            "$ref": "#/components/parameters/ProfileName"
-          }
-        ]
+        "summary": "Clear finished job history"
       }
     },
     "/api/cleanup/operation-logs": {
       "post": {
         "description": "Clears active-profile operation logs. Torrents, jobs, settings and rules are preserved.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -4485,7 +4628,12 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Clear operation logs",
+        "summary": "Clear operation logs"
+      }
+    },
+    "/api/cleanup/planner": {
+      "post": {
+        "description": "Deletes Download Planner action history for the active profile. Saved Planner settings are preserved.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -4493,12 +4641,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/cleanup/planner": {
-      "post": {
-        "description": "Deletes Download Planner action history for the active profile. Saved Planner settings are preserved.",
+        ],
         "responses": {
           "200": {
             "content": {
@@ -4526,7 +4669,12 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Clear Planner action history",
+        "summary": "Clear Planner action history"
+      }
+    },
+    "/api/cleanup/poller-diagnostics": {
+      "post": {
+        "description": "Clears in-memory poller runtime counters for the active profile. Note: polling settings and torrent state are preserved.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -4534,13 +4682,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/cleanup/poller-diagnostics": {
-      "post": {
-        "summary": "Reset poller diagnostics",
-        "description": "Clears in-memory poller runtime counters for the active profile. Note: polling settings and torrent state are preserved.",
+        ],
         "responses": {
           "200": {
             "content": {
@@ -4551,13 +4693,13 @@
                       "$ref": "#/components/schemas/CleanupResponse"
                     },
                     {
-                      "type": "object",
                       "properties": {
                         "runtime": {
-                          "type": "object",
-                          "additionalProperties": true
+                          "additionalProperties": true,
+                          "type": "object"
                         }
-                      }
+                      },
+                      "type": "object"
                     }
                   ]
                 }
@@ -4581,6 +4723,11 @@
             "sessionCookie": []
           }
         ],
+        "summary": "Reset poller diagnostics"
+      }
+    },
+    "/api/cleanup/smart-queue": {
+      "post": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -4588,11 +4735,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/cleanup/smart-queue": {
-      "post": {
+        ],
         "responses": {
           "200": {
             "content": {
@@ -4610,7 +4753,11 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Clear Smart Queue history",
+        "summary": "Clear Smart Queue history"
+      }
+    },
+    "/api/cleanup/summary": {
+      "get": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -4618,11 +4765,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/cleanup/summary": {
-      "get": {
+        ],
         "responses": {
           "200": {
             "content": {
@@ -4640,7 +4783,11 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Cleanup summary",
+        "summary": "Cleanup summary"
+      }
+    },
+    "/api/download-location/preferences": {
+      "get": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -4648,11 +4795,115 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiOk"
+                    },
+                    {
+                      "properties": {
+                        "default_path": {
+                          "type": "string"
+                        },
+                        "preferences": {
+                          "$ref": "#/components/schemas/Preferences"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Get download location preferences"
+      },
+      "post": {
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Preferences"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiOk"
+                    },
+                    {
+                      "properties": {
+                        "default_path": {
+                          "type": "string"
+                        },
+                        "preferences": {
+                          "$ref": "#/components/schemas/Preferences"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Save download location preferences"
       }
     },
     "/api/download-planner": {
       "get": {
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -4665,7 +4916,9 @@
             "description": "OK"
           }
         },
-        "summary": "Manage download planner settings",
+        "summary": "Manage download planner settings"
+      },
+      "post": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -4673,26 +4926,24 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      },
-      "post": {
+        ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
                 "properties": {
                   "profile_id": {
-                    "type": "integer",
                     "default": 1,
+                    "description": "Optional rTorrent profile id. Overrides active profile for this request.",
                     "minimum": 1,
-                    "description": "Optional rTorrent profile id. Overrides active profile for this request."
+                    "type": "integer"
                   },
                   "profile_name": {
-                    "type": "string",
-                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
+                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+                    "type": "string"
                   }
-                }
+                },
+                "type": "object"
               }
             }
           },
@@ -4710,36 +4961,36 @@
             "description": "OK"
           }
         },
-        "summary": "Manage download planner settings",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ProfileId"
-          },
-          {
-            "$ref": "#/components/parameters/ProfileName"
-          }
-        ]
+        "summary": "Manage download planner settings"
       }
     },
     "/api/download-planner/check": {
       "post": {
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
                 "properties": {
                   "profile_id": {
-                    "type": "integer",
                     "default": 1,
+                    "description": "Optional rTorrent profile id. Overrides active profile for this request.",
                     "minimum": 1,
-                    "description": "Optional rTorrent profile id. Overrides active profile for this request."
+                    "type": "integer"
                   },
                   "profile_name": {
-                    "type": "string",
-                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
+                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+                    "type": "string"
                   }
-                }
+                },
+                "type": "object"
               }
             }
           },
@@ -4757,20 +5008,20 @@
             "description": "OK"
           }
         },
-        "summary": "Run download planner check",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ProfileId"
-          },
-          {
-            "$ref": "#/components/parameters/ProfileName"
-          }
-        ]
+        "summary": "Run download planner check"
       }
     },
     "/api/download-planner/history": {
       "delete": {
         "description": "Deletes Download Planner action history for the active profile. Saved Planner settings are preserved.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -4819,7 +5070,12 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Clear Planner action history",
+        "summary": "Clear Planner action history"
+      }
+    },
+    "/api/download-planner/override": {
+      "post": {
+        "description": "Set a temporary manual planner override.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -4827,12 +5083,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/download-planner/override": {
-      "post": {
-        "description": "Set a temporary manual planner override.",
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -4847,18 +5098,18 @@
                   "minutes": {
                     "type": "integer"
                   },
-                  "up_limit": {
+                  "profile_id": {
+                    "default": 1,
+                    "description": "Optional rTorrent profile id. Overrides active profile for this request.",
+                    "minimum": 1,
                     "type": "integer"
                   },
-                  "profile_id": {
-                    "type": "integer",
-                    "default": 1,
-                    "minimum": 1,
-                    "description": "Optional rTorrent profile id. Overrides active profile for this request."
-                  },
                   "profile_name": {
-                    "type": "string",
-                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
+                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+                    "type": "string"
+                  },
+                  "up_limit": {
+                    "type": "integer"
                   }
                 },
                 "type": "object"
@@ -4884,15 +5135,7 @@
             "description": "OK"
           }
         },
-        "summary": "Set download planner override",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ProfileId"
-          },
-          {
-            "$ref": "#/components/parameters/ProfileName"
-          }
-        ]
+        "summary": "Set download planner override"
       }
     },
     "/api/download-planner/preview": {
@@ -4934,6 +5177,14 @@
     },
     "/api/health": {
       "get": {
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -4961,7 +5212,11 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Application health check",
+        "summary": "Application health check"
+      }
+    },
+    "/api/health/nagios": {
+      "get": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -4969,11 +5224,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/health/nagios": {
-      "get": {
+        ],
         "responses": {
           "200": {
             "description": "Plain-text OK"
@@ -4987,15 +5238,7 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Nagios-compatible health check",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ProfileId"
-          },
-          {
-            "$ref": "#/components/parameters/ProfileName"
-          }
-        ]
+        "summary": "Nagios-compatible health check"
       }
     },
     "/api/jobs": {
@@ -5065,6 +5308,14 @@
     "/api/jobs/clear": {
       "post": {
         "description": "Deletes jobs that are not pending or running.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -5094,15 +5345,7 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Clear finished job history",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ProfileId"
-          },
-          {
-            "$ref": "#/components/parameters/ProfileName"
-          }
-        ]
+        "summary": "Clear finished job history"
       }
     },
     "/api/jobs/{job_id}/cancel": {
@@ -5281,6 +5524,14 @@
     },
     "/api/labels": {
       "get": {
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -5313,7 +5564,9 @@
             "sessionCookie": []
           }
         ],
-        "summary": "List labels",
+        "summary": "List labels"
+      },
+      "post": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -5321,9 +5574,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      },
-      "post": {
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -5376,15 +5627,7 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Create or update label",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ProfileId"
-          },
-          {
-            "$ref": "#/components/parameters/ProfileName"
-          }
-        ]
+        "summary": "Create or update label"
       }
     },
     "/api/labels/{label_id}": {
@@ -5452,6 +5695,14 @@
     },
     "/api/openapi.json": {
       "get": {
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -5469,15 +5720,7 @@
             "sessionCookie": []
           }
         ],
-        "summary": "OpenAPI schema",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ProfileId"
-          },
-          {
-            "$ref": "#/components/parameters/ProfileName"
-          }
-        ]
+        "summary": "OpenAPI schema"
       }
     },
     "/api/operation-logs": {
@@ -5549,6 +5792,14 @@
     "/api/operation-logs/apply-retention": {
       "post": {
         "description": "Runs retention cleanup for active-profile operation logs.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -5573,7 +5824,12 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Apply operation log retention",
+        "summary": "Apply operation log retention"
+      }
+    },
+    "/api/operation-logs/clear": {
+      "post": {
+        "description": "Clears active-profile operation logs, optionally limited to one event type.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -5581,12 +5837,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/operation-logs/clear": {
-      "post": {
-        "description": "Clears active-profile operation logs, optionally limited to one event type.",
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -5614,7 +5865,12 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Clear operation logs",
+        "summary": "Clear operation logs"
+      }
+    },
+    "/api/operation-logs/settings": {
+      "post": {
+        "description": "Saves active-profile operation log retention and applies it immediately.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -5622,12 +5878,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/operation-logs/settings": {
-      "post": {
-        "description": "Saves active-profile operation log retention and applies it immediately.",
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -5655,19 +5906,12 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Save operation log retention settings",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ProfileId"
-          },
-          {
-            "$ref": "#/components/parameters/ProfileName"
-          }
-        ]
+        "summary": "Save operation log retention settings"
       }
     },
     "/api/path/browse": {
       "get": {
+        "description": "Lists directories that the rTorrent process can enter and read. The filesystem root is never listed; denied or unreadable requests fall back to the first accessible download-space candidate.",
         "parameters": [
           {
             "in": "query",
@@ -5700,12 +5944,19 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Browse rTorrent-readable directories",
-        "description": "Lists directories that the rTorrent process can enter and read. The filesystem root is never listed; denied or unreadable requests fall back to the first accessible download-space candidate."
+        "summary": "Browse rTorrent-readable directories"
       }
     },
     "/api/path/default": {
       "get": {
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -5723,7 +5974,12 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Get active default download path",
+        "summary": "Get active default download path"
+      }
+    },
+    "/api/path/directories": {
+      "post": {
+        "description": "Creates a directory on the active rTorrent host for inline path-picker use. Existing torrent state is not changed.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -5731,12 +5987,109 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PathDirectoryCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PathDirectoryMutationResponse"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Create an empty directory"
+      }
+    },
+    "/api/path/directories/rename": {
+      "post": {
+        "description": "Renames a directory only when it is empty and does not contain a cached torrent path.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PathDirectoryRenameRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PathDirectoryMutationResponse"
+                }
+              }
+            },
+            "description": "Renamed"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Rename an empty directory"
       }
     },
     "/api/poller/settings": {
       "get": {
         "description": "Get poller settings",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -5754,7 +6107,10 @@
             "description": "Get poller settings"
           }
         },
-        "summary": "Get poller settings",
+        "summary": "Get poller settings"
+      },
+      "post": {
+        "description": "Save poller settings",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -5762,10 +6118,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      },
-      "post": {
-        "description": "Save poller settings",
+        ],
         "responses": {
           "200": {
             "content": {
@@ -5783,19 +6136,19 @@
             "description": "Save poller settings"
           }
         },
-        "summary": "Save poller settings",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ProfileId"
-          },
-          {
-            "$ref": "#/components/parameters/ProfileName"
-          }
-        ]
+        "summary": "Save poller settings"
       }
     },
     "/api/port-check": {
       "get": {
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -5813,17 +6166,17 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Read cached incoming port check status",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ProfileId"
-          },
-          {
-            "$ref": "#/components/parameters/ProfileName"
-          }
-        ]
+        "summary": "Read cached incoming port check status"
       },
       "post": {
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -5841,19 +6194,19 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Run incoming port check immediately, bypassing cache",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ProfileId"
-          },
-          {
-            "$ref": "#/components/parameters/ProfileName"
-          }
-        ]
+        "summary": "Run incoming port check immediately, bypassing cache"
       }
     },
     "/api/preferences": {
       "get": {
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -5883,7 +6236,9 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Get preferences",
+        "summary": "Get preferences"
+      },
+      "post": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -5891,9 +6246,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      },
-      "post": {
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -5943,7 +6296,12 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Save preferences",
+        "summary": "Save preferences"
+      }
+    },
+    "/api/preferences/table-columns/recommended": {
+      "post": {
+        "description": "Applies the backend-owned recommended torrent table layout, including desktop visibility, mobile visibility, smart mobile filters and column widths.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -5951,30 +6309,25 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/preferences/table-columns/recommended": {
-      "post": {
-        "description": "Applies the backend-owned recommended torrent table layout, including desktop visibility, mobile visibility, smart mobile filters and column widths.",
+        ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
                 "additionalProperties": false,
-                "type": "object",
                 "properties": {
                   "profile_id": {
-                    "type": "integer",
                     "default": 1,
+                    "description": "Optional rTorrent profile id. Overrides active profile for this request.",
                     "minimum": 1,
-                    "description": "Optional rTorrent profile id. Overrides active profile for this request."
+                    "type": "integer"
                   },
                   "profile_name": {
-                    "type": "string",
-                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
+                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+                    "type": "string"
                   }
-                }
+                },
+                "type": "object"
               }
             }
           },
@@ -6019,7 +6372,11 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Apply recommended table columns",
+        "summary": "Apply recommended table columns"
+      }
+    },
+    "/api/profiles": {
+      "get": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -6027,11 +6384,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/profiles": {
-      "get": {
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6067,7 +6420,9 @@
             "sessionCookie": []
           }
         ],
-        "summary": "List rTorrent profiles",
+        "summary": "List rTorrent profiles"
+      },
+      "post": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -6075,9 +6430,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      },
-      "post": {
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -6133,7 +6486,12 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Create rTorrent profile",
+        "summary": "Create rTorrent profile"
+      }
+    },
+    "/api/profiles/diagnostics": {
+      "get": {
+        "description": "Run diagnostics for the active rTorrent profile.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -6141,12 +6499,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/profiles/diagnostics": {
-      "get": {
-        "description": "Run diagnostics for the active rTorrent profile.",
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6164,7 +6517,12 @@
             "description": "Diagnostics result"
           }
         },
-        "summary": "Active profile diagnostics",
+        "summary": "Active profile diagnostics"
+      }
+    },
+    "/api/profiles/export": {
+      "get": {
+        "description": "Export rTorrent profiles.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -6172,12 +6530,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/profiles/export": {
-      "get": {
-        "description": "Export rTorrent profiles.",
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6195,7 +6548,12 @@
             "description": "Profiles export"
           }
         },
-        "summary": "Export profiles",
+        "summary": "Export profiles"
+      }
+    },
+    "/api/profiles/import": {
+      "post": {
+        "description": "Import rTorrent profiles from exported JSON.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -6203,32 +6561,27 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/profiles/import": {
-      "post": {
-        "description": "Import rTorrent profiles from exported JSON.",
+        ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
                 "properties": {
+                  "profile_id": {
+                    "default": 1,
+                    "description": "Optional rTorrent profile id. Overrides active profile for this request.",
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "profile_name": {
+                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+                    "type": "string"
+                  },
                   "profiles": {
                     "items": {
                       "type": "object"
                     },
                     "type": "array"
-                  },
-                  "profile_id": {
-                    "type": "integer",
-                    "default": 1,
-                    "minimum": 1,
-                    "description": "Optional rTorrent profile id. Overrides active profile for this request."
-                  },
-                  "profile_name": {
-                    "type": "string",
-                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
                   }
                 },
                 "type": "object"
@@ -6254,7 +6607,12 @@
             "description": "OK"
           }
         },
-        "summary": "Import profiles",
+        "summary": "Import profiles"
+      }
+    },
+    "/api/profiles/test": {
+      "post": {
+        "description": "Test a submitted SCGI profile payload without saving it.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -6262,12 +6620,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/profiles/test": {
-      "post": {
-        "description": "Test a submitted SCGI profile payload without saving it.",
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -6282,21 +6635,21 @@
                   "name": {
                     "type": "string"
                   },
+                  "profile_id": {
+                    "default": 1,
+                    "description": "Optional rTorrent profile id. Overrides active profile for this request.",
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "profile_name": {
+                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+                    "type": "string"
+                  },
                   "scgi_url": {
                     "type": "string"
                   },
                   "timeout_seconds": {
                     "type": "number"
-                  },
-                  "profile_id": {
-                    "type": "integer",
-                    "default": 1,
-                    "minimum": 1,
-                    "description": "Optional rTorrent profile id. Overrides active profile for this request."
-                  },
-                  "profile_name": {
-                    "type": "string",
-                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
                   }
                 },
                 "type": "object"
@@ -6322,15 +6675,7 @@
             "description": "OK"
           }
         },
-        "summary": "Test rTorrent profile",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ProfileId"
-          },
-          {
-            "$ref": "#/components/parameters/ProfileName"
-          }
-        ]
+        "summary": "Test rTorrent profile"
       }
     },
     "/api/profiles/{profile_id}": {
@@ -6539,6 +6884,14 @@
     "/api/profiles/{profile_id}/diagnostics": {
       "get": {
         "description": "Run diagnostics for a saved rTorrent profile.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6556,7 +6909,11 @@
             "description": "Diagnostics result"
           }
         },
-        "summary": "Profile diagnostics",
+        "summary": "Profile diagnostics"
+      }
+    },
+    "/api/ratio-groups": {
+      "get": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -6564,11 +6921,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/ratio-groups": {
-      "get": {
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6601,7 +6954,9 @@
             "sessionCookie": []
           }
         ],
-        "summary": "List ratio groups",
+        "summary": "List ratio groups"
+      },
+      "post": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -6609,9 +6964,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      },
-      "post": {
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -6664,7 +7017,11 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Create or update ratio group",
+        "summary": "Create or update ratio group"
+      }
+    },
+    "/api/ratio-groups/check": {
+      "post": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -6672,11 +7029,64 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "profile_id": {
+                    "default": 1,
+                    "description": "Optional rTorrent profile id. Overrides active profile for this request.",
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "profile_name": {
+                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Run ratio groups check"
       }
     },
     "/api/ratio-groups/{group_id}": {
       "delete": {
+        "parameters": [
+          {
+            "description": "Ratio group id",
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6745,76 +7155,19 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Delete ratio group",
-        "parameters": [
-          {
-            "name": "group_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "description": "Ratio group id"
-          },
-          {
-            "$ref": "#/components/parameters/ProfileId"
-          },
-          {
-            "$ref": "#/components/parameters/ProfileName"
-          }
-        ]
-      }
-    },
-    "/api/ratio-groups/check": {
-      "post": {
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "profile_id": {
-                    "type": "integer",
-                    "default": 1,
-                    "minimum": 1,
-                    "description": "Optional rTorrent profile id. Overrides active profile for this request."
-                  },
-                  "profile_name": {
-                    "type": "string",
-                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
-                  }
-                }
-              }
-            }
-          },
-          "required": false
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                }
-              }
-            },
-            "description": "OK"
-          }
-        },
-        "summary": "Run ratio groups check",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ProfileId"
-          },
-          {
-            "$ref": "#/components/parameters/ProfileName"
-          }
-        ]
+        "summary": "Delete ratio group"
       }
     },
     "/api/rss": {
       "get": {
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6832,7 +7185,11 @@
             "sessionCookie": []
           }
         ],
-        "summary": "List RSS feeds and rules",
+        "summary": "List RSS feeds and rules"
+      }
+    },
+    "/api/rss/check": {
+      "post": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -6840,11 +7197,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/rss/check": {
-      "post": {
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6894,7 +7247,11 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Manually check RSS feeds",
+        "summary": "Manually check RSS feeds"
+      }
+    },
+    "/api/rss/feeds": {
+      "post": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -6902,29 +7259,25 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/rss/feeds": {
-      "post": {
+        ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
                 "additionalProperties": true,
-                "type": "object",
                 "properties": {
                   "profile_id": {
-                    "type": "integer",
                     "default": 1,
+                    "description": "Optional rTorrent profile id. Overrides active profile for this request.",
                     "minimum": 1,
-                    "description": "Optional rTorrent profile id. Overrides active profile for this request."
+                    "type": "integer"
                   },
                   "profile_name": {
-                    "type": "string",
-                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
+                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+                    "type": "string"
                   }
-                }
+                },
+                "type": "object"
               }
             }
           },
@@ -6957,15 +7310,7 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Add or update RSS feed",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ProfileId"
-          },
-          {
-            "$ref": "#/components/parameters/ProfileName"
-          }
-        ]
+        "summary": "Add or update RSS feed"
       }
     },
     "/api/rss/feeds/{feed_id}": {
@@ -7003,24 +7348,32 @@
     },
     "/api/rss/rules": {
       "post": {
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
                 "additionalProperties": true,
-                "type": "object",
                 "properties": {
                   "profile_id": {
-                    "type": "integer",
                     "default": 1,
+                    "description": "Optional rTorrent profile id. Overrides active profile for this request.",
                     "minimum": 1,
-                    "description": "Optional rTorrent profile id. Overrides active profile for this request."
+                    "type": "integer"
                   },
                   "profile_name": {
-                    "type": "string",
-                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
+                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+                    "type": "string"
                   }
-                }
+                },
+                "type": "object"
               }
             }
           },
@@ -7053,7 +7406,11 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Add or update RSS rule",
+        "summary": "Add or update RSS rule"
+      }
+    },
+    "/api/rss/rules/test": {
+      "post": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -7061,28 +7418,24 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/rss/rules/test": {
-      "post": {
+        ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
                 "properties": {
                   "profile_id": {
-                    "type": "integer",
                     "default": 1,
+                    "description": "Optional rTorrent profile id. Overrides active profile for this request.",
                     "minimum": 1,
-                    "description": "Optional rTorrent profile id. Overrides active profile for this request."
+                    "type": "integer"
                   },
                   "profile_name": {
-                    "type": "string",
-                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
+                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+                    "type": "string"
                   }
-                }
+                },
+                "type": "object"
               }
             }
           },
@@ -7100,15 +7453,7 @@
             "description": "OK"
           }
         },
-        "summary": "Test RSS rule",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ProfileId"
-          },
-          {
-            "$ref": "#/components/parameters/ProfileName"
-          }
-        ]
+        "summary": "Test RSS rule"
       }
     },
     "/api/rss/rules/{rule_id}": {
@@ -7147,6 +7492,14 @@
     "/api/rtorrent-config": {
       "get": {
         "description": "Get startup rTorrent config",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -7164,7 +7517,10 @@
             "description": "Get startup rTorrent config"
           }
         },
-        "summary": "Get startup rTorrent config",
+        "summary": "Get startup rTorrent config"
+      },
+      "post": {
+        "description": "Save startup rTorrent config",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -7172,10 +7528,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      },
-      "post": {
-        "description": "Save startup rTorrent config",
+        ],
         "responses": {
           "200": {
             "content": {
@@ -7193,7 +7546,12 @@
             "description": "Save startup rTorrent config"
           }
         },
-        "summary": "Save startup rTorrent config",
+        "summary": "Save startup rTorrent config"
+      }
+    },
+    "/api/rtorrent-config/generate": {
+      "post": {
+        "description": "Generate startup rTorrent config",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -7201,12 +7559,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/rtorrent-config/generate": {
-      "post": {
-        "description": "Generate startup rTorrent config",
+        ],
         "responses": {
           "200": {
             "content": {
@@ -7224,7 +7577,12 @@
             "description": "Generate startup rTorrent config"
           }
         },
-        "summary": "Generate startup rTorrent config",
+        "summary": "Generate startup rTorrent config"
+      }
+    },
+    "/api/rtorrent-config/reset": {
+      "post": {
+        "description": "Clear pyTorrent-saved rTorrent config overrides and reload live rTorrent values.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -7232,12 +7590,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/rtorrent-config/reset": {
-      "post": {
-        "description": "Clear pyTorrent-saved rTorrent config overrides and reload live rTorrent values.",
+        ],
         "responses": {
           "200": {
             "content": {
@@ -7265,15 +7618,7 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Reset startup rTorrent config overrides",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ProfileId"
-          },
-          {
-            "$ref": "#/components/parameters/ProfileName"
-          }
-        ]
+        "summary": "Reset startup rTorrent config overrides"
       }
     },
     "/api/smart-queue": {
@@ -7316,6 +7661,14 @@
         "summary": "Get Smart Queue settings, exceptions and history"
       },
       "post": {
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -7353,7 +7706,11 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Save Smart Queue settings",
+        "summary": "Save Smart Queue settings"
+      }
+    },
+    "/api/smart-queue/check": {
+      "post": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -7361,11 +7718,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/smart-queue/check": {
-      "post": {
+        ],
         "responses": {
           "200": {
             "content": {
@@ -7393,7 +7746,11 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Run Smart Queue check immediately",
+        "summary": "Run Smart Queue check immediately"
+      }
+    },
+    "/api/smart-queue/exclusion": {
+      "post": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -7401,11 +7758,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/smart-queue/exclusion": {
-      "post": {
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -7417,18 +7770,18 @@
                   "hash": {
                     "type": "string"
                   },
-                  "reason": {
-                    "type": "string"
-                  },
                   "profile_id": {
-                    "type": "integer",
                     "default": 1,
+                    "description": "Optional rTorrent profile id. Overrides active profile for this request.",
                     "minimum": 1,
-                    "description": "Optional rTorrent profile id. Overrides active profile for this request."
+                    "type": "integer"
                   },
                   "profile_name": {
-                    "type": "string",
-                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
+                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -7483,7 +7836,12 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Set Smart Queue exclusion",
+        "summary": "Set Smart Queue exclusion"
+      }
+    },
+    "/api/smart-queue/history": {
+      "delete": {
+        "description": "Deletes Smart Queue audit history for the active profile only. Settings, exclusions and queue state are preserved.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -7491,12 +7849,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/smart-queue/history": {
-      "delete": {
-        "description": "Deletes Smart Queue audit history for the active profile only. Settings, exclusions and queue state are preserved.",
+        ],
         "responses": {
           "200": {
             "content": {
@@ -7545,7 +7898,11 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Clear Smart Queue history for active profile",
+        "summary": "Clear Smart Queue history for active profile"
+      }
+    },
+    "/api/speed/limits": {
+      "post": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -7553,11 +7910,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/speed/limits": {
-      "post": {
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -7595,7 +7948,12 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Queue global speed limit change",
+        "summary": "Queue global speed limit change"
+      }
+    },
+    "/api/static_hash": {
+      "get": {
+        "description": "Returns the startup-computed hash for app JavaScript and CSS assets. The value is kept in memory and returned without scanning static files per request.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -7603,41 +7961,40 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/static_hash": {
-      "get": {
-        "tags": [
-          "System"
         ],
-        "summary": "Get current frontend JS/CSS hash",
-        "description": "Returns the startup-computed hash for app JavaScript and CSS assets. The value is kept in memory and returned without scanning static files per request.",
         "responses": {
           "200": {
-            "description": "Static asset hash",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
                   "properties": {
                     "ok": {
                       "type": "boolean"
                     },
                     "static_hash": {
-                      "type": "string",
-                      "description": "Short SHA-256-based hash of frontend JavaScript and CSS files computed once at app startup."
+                      "description": "Short SHA-256-based hash of frontend JavaScript and CSS files computed once at app startup.",
+                      "type": "string"
                     },
                     "version": {
-                      "type": "string",
-                      "description": "Alias of static_hash for simple client version checks."
+                      "description": "Alias of static_hash for simple client version checks.",
+                      "type": "string"
                     }
-                  }
+                  },
+                  "type": "object"
                 }
               }
-            }
+            },
+            "description": "Static asset hash"
           }
         },
+        "summary": "Get current frontend JS/CSS hash",
+        "tags": [
+          "System"
+        ]
+      }
+    },
+    "/api/system/disk": {
+      "get": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -7645,11 +8002,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/system/disk": {
-      "get": {
+        ],
         "responses": {
           "200": {
             "content": {
@@ -7687,7 +8040,12 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Disk usage for monitored paths",
+        "summary": "Disk usage for monitored paths"
+      }
+    },
+    "/api/system/status": {
+      "get": {
+        "description": "For remote profiles CPU/RAM host usage is not returned and usage_available is false.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -7695,12 +8053,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/system/status": {
-      "get": {
-        "description": "For remote profiles CPU/RAM host usage is not returned and usage_available is false.",
+        ],
         "responses": {
           "200": {
             "content": {
@@ -7738,15 +8091,7 @@
             "sessionCookie": []
           }
         ],
-        "summary": "rTorrent/system status",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ProfileId"
-          },
-          {
-            "$ref": "#/components/parameters/ProfileName"
-          }
-        ]
+        "summary": "rTorrent/system status"
       }
     },
     "/api/torrent-stats": {
@@ -7811,6 +8156,14 @@
     },
     "/api/torrents": {
       "get": {
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -7828,7 +8181,11 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Get cached torrent snapshot",
+        "summary": "Get cached torrent snapshot"
+      }
+    },
+    "/api/torrents/add": {
+      "post": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -7836,11 +8193,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/torrents/add": {
-      "post": {
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -7850,6 +8203,16 @@
                     "type": "string"
                   },
                   "label": {
+                    "type": "string"
+                  },
+                  "profile_id": {
+                    "default": 1,
+                    "description": "Optional rTorrent profile id. Overrides active profile for this request.",
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "profile_name": {
+                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
                     "type": "string"
                   },
                   "start": {
@@ -7867,16 +8230,6 @@
                         "type": "array"
                       }
                     ]
-                  },
-                  "profile_id": {
-                    "type": "integer",
-                    "default": 1,
-                    "minimum": 1,
-                    "description": "Optional rTorrent profile id. Overrides active profile for this request."
-                  },
-                  "profile_name": {
-                    "type": "string",
-                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
                   }
                 },
                 "type": "object"
@@ -7886,6 +8239,10 @@
               "schema": {
                 "properties": {
                   "directory": {
+                    "type": "string"
+                  },
+                  "file_priorities": {
+                    "description": "JSON map/list of selected file priorities from preview; zero-priority files are excluded from free-space requirement.",
                     "type": "string"
                   },
                   "files": {
@@ -7898,21 +8255,21 @@
                   "label": {
                     "type": "string"
                   },
+                  "profile_id": {
+                    "default": 1,
+                    "description": "Optional rTorrent profile id. Overrides active profile for this request.",
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "profile_name": {
+                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+                    "type": "string"
+                  },
                   "start": {
                     "type": "boolean"
                   },
                   "uris": {
                     "type": "string"
-                  },
-                  "profile_id": {
-                    "type": "integer",
-                    "default": 1,
-                    "minimum": 1,
-                    "description": "Optional rTorrent profile id. Overrides active profile for this request."
-                  },
-                  "profile_name": {
-                    "type": "string",
-                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
                   }
                 },
                 "type": "object"
@@ -7940,6 +8297,28 @@
               }
             },
             "description": "Error"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiError"
+                    },
+                    {
+                      "properties": {
+                        "space_check": {
+                          "$ref": "#/components/schemas/TorrentSpaceCheck"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Not enough free space"
           }
         },
         "security": [
@@ -7947,7 +8326,12 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Add magnet links or torrent files",
+        "summary": "Add magnet links or torrent files"
+      }
+    },
+    "/api/torrents/create": {
+      "post": {
+        "description": "Create a .torrent file from a source path on the active rTorrent host and optionally add/share it.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -7955,12 +8339,7 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/torrents/create": {
-      "post": {
-        "description": "Create a .torrent file from a source path on the active rTorrent host and optionally add/share it.",
+        ],
         "requestBody": {
           "content": {
             "multipart/form-data": {
@@ -7982,6 +8361,16 @@
                     ],
                     "type": "string"
                   },
+                  "profile_id": {
+                    "default": 1,
+                    "description": "Optional rTorrent profile id. Overrides active profile for this request.",
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "profile_name": {
+                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+                    "type": "string"
+                  },
                   "share": {
                     "enum": [
                       "0",
@@ -7997,16 +8386,6 @@
                   },
                   "trackers": {
                     "type": "string"
-                  },
-                  "profile_id": {
-                    "type": "integer",
-                    "default": 1,
-                    "minimum": 1,
-                    "description": "Optional rTorrent profile id. Overrides active profile for this request."
-                  },
-                  "profile_name": {
-                    "type": "string",
-                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
                   }
                 },
                 "type": "object"
@@ -8028,54 +8407,11 @@
             "description": "Created torrent file"
           }
         },
-        "summary": "Create torrent file",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ProfileId"
-          },
-          {
-            "$ref": "#/components/parameters/ProfileName"
-          }
-        ]
+        "summary": "Create torrent file"
       }
     },
     "/api/torrents/preview": {
       "post": {
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "profile_id": {
-                    "type": "integer",
-                    "default": 1,
-                    "minimum": 1,
-                    "description": "Optional rTorrent profile id. Overrides active profile for this request."
-                  },
-                  "profile_name": {
-                    "type": "string",
-                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
-                  }
-                }
-              }
-            }
-          },
-          "required": false
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                }
-              }
-            },
-            "description": "OK"
-          }
-        },
-        "summary": "Preview torrent files",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -8083,113 +8419,132 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
-      }
-    },
-    "/api/torrents/torrent-files.zip": {
-      "post": {
+        ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
                 "properties": {
                   "profile_id": {
-                    "type": "integer",
                     "default": 1,
+                    "description": "Optional rTorrent profile id. Overrides active profile for this request.",
                     "minimum": 1,
-                    "description": "Optional rTorrent profile id. Overrides active profile for this request."
+                    "type": "integer"
                   },
                   "profile_name": {
-                    "type": "string",
-                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
-                  }
-                }
-              }
-            }
-          },
-          "required": false
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                }
-              }
-            },
-            "description": "OK"
-          }
-        },
-        "summary": "Export selected torrent files as ZIP",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ProfileId"
-          },
-          {
-            "$ref": "#/components/parameters/ProfileName"
-          }
-        ]
-      }
-    },
-    "/api/torrents/torrent-files.zip/link": {
-      "post": {
-        "summary": "Create temporary .torrent files ZIP download link",
-        "description": "Validates selected torrents and returns a short-lived /download URL for a ZIP of exported .torrent files.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "hashes": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "profile_id": {
-                    "type": "integer",
-                    "default": 1,
-                    "minimum": 1,
-                    "description": "Optional rTorrent profile id. Overrides active profile for this request."
-                  },
-                  "profile_name": {
-                    "type": "string",
-                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
+                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+                    "type": "string"
                   }
                 },
-                "required": [
-                  "hashes"
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TemporaryLinkResponse"
-                }
+                "type": "object"
               }
             }
           },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Preview torrent files"
+      }
+    },
+    "/api/torrents/space-check": {
+      "post": {
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "directory": {
+                    "type": "string"
+                  },
+                  "file_priorities": {
+                    "description": "JSON priorities matching /api/torrents/add.",
+                    "type": "string"
+                  },
+                  "files": {
+                    "items": {
+                      "format": "binary",
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "profile_id": {
+                    "default": 1,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "profile_name": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiOk"
+                    },
+                    {
+                      "properties": {
+                        "space_check": {
+                          "$ref": "#/components/schemas/TorrentSpaceCheck"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "OK"
+          },
           "400": {
-            "description": "Error",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiError"
                 }
               }
-            }
+            },
+            "description": "Error"
           }
         },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Check free space for selected torrent files"
+      }
+    },
+    "/api/torrents/torrent-files.zip": {
+      "post": {
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -8197,7 +8552,109 @@
           {
             "$ref": "#/components/parameters/ProfileName"
           }
-        ]
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "profile_id": {
+                    "default": 1,
+                    "description": "Optional rTorrent profile id. Overrides active profile for this request.",
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "profile_name": {
+                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Export selected torrent files as ZIP"
+      }
+    },
+    "/api/torrents/torrent-files.zip/link": {
+      "post": {
+        "description": "Validates selected torrents and returns a short-lived /download URL for a ZIP of exported .torrent files.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "hashes": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "profile_id": {
+                    "default": 1,
+                    "description": "Optional rTorrent profile id. Overrides active profile for this request.",
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "profile_name": {
+                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "hashes"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemporaryLinkResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Create temporary .torrent files ZIP download link"
       }
     },
     "/api/torrents/{action_name}": {
@@ -8252,6 +8709,16 @@
                   "path": {
                     "type": "string"
                   },
+                  "profile_id": {
+                    "default": 1,
+                    "description": "Optional rTorrent profile id. Overrides active profile for this request.",
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "profile_name": {
+                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+                    "type": "string"
+                  },
                   "ratio_group": {
                     "type": "string"
                   },
@@ -8260,16 +8727,6 @@
                   },
                   "remove_data": {
                     "type": "boolean"
-                  },
-                  "profile_id": {
-                    "type": "integer",
-                    "default": 1,
-                    "minimum": 1,
-                    "description": "Optional rTorrent profile id. Overrides active profile for this request."
-                  },
-                  "profile_name": {
-                    "type": "string",
-                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
                   }
                 },
                 "type": "object"
@@ -8487,7 +8944,6 @@
     },
     "/api/torrents/{torrent_hash}/files/download-link": {
       "post": {
-        "summary": "Create temporary torrent file download link from body",
         "description": "Body-based alias that validates a selected torrent file and returns a short-lived /download URL.",
         "parameters": [
           {
@@ -8506,55 +8962,56 @@
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
                 "properties": {
                   "file_index": {
                     "type": "integer"
                   },
                   "profile_id": {
-                    "type": "integer",
                     "default": 1,
+                    "description": "Optional rTorrent profile id. Overrides active profile for this request.",
                     "minimum": 1,
-                    "description": "Optional rTorrent profile id. Overrides active profile for this request."
+                    "type": "integer"
                   },
                   "profile_name": {
-                    "type": "string",
-                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
+                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+                    "type": "string"
                   }
                 },
                 "required": [
                   "file_index"
-                ]
+                ],
+                "type": "object"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
-            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TemporaryLinkResponse"
                 }
               }
-            }
+            },
+            "description": "OK"
           },
           "400": {
-            "description": "Error",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiError"
                 }
               }
-            }
+            },
+            "description": "Error"
           }
-        }
+        },
+        "summary": "Create temporary torrent file download link from body"
       }
     },
     "/api/torrents/{torrent_hash}/files/download.zip": {
@@ -8579,19 +9036,19 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
                 "properties": {
                   "profile_id": {
-                    "type": "integer",
                     "default": 1,
+                    "description": "Optional rTorrent profile id. Overrides active profile for this request.",
                     "minimum": 1,
-                    "description": "Optional rTorrent profile id. Overrides active profile for this request."
+                    "type": "integer"
                   },
                   "profile_name": {
-                    "type": "string",
-                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
+                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+                    "type": "string"
                   }
-                }
+                },
+                "type": "object"
               }
             }
           },
@@ -8614,7 +9071,6 @@
     },
     "/api/torrents/{torrent_hash}/files/download.zip/link": {
       "post": {
-        "summary": "Create temporary torrent files ZIP download link",
         "description": "Validates selected torrent files and returns a short-lived /download URL for a ZIP archive. If indexes is omitted or null, all files are included.",
         "parameters": [
           {
@@ -8633,56 +9089,57 @@
           }
         ],
         "requestBody": {
-          "required": false,
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
                 "properties": {
                   "indexes": {
-                    "type": "array",
                     "items": {
                       "type": "integer"
                     },
-                    "nullable": true
+                    "nullable": true,
+                    "type": "array"
                   },
                   "profile_id": {
-                    "type": "integer",
                     "default": 1,
+                    "description": "Optional rTorrent profile id. Overrides active profile for this request.",
                     "minimum": 1,
-                    "description": "Optional rTorrent profile id. Overrides active profile for this request."
+                    "type": "integer"
                   },
                   "profile_name": {
-                    "type": "string",
-                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
+                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+                    "type": "string"
                   }
-                }
+                },
+                "type": "object"
               }
             }
-          }
+          },
+          "required": false
         },
         "responses": {
           "200": {
-            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TemporaryLinkResponse"
                 }
               }
-            }
+            },
+            "description": "OK"
           },
           "400": {
-            "description": "Error",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiError"
                 }
               }
-            }
+            },
+            "description": "Error"
           }
-        }
+        },
+        "summary": "Create temporary torrent files ZIP download link"
       }
     },
     "/api/torrents/{torrent_hash}/files/folder-priority": {
@@ -8707,19 +9164,19 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
                 "properties": {
                   "profile_id": {
-                    "type": "integer",
                     "default": 1,
+                    "description": "Optional rTorrent profile id. Overrides active profile for this request.",
                     "minimum": 1,
-                    "description": "Optional rTorrent profile id. Overrides active profile for this request."
+                    "type": "integer"
                   },
                   "profile_name": {
-                    "type": "string",
-                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
+                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+                    "type": "string"
                   }
-                }
+                },
+                "type": "object"
               }
             }
           },
@@ -8884,7 +9341,6 @@
     },
     "/api/torrents/{torrent_hash}/files/{file_index}/download-link": {
       "post": {
-        "summary": "Create temporary torrent file download link",
         "description": "Validates the selected torrent file through the API and returns a short-lived /download URL for the UI.",
         "parameters": [
           {
@@ -8912,31 +9368,31 @@
         ],
         "responses": {
           "200": {
-            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TemporaryLinkResponse"
                 }
               }
-            }
+            },
+            "description": "OK"
           },
           "400": {
-            "description": "Error",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiError"
                 }
               }
-            }
+            },
+            "description": "Error"
           }
-        }
+        },
+        "summary": "Create temporary torrent file download link"
       }
     },
     "/api/torrents/{torrent_hash}/files/{file_index}/mediainfo": {
       "get": {
-        "summary": "Get torrent file media info",
         "description": "Returns lightweight media information for a torrent file and may include a temporary in-app PDF preview URL. Note: this documents the existing additive media-info endpoint.",
         "parameters": [
           {
@@ -8972,13 +9428,13 @@
                       "$ref": "#/components/schemas/ApiOk"
                     },
                     {
-                      "type": "object",
                       "properties": {
                         "media_info": {
-                          "type": "object",
-                          "additionalProperties": true
+                          "additionalProperties": true,
+                          "type": "object"
                         }
-                      }
+                      },
+                      "type": "object"
                     }
                   ]
                 }
@@ -9001,7 +9457,8 @@
           {
             "sessionCookie": []
           }
-        ]
+        ],
+        "summary": "Get torrent file media info"
       }
     },
     "/api/torrents/{torrent_hash}/peers": {
@@ -9087,7 +9544,6 @@
     },
     "/api/torrents/{torrent_hash}/torrent-file/link": {
       "get": {
-        "summary": "Create temporary .torrent export download link",
         "description": "Validates .torrent export availability and returns a short-lived /download URL for the UI.",
         "parameters": [
           {
@@ -9107,26 +9563,27 @@
         ],
         "responses": {
           "200": {
-            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TemporaryLinkResponse"
                 }
               }
-            }
+            },
+            "description": "OK"
           },
           "400": {
-            "description": "Error",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiError"
                 }
               }
-            }
+            },
+            "description": "Error"
           }
-        }
+        },
+        "summary": "Create temporary .torrent export download link"
       }
     },
     "/api/torrents/{torrent_hash}/trackers": {
@@ -9208,19 +9665,19 @@
             "application/json": {
               "schema": {
                 "additionalProperties": true,
-                "type": "object",
                 "properties": {
                   "profile_id": {
-                    "type": "integer",
                     "default": 1,
+                    "description": "Optional rTorrent profile id. Overrides active profile for this request.",
                     "minimum": 1,
-                    "description": "Optional rTorrent profile id. Overrides active profile for this request."
+                    "type": "integer"
                   },
                   "profile_name": {
-                    "type": "string",
-                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided."
+                    "description": "Optional rTorrent profile name. Used only when profile_id is not provided.",
+                    "type": "string"
                   }
-                }
+                },
+                "type": "object"
               }
             }
           },
@@ -9468,6 +9925,14 @@
     "/api/traffic/history": {
       "get": {
         "description": "Traffic history",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          },
+          {
+            "$ref": "#/components/parameters/ProfileName"
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -9485,20 +9950,11 @@
             "description": "Traffic history"
           }
         },
-        "summary": "Traffic history",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ProfileId"
-          },
-          {
-            "$ref": "#/components/parameters/ProfileName"
-          }
-        ]
+        "summary": "Traffic history"
       }
     },
     "/download/{token}": {
       "get": {
-        "summary": "Open temporary download link",
         "description": "Resolves a short-lived in-app download token created by an API endpoint and streams the requested file or ZIP.",
         "parameters": [
           {
@@ -9518,54 +9974,54 @@
         ],
         "responses": {
           "200": {
-            "description": "File stream",
             "content": {
               "application/octet-stream": {
                 "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              },
-              "application/zip": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
+                  "format": "binary",
+                  "type": "string"
                 }
               },
               "application/x-bittorrent": {
                 "schema": {
-                  "type": "string",
-                  "format": "binary"
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "application/zip": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
                 }
               }
-            }
+            },
+            "description": "File stream"
           },
           "403": {
-            "description": "Error",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiError"
                 }
               }
-            }
+            },
+            "description": "Error"
           },
           "404": {
-            "description": "Error",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiError"
                 }
               }
-            }
+            },
+            "description": "Error"
           }
-        }
+        },
+        "summary": "Open temporary download link"
       }
     },
     "/preview/pdf/{token}": {
       "get": {
-        "summary": "Open temporary PDF preview",
         "description": "Streams a PDF through an in-app temporary preview URL created by the API. The browser-visible URL does not expose the stable /api download route.",
         "parameters": [
           {
@@ -9585,17 +10041,164 @@
         ],
         "responses": {
           "200": {
-            "description": "PDF stream",
             "content": {
               "application/pdf": {
                 "schema": {
-                  "type": "string",
-                  "format": "binary"
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "PDF stream"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Open temporary PDF preview"
+      }
+    },
+    "/api/speed/profiles": {
+      "get": {
+        "summary": "List user speed profiles",
+        "responses": {
+          "200": {
+            "description": "Speed profiles",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "profiles": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SpeedProfile"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      },
+      "post": {
+        "summary": "Create user speed profile",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpeedProfileRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Speed profile created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "profile": {
+                      "$ref": "#/components/schemas/SpeedProfile"
+                    }
+                  }
                 }
               }
             }
           },
-          "403": {
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/speed/profiles/{profile_id}": {
+      "put": {
+        "summary": "Update user speed profile",
+        "parameters": [
+          {
+            "name": "profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpeedProfileRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Speed profile updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "profile": {
+                      "$ref": "#/components/schemas/SpeedProfile"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
             "description": "Error",
             "content": {
               "application/json": {
@@ -9615,86 +10218,45 @@
               }
             }
           }
-        }
-      }
-    },
-    "/api/path/directories": {
-      "post": {
-        "summary": "Create an empty directory",
-        "description": "Creates a directory on the active rTorrent host for inline path-picker use. Existing torrent state is not changed.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PathDirectoryCreateRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Created",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PathDirectoryMutationResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
         },
         "security": [
           {
             "sessionCookie": []
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ProfileId"
-          },
-          {
-            "$ref": "#/components/parameters/ProfileName"
           }
         ]
-      }
-    },
-    "/api/path/directories/rename": {
-      "post": {
-        "summary": "Rename an empty directory",
-        "description": "Renames a directory only when it is empty and does not contain a cached torrent path.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PathDirectoryRenameRequest"
-              }
+      },
+      "delete": {
+        "summary": "Delete user speed profile",
+        "parameters": [
+          {
+            "name": "profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
             }
           }
-        },
+        ],
         "responses": {
           "200": {
-            "description": "Renamed",
+            "description": "Speed profile deleted",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PathDirectoryMutationResponse"
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "deleted": {
+                      "type": "boolean"
+                    }
+                  }
                 }
               }
             }
           },
-          "400": {
+          "404": {
             "description": "Error",
             "content": {
               "application/json": {
@@ -9708,14 +10270,6 @@
         "security": [
           {
             "sessionCookie": []
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ProfileId"
-          },
-          {
-            "$ref": "#/components/parameters/ProfileName"
           }
         ]
       }

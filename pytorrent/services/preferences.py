@@ -510,6 +510,18 @@ def save_preferences(data: dict, user_id: int | None = None, profile_id: int | N
     torrent_list_font_size = data.get("torrent_list_font_size")
     compact_torrent_list_enabled = data.get("compact_torrent_list_enabled")
     detail_panel_height = data.get("detail_panel_height")
+    default_download_path = data.get("default_download_path")
+    download_location_mode = data.get("download_location_mode")
+    download_last_path = data.get("download_last_path")
+    download_remember_last_enabled = data.get("download_remember_last_enabled")
+    # Note: The Add modal remember switch is a shortcut for the remember-last mode.
+    # Keeping this normalization server-side protects API callers and stale frontend bundles.
+    if download_remember_last_enabled is True and download_location_mode is None:
+        download_location_mode = "remember_last"
+    if download_location_mode == "remember_last" and download_remember_last_enabled is None:
+        download_remember_last_enabled = True
+    drop_location_mode = data.get("drop_location_mode")
+    free_space_check_enabled = data.get("free_space_check_enabled")
     disk_payload = None
     if any(value is not None for value in (disk_monitor_paths_json, disk_monitor_mode, disk_monitor_selected_path, disk_monitor_stop_enabled, disk_monitor_stop_threshold)):
         disk_payload = {
@@ -521,6 +533,13 @@ def save_preferences(data: dict, user_id: int | None = None, profile_id: int | N
         }
     with connect() as conn:
         now = utcnow()
+        current_pref = conn.execute(
+            "SELECT easter_egg_loading_image_url, easter_egg_click_image_url FROM user_preferences WHERE user_id=?",
+            (user_id,),
+        ).fetchone()
+        effective_easter_loading_url = _url_setting(data, "easter_egg_loading_image_url") if easter_egg_loading_image_url is not None else ((current_pref or {}).get("easter_egg_loading_image_url") or "")
+        effective_easter_click_url = _url_setting(data, "easter_egg_click_image_url") if easter_egg_click_image_url is not None else ((current_pref or {}).get("easter_egg_click_image_url") or "")
+        easter_egg_has_image = bool(effective_easter_loading_url or effective_easter_click_url)
         if allowed_theme:
             conn.execute("UPDATE user_preferences SET theme=?, updated_at=? WHERE user_id=?", (allowed_theme, now, user_id))
         if bootstrap_theme:
@@ -536,11 +555,13 @@ def save_preferences(data: dict, user_id: int | None = None, profile_id: int | N
             # Note: Smart Queue toast noise can be disabled independently from automation notifications.
             conn.execute("UPDATE user_preferences SET smart_queue_toasts_enabled=?, updated_at=? WHERE user_id=?", (1 if smart_queue_toasts_enabled else 0, now, user_id))
         if easter_egg_enabled is not None:
-            conn.execute("UPDATE user_preferences SET easter_egg_enabled=?, updated_at=? WHERE user_id=?", (1 if easter_egg_enabled else 0, now, user_id))
+            conn.execute("UPDATE user_preferences SET easter_egg_enabled=?, updated_at=? WHERE user_id=?", (1 if (easter_egg_enabled and easter_egg_has_image) else 0, now, user_id))
+        elif (easter_egg_loading_image_url is not None or easter_egg_click_image_url is not None) and not easter_egg_has_image:
+            conn.execute("UPDATE user_preferences SET easter_egg_enabled=0, updated_at=? WHERE user_id=?", (now, user_id))
         if easter_egg_loading_image_url is not None:
-            conn.execute("UPDATE user_preferences SET easter_egg_loading_image_url=?, updated_at=? WHERE user_id=?", (_url_setting(data, "easter_egg_loading_image_url"), now, user_id))
+            conn.execute("UPDATE user_preferences SET easter_egg_loading_image_url=?, updated_at=? WHERE user_id=?", (effective_easter_loading_url, now, user_id))
         if easter_egg_click_image_url is not None:
-            conn.execute("UPDATE user_preferences SET easter_egg_click_image_url=?, updated_at=? WHERE user_id=?", (_url_setting(data, "easter_egg_click_image_url"), now, user_id))
+            conn.execute("UPDATE user_preferences SET easter_egg_click_image_url=?, updated_at=? WHERE user_id=?", (effective_easter_click_url, now, user_id))
         if interface_scale is not None:
             scale = int(interface_scale or 100)
             if scale < 80: scale = 80
@@ -573,6 +594,25 @@ def save_preferences(data: dict, user_id: int | None = None, profile_id: int | N
             if height < 160: height = 160
             if height > 720: height = 720
             conn.execute("UPDATE user_preferences SET detail_panel_height=?, updated_at=? WHERE user_id=?", (height, now, user_id))
+        if default_download_path is not None:
+            # Note: The user-level default path is additive; an empty value falls back to the active rTorrent profile default.
+            conn.execute("UPDATE user_preferences SET default_download_path=?, updated_at=? WHERE user_id=?", (str(default_download_path or '').strip(), now, user_id))
+        if download_location_mode is not None:
+            mode = str(download_location_mode or 'profile_default').strip()
+            if mode not in {'profile_default', 'choose_each_time', 'remember_last'}:
+                mode = 'profile_default'
+            conn.execute("UPDATE user_preferences SET download_location_mode=?, updated_at=? WHERE user_id=?", (mode, now, user_id))
+        if download_last_path is not None:
+            conn.execute("UPDATE user_preferences SET download_last_path=?, updated_at=? WHERE user_id=?", (str(download_last_path or '').strip(), now, user_id))
+        if download_remember_last_enabled is not None:
+            conn.execute("UPDATE user_preferences SET download_remember_last_enabled=?, updated_at=? WHERE user_id=?", (1 if download_remember_last_enabled else 0, now, user_id))
+        if drop_location_mode is not None:
+            mode = str(drop_location_mode or 'default').strip()
+            if mode not in {'default', 'ask_batch', 'ask_each'}:
+                mode = 'default'
+            conn.execute("UPDATE user_preferences SET drop_location_mode=?, updated_at=? WHERE user_id=?", (mode, now, user_id))
+        if free_space_check_enabled is not None:
+            conn.execute("UPDATE user_preferences SET free_space_check_enabled=?, updated_at=? WHERE user_id=?", (1 if free_space_check_enabled else 0, now, user_id))
     save_profile_preferences(user_id, profile_id, data)
     if disk_payload is not None:
         save_disk_monitor_preferences(profile_id, disk_payload, user_id)

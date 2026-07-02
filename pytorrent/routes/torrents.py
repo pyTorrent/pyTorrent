@@ -2,7 +2,8 @@ from __future__ import annotations
 from ._shared import *
 import json
 import posixpath
-from ..services import profile_speed_limits
+from ..services import profile_speed_limits, speed_limit_profiles
+from ..utils import human_size
 from ..services import pdf_preview_links, torrent_creator
 from ..services.reverse_dns import attach_reverse_dns
 
@@ -713,6 +714,68 @@ def torrent_create():
         return jsonify({"ok": False, "error": str(exc)}), 400
 
 
+
+
+def _selected_torrent_size(meta: dict, file_priorities: list | None = None) -> int:
+    """Return bytes selected for download; unchecked files from the Add preview do not count."""
+    priority_by_index = {}
+    if isinstance(file_priorities, list):
+        for item in file_priorities:
+            try:
+                priority_by_index[int(item.get("index"))] = int(item.get("priority") or 0)
+            except Exception:
+                continue
+    files = meta.get("files") or []
+    if not priority_by_index:
+        return int(meta.get("size") or 0)
+    total = 0
+    for index, item in enumerate(files):
+        if int(priority_by_index.get(index, 1) or 0) > 0:
+            total += int(item.get("size") or 0)
+    return total
+
+
+def _space_check_payload(profile: dict, directory: str, items: list[dict]) -> dict:
+    directory = str(directory or "").strip() or active_default_download_path(profile)
+    required = sum(max(0, int(item.get("required_bytes") or 0)) for item in items)
+    usage = rtorrent.disk_usage_for_paths(profile, [directory], "selected", directory)
+    free = int(usage.get("free") or 0) if usage.get("ok") else 0
+    ok_space = bool(usage.get("ok")) and free >= required
+    return {
+        "ok": ok_space,
+        "directory": directory,
+        "required_bytes": required,
+        "required_h": human_size(required),
+        "free_bytes": free,
+        "free_h": human_size(free),
+        "shortfall_bytes": max(0, required - free),
+        "shortfall_h": human_size(max(0, required - free)),
+        "disk": usage,
+        "items": items,
+        "message": "Enough free space." if ok_space else f"Not enough free space in {directory}. Required {human_size(required)}, available {human_size(free)}.",
+    }
+
+
+def _parse_priority_payload(value) -> dict | list:
+    try:
+        return json.loads(value or "{}")
+    except Exception:
+        return {}
+
+
+def _priorities_for(priority_payload: dict | list, filename: str, info_hash: str) -> list:
+    if isinstance(priority_payload, dict):
+        return priority_payload.get(filename) or priority_payload.get(info_hash) or []
+    if isinstance(priority_payload, list):
+        return priority_payload
+    return []
+
+
+def _should_check_free_space(profile: dict) -> bool:
+    prefs = preferences.get_preferences(profile_id=int(profile.get("id") or 0))
+    return bool(int((prefs or {}).get("free_space_check_enabled") or 0))
+
+
 @bp.post("/torrents/add")
 def torrent_add():
     profile = request_profile()
@@ -727,23 +790,31 @@ def torrent_add():
         for uri in uris:
             job_ids.append(enqueue("add_magnet", profile["id"], {"uri": uri, "start": start, "directory": directory, "label": label}))
         existing_hashes = {str(t.get("hash") or "").upper() for t in torrent_cache.snapshot(profile["id"])}
-        try:
-            priority_payload = json.loads(request.form.get("file_priorities") or "{}")
-        except Exception:
-            priority_payload = {}
+        priority_payload = _parse_priority_payload(request.form.get("file_priorities"))
         allow_duplicates = request.form.get("allow_duplicates", "0") in {"1", "true", "on", "yes"}
         skipped_duplicates = []
-        for uploaded in request.files.getlist("files"):
-            raw = uploaded.read()
+        uploaded_files = [(uploaded.filename, uploaded.read()) for uploaded in request.files.getlist("files")]
+        if _should_check_free_space(profile) and uploaded_files:
+            space_items = []
+            for filename_hint, raw_data in uploaded_files:
+                meta = parse_torrent(raw_data)
+                info_hash = str(meta.get("info_hash") or "").upper()
+                filename_hint = filename_hint or meta.get("name") or info_hash
+                file_priorities = _priorities_for(priority_payload, filename_hint, info_hash)
+                space_items.append({"filename": filename_hint, "info_hash": info_hash, "required_bytes": _selected_torrent_size(meta, file_priorities)})
+            space = _space_check_payload(profile, directory, space_items)
+            if not space.get("ok"):
+                return jsonify({"ok": False, "error": space.get("message"), "space_check": space}), 409
+        for filename_hint, raw in uploaded_files:
             meta = parse_torrent(raw)
             info_hash = str(meta.get("info_hash") or "").upper()
-            filename = uploaded.filename or meta.get("name") or info_hash
+            filename = filename_hint or meta.get("name") or info_hash
             if info_hash and info_hash in existing_hashes and not allow_duplicates:
                 skipped_duplicates.append({"filename": filename, "info_hash": info_hash})
                 continue
             file_priorities = []
             if isinstance(priority_payload, dict):
-                file_priorities = priority_payload.get(filename) or priority_payload.get(info_hash) or []
+                file_priorities = _priorities_for(priority_payload, filename, info_hash)
             elif isinstance(priority_payload, list):
                 file_priorities = priority_payload
 
@@ -768,6 +839,47 @@ def torrent_add():
     for uri in uris:
         job_ids.append(enqueue("add_magnet", profile["id"], {"uri": uri, "start": data.get("start", True), "directory": data.get("directory", "") or active_default_download_path(profile), "label": data.get("label", "")}))
     return ok({"job_ids": job_ids})
+
+
+
+
+@bp.post("/torrents/space-check")
+def torrent_space_check():
+    profile = request_profile()
+    if not profile:
+        return jsonify({"ok": False, "error": "No profile"}), 400
+    if not (request.content_type and request.content_type.startswith("multipart/form-data")):
+        return jsonify({"ok": False, "error": "multipart/form-data is required"}), 400
+    directory = request.form.get("directory", "") or active_default_download_path(profile)
+    priority_payload = _parse_priority_payload(request.form.get("file_priorities"))
+    try:
+        items = []
+        for uploaded in request.files.getlist("files"):
+            raw = uploaded.read()
+            meta = parse_torrent(raw)
+            info_hash = str(meta.get("info_hash") or "").upper()
+            filename = uploaded.filename or meta.get("name") or info_hash
+            file_priorities = _priorities_for(priority_payload, filename, info_hash)
+            items.append({"filename": filename, "info_hash": info_hash, "required_bytes": _selected_torrent_size(meta, file_priorities)})
+        return ok({"space_check": _space_check_payload(profile, directory, items)})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+
+@bp.get("/download-location/preferences")
+def download_location_preferences_get():
+    profile = request_profile()
+    prefs = preferences.get_preferences(profile_id=profile.get("id") if profile else None)
+    profile_default = active_default_download_path(profile) if profile else ""
+    return ok({"preferences": prefs, "default_path": profile_default})
+
+
+@bp.post("/download-location/preferences")
+def download_location_preferences_save():
+    profile_id = request_profile_id(require_write=True)
+    prefs = preferences.save_preferences(request.get_json(silent=True) or {}, profile_id=profile_id)
+    profile = preferences.get_profile(profile_id, auth.current_user_id() or default_user_id()) if profile_id else request_profile()
+    return ok({"preferences": prefs, "default_path": active_default_download_path(profile) if profile else ""})
 
 
 @bp.post("/torrents/preview")
@@ -810,6 +922,38 @@ def speed_limits():
     # Note: Manual speed limits are stored once per rTorrent profile, so every user opening this profile sees and applies the same values.
     job_id = enqueue("set_limits", profile["id"], {"down": limits["down"], "up": limits["up"]})
     return ok({"job_id": job_id, "limits": limits})
+
+
+@bp.get("/speed/profiles")
+def speed_profiles_list():
+    # Note: User-defined speed presets are stored per user and only populate the modal selector; applying them still uses the existing limits job.
+    return ok({"profiles": speed_limit_profiles.list_profiles()})
+
+
+@bp.post("/speed/profiles")
+def speed_profiles_create():
+    data = request.get_json(silent=True) or {}
+    try:
+        profile = speed_limit_profiles.save_profile(data.get("name"), data.get("down"), data.get("up"))
+        return ok({"profile": profile})
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+
+@bp.put("/speed/profiles/<int:profile_id>")
+def speed_profiles_update(profile_id: int):
+    data = request.get_json(silent=True) or {}
+    try:
+        profile = speed_limit_profiles.save_profile(data.get("name"), data.get("down"), data.get("up"), profile_id=profile_id)
+        return ok({"profile": profile})
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 404 if "not found" in str(exc).lower() else 400
+
+
+@bp.delete("/speed/profiles/<int:profile_id>")
+def speed_profiles_delete(profile_id: int):
+    speed_limit_profiles.delete_profile(profile_id)
+    return ok({"deleted": True})
 
 
 def _user_disk_status(profile: dict) -> dict:

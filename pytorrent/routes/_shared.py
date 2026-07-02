@@ -224,6 +224,13 @@ def active_default_download_path(profile: dict | None) -> str:
     if not profile:
         return ""
     try:
+        prefs = preferences.get_preferences(profile_id=int(profile.get("id") or 0))
+        custom = str((prefs or {}).get("default_download_path") or "").strip()
+        if custom:
+            return custom
+    except Exception:
+        pass
+    try:
         return rtorrent.default_download_path(profile)
     except Exception:
         return ""

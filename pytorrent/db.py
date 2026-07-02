@@ -68,6 +68,12 @@ CREATE TABLE IF NOT EXISTS user_preferences (
   easter_egg_click_image_url TEXT DEFAULT '',
   interface_scale INTEGER DEFAULT 100,
   detail_panel_height INTEGER DEFAULT 255,
+  default_download_path TEXT DEFAULT '',
+  download_location_mode TEXT DEFAULT 'profile_default',
+  download_last_path TEXT DEFAULT '',
+  download_remember_last_enabled INTEGER DEFAULT 0,
+  drop_location_mode TEXT DEFAULT 'default',
+  free_space_check_enabled INTEGER DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   FOREIGN KEY(user_id) REFERENCES users(id)
@@ -398,6 +404,19 @@ CREATE TABLE IF NOT EXISTS profile_speed_limits (
   updated_at TEXT NOT NULL,
   FOREIGN KEY(profile_id) REFERENCES rtorrent_profiles(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS speed_limit_profiles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  down_limit INTEGER DEFAULT 0,
+  up_limit INTEGER DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_speed_limit_profiles_user ON speed_limit_profiles(user_id, lower(name));
 
 CREATE TABLE IF NOT EXISTS transfer_speed_peaks (
   profile_id INTEGER PRIMARY KEY,

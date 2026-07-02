@@ -2275,18 +2275,31 @@ body.mobile-mode .mobile-filter-bar {
 .tracker-actions {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: 0.45rem;
 }
 
+.tracker-actions {
+  flex-wrap: wrap;
+}
+
 .tracker-toolbar {
+  flex-wrap: nowrap;
   justify-content: space-between;
   margin-bottom: 0.55rem;
 }
 
+.tracker-toolbar .input-group {
+  flex: 1 1 auto;
+  max-width: min(48rem, 100%);
+}
+
+.tracker-toolbar #trackerReannounceBtn {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
 .tracker-add-input {
   min-width: 240px;
-  max-width: 520px;
 }
 
 .tracker-table {
@@ -4037,7 +4050,8 @@ body,
   grid-template-columns: minmax(14rem, 1fr) minmax(10rem, 16rem) auto;
 }
 
-.add-start-card {
+.add-option-switch,
+.add-option-check {
   align-items: center;
   display: flex;
   gap: 0.55rem;
@@ -4048,9 +4062,29 @@ body,
   white-space: nowrap;
 }
 
-.add-start-card .form-check-input {
+.add-option-switch .form-check-input,
+.add-option-check .form-check-input {
   flex: 0 0 auto;
   margin: 0;
+}
+
+.add-option-copy {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.add-option-copy small {
+  color: var(--bs-secondary-color);
+  font-size: 0.76rem;
+  line-height: 1.15;
+  white-space: normal;
+}
+
+.add-options-stack {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
 }
 
 .create-properties-grid,
@@ -4077,7 +4111,8 @@ body,
     grid-template-columns: 1fr;
   }
 
-  .add-start-card {
+  .add-option-switch,
+  .add-option-check {
     justify-content: flex-start;
   }
 }
@@ -6335,5 +6370,57 @@ body.compact-torrent-list .mobile-progress .torrent-progress {
   .smart-simulation-block-meta {
     justify-content: flex-start;
     white-space: normal;
+  }
+}
+
+
+.download-location-grid .form-field .input-group {
+  margin-top: 0.25rem;
+}
+
+.drop-location-file-list {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.drop-location-file {
+  align-items: center;
+  background: var(--surface-muted, rgba(148, 163, 184, 0.08));
+  border: 1px solid var(--border-color, rgba(148, 163, 184, 0.22));
+  border-radius: 0.55rem;
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.45rem 0.65rem;
+}
+
+.drop-location-file span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.speed-profile-panel {
+  background: var(--bs-tertiary-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.75rem;
+  padding: 0.85rem;
+}
+
+.speed-profile-controls,
+.speed-profile-editor {
+  align-items: center;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.speed-profile-editor {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+@media (max-width: 575.98px) {
+  .speed-profile-controls,
+  .speed-profile-editor {
+    grid-template-columns: 1fr;
   }
 }
