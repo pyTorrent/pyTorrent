@@ -2273,13 +2273,24 @@ body.mobile-mode .mobile-filter-bar {
 
 .tracker-toolbar,
 .tracker-actions {
-  display: flex;
   align-items: center;
+  display: flex;
   gap: 0.45rem;
 }
 
 .tracker-actions {
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+}
+
+/* Note: The tracker delete button stays icon-only so it does not make tracker rows taller than peer rows. */
+.tracker-delete {
+  align-items: center;
+  display: inline-flex;
+  height: 1.35rem;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  width: 1.35rem;
 }
 
 .tracker-toolbar {
@@ -2302,47 +2313,6 @@ body.mobile-mode .mobile-filter-bar {
   min-width: 240px;
 }
 
-.tracker-table {
-  min-width: 960px;
-  table-layout: fixed;
-  width: 100%;
-}
-
-.tracker-table th,
-.tracker-table td {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  vertical-align: middle;
-}
-
-.tracker-table th:nth-child(1),
-.tracker-table td:nth-child(1) {
-  width: 6%;
-}
-
-.tracker-table th:nth-child(2),
-.tracker-table td:nth-child(2) {
-  width: 38%;
-}
-
-.tracker-table th:nth-child(3),
-.tracker-table td:nth-child(3),
-.tracker-table th:nth-child(4),
-.tracker-table td:nth-child(4),
-.tracker-table th:nth-child(5),
-.tracker-table td:nth-child(5) {
-  width: 10%;
-}
-
-.tracker-table th:nth-child(6),
-.tracker-table td:nth-child(6) {
-  width: 16%;
-}
-
-.tracker-table th:nth-child(7),
-.tracker-table td:nth-child(7) {
-  width: 10%;
-}
 
 .tracker-url-text {
   display: block;
@@ -5011,15 +4981,19 @@ body,
   }
 }
 
-/* Note: Peers tables keep hostnames readable and keep progress columns stable. */
-.peers-table {
+/* Note: Detail tables share fixed layout rules so tracker and peer rows keep matching spacing. */
+.peers-table,
+.tracker-table {
   min-width: 960px;
   table-layout: fixed;
   width: 100%;
 }
 
 .peers-table th,
-.peers-table td {
+.peers-table td,
+.tracker-table th,
+.tracker-table td {
+  line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
   vertical-align: middle;
@@ -5028,6 +5002,67 @@ body,
 .peers-table .peer-progress-wide {
   min-width: 0;
   width: 100%;
+}
+
+.tracker-table:not(.tracker-table-icons) th:nth-child(1),
+.tracker-table:not(.tracker-table-icons) td:nth-child(1),
+.tracker-table.tracker-table-icons th:nth-child(1),
+.tracker-table.tracker-table-icons td:nth-child(1),
+.tracker-table.tracker-table-icons th:nth-child(2),
+.tracker-table.tracker-table-icons td:nth-child(2) {
+  width: 4%;
+}
+
+.tracker-table:not(.tracker-table-icons) th:nth-child(2),
+.tracker-table:not(.tracker-table-icons) td:nth-child(2) {
+  width: 39%;
+}
+
+.tracker-table.tracker-table-icons th:nth-child(3),
+.tracker-table.tracker-table-icons td:nth-child(3) {
+  width: 35%;
+}
+
+.tracker-table:not(.tracker-table-icons) th:nth-child(3),
+.tracker-table:not(.tracker-table-icons) td:nth-child(3),
+.tracker-table:not(.tracker-table-icons) th:nth-child(4),
+.tracker-table:not(.tracker-table-icons) td:nth-child(4),
+.tracker-table:not(.tracker-table-icons) th:nth-child(5),
+.tracker-table:not(.tracker-table-icons) td:nth-child(5),
+.tracker-table.tracker-table-icons th:nth-child(4),
+.tracker-table.tracker-table-icons td:nth-child(4),
+.tracker-table.tracker-table-icons th:nth-child(5),
+.tracker-table.tracker-table-icons td:nth-child(5) {
+  width: 8%;
+}
+
+.tracker-table.tracker-table-icons th:nth-child(6),
+.tracker-table.tracker-table-icons td:nth-child(6) {
+  width: 7%;
+}
+
+.tracker-table:not(.tracker-table-icons) th:nth-child(6),
+.tracker-table:not(.tracker-table-icons) td:nth-child(6),
+.tracker-table.tracker-table-icons th:nth-child(7),
+.tracker-table.tracker-table-icons td:nth-child(7) {
+  width: 16%;
+}
+
+.tracker-table:not(.tracker-table-icons) th:nth-child(7),
+.tracker-table:not(.tracker-table-icons) td:nth-child(7) {
+  width: 17%;
+}
+
+.tracker-table.tracker-table-icons th:nth-child(8),
+.tracker-table.tracker-table-icons td:nth-child(8) {
+  width: 18%;
+}
+
+.tracker-detail-icon {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+  min-width: 1.25rem;
 }
 
 .peers-table:not(.peers-table-hosts) th:nth-child(1),
