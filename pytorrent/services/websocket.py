@@ -3,6 +3,7 @@ import threading
 import time
 import json
 import psutil
+from flask import request
 from flask_socketio import emit, join_room, leave_room, disconnect
 from .preferences import active_profile, get_profile
 from ..db import default_user_id
@@ -32,6 +33,43 @@ def _emit_profile(socketio, event: str, payload: dict, profile_id: int) -> None:
 
 
 _speed_limits_applied: dict[int, tuple[int, int]] = {}
+_socket_profiles: dict[str, int] = {}
+_profile_socket_counts: dict[int, int] = {}
+_socket_profile_lock = threading.Lock()
+
+
+def _profile_client_count(profile_id: int) -> int:
+    with _socket_profile_lock:
+        return int(_profile_socket_counts.get(int(profile_id), 0) or 0)
+
+
+def _register_profile_socket(profile_id: int) -> None:
+    sid = str(getattr(request, "sid", "") or "")
+    if not sid:
+        return
+    profile_id = int(profile_id)
+    with _socket_profile_lock:
+        previous = _socket_profiles.get(sid)
+        if previous == profile_id:
+            return
+        if previous:
+            _profile_socket_counts[previous] = max(0, int(_profile_socket_counts.get(previous, 0) or 0) - 1)
+            poller_control.set_connected_clients(previous, _profile_socket_counts[previous])
+        _socket_profiles[sid] = profile_id
+        _profile_socket_counts[profile_id] = int(_profile_socket_counts.get(profile_id, 0) or 0) + 1
+        poller_control.set_connected_clients(profile_id, _profile_socket_counts[profile_id])
+
+
+def _unregister_profile_socket() -> None:
+    sid = str(getattr(request, "sid", "") or "")
+    if not sid:
+        return
+    with _socket_profile_lock:
+        profile_id = _socket_profiles.pop(sid, None)
+        if not profile_id:
+            return
+        _profile_socket_counts[profile_id] = max(0, int(_profile_socket_counts.get(profile_id, 0) or 0) - 1)
+        poller_control.set_connected_clients(profile_id, _profile_socket_counts[profile_id])
 
 
 def _apply_configured_speed_limits(profile: dict, *, force: bool = False) -> None:
@@ -47,16 +85,13 @@ def _apply_configured_speed_limits(profile: dict, *, force: bool = False) -> Non
     _speed_limits_applied[profile_id] = key
 
 
-def _run_slow_profile_tasks(socketio, profile: dict, profile_id: int) -> None:
+def _run_queue_profile_tasks(socketio, profile: dict, profile_id: int, settings: dict | None = None) -> None:
     state = poller_control.state_for(profile_id)
+    settings = poller_control.normalize_settings(settings or poller_control.get_settings(profile_id))
     profile_user_id = int(profile.get("user_id") or default_user_id())
     try:
         try:
-            torrent_stats.queue_refresh(socketio, profile, force=False, room=_profile_room(profile_id))
-        except Exception as exc:
-            _emit_profile(socketio, "torrent_stats_update", {"ok": False, "profile_id": profile_id, "error": str(exc)}, profile_id)
-        try:
-            result = smart_queue.check(profile, user_id=profile_user_id, force=False)
+            result = smart_queue.check(profile, user_id=profile_user_id, force=False, cleanup_disabled=bool(settings.get("run_smart_queue_cleanup_while_disabled")))
             if result.get("enabled"):
                 _emit_profile(socketio, "smart_queue_update", result, profile_id)
                 if result.get("stopped") or result.get("started") or result.get("start_requested") or result.get("paused") or result.get("resumed"):
@@ -66,6 +101,18 @@ def _run_slow_profile_tasks(socketio, profile: dict, profile_id: int) -> None:
                         _emit_profile(socketio, "torrent_patch", payload, profile_id)
         except Exception as exc:
             _emit_profile(socketio, "smart_queue_update", {"ok": False, "profile_id": profile_id, "error": str(exc)}, profile_id)
+    finally:
+        state.queue_task_running = False
+
+
+def _run_slow_profile_tasks(socketio, profile: dict, profile_id: int, settings: dict | None = None) -> None:
+    state = poller_control.state_for(profile_id)
+    profile_user_id = int(profile.get("user_id") or default_user_id())
+    try:
+        try:
+            torrent_stats.queue_refresh(socketio, profile, force=False, room=_profile_room(profile_id))
+        except Exception as exc:
+            _emit_profile(socketio, "torrent_stats_update", {"ok": False, "profile_id": profile_id, "error": str(exc)}, profile_id)
         try:
             auto_result = automation_rules.check(profile, user_id=profile_user_id, force=False)
             if auto_result.get("applied") or auto_result.get("batches"):
@@ -128,9 +175,9 @@ def register_socketio_handlers(socketio):
                     next_sleep,
                     max(poller_control.MIN_POLL_INTERVAL_SECONDS, live_interval - (now - state.last_live_at)),
                     max(poller_control.MIN_POLL_INTERVAL_SECONDS, list_interval - (now - state.last_list_at)),
-                    max(poller_control.MIN_POLL_INTERVAL_SECONDS, float(settings["system_stats_interval_seconds"]) - (now - state.last_system_at)),
-                    max(poller_control.MIN_POLL_INTERVAL_SECONDS, float(settings["slow_stats_interval_seconds"]) - (now - state.last_slow_at)),
-                    max(poller_control.MIN_POLL_INTERVAL_SECONDS, float(settings["queue_stats_interval_seconds"]) - (now - state.last_queue_at)),
+                    max(poller_control.MIN_POLL_INTERVAL_SECONDS, poller_control.effective_system_interval(settings, state) - (now - state.last_system_at)),
+                    max(poller_control.MIN_POLL_INTERVAL_SECONDS, poller_control.effective_slow_interval(settings, state) - (now - state.last_slow_at)),
+                    max(poller_control.MIN_POLL_INTERVAL_SECONDS, poller_control.effective_queue_interval(settings, state) - (now - state.last_queue_at)),
                 )
 
                 run_live = poller_control.should_live_poll(now, settings, state)
@@ -242,16 +289,21 @@ def register_socketio_handlers(socketio):
                     if poller_control.should_tracker_poll(now, settings, state):
                         state.last_tracker_at = now
 
-                    if run_slow or run_queue:
-                        if run_slow:
-                            state.last_slow_at = now
-                        if run_queue:
-                            state.last_queue_at = now
+                    if run_queue:
+                        state.last_queue_at = now
+                        if state.queue_task_running:
+                            skipped_emissions += 1
+                        else:
+                            state.queue_task_running = True
+                            socketio.start_background_task(_run_queue_profile_tasks, socketio, dict(profile), pid, dict(settings))
+
+                    if run_slow:
+                        state.last_slow_at = now
                         if state.slow_task_running:
                             skipped_emissions += 1
                         else:
                             state.slow_task_running = True
-                            socketio.start_background_task(_run_slow_profile_tasks, socketio, dict(profile), pid)
+                            socketio.start_background_task(_run_slow_profile_tasks, socketio, dict(profile), pid, dict(settings))
                 except Exception as exc:
                     ok = False
                     error = str(exc)
@@ -284,6 +336,7 @@ def register_socketio_handlers(socketio):
         profile = active_profile()
         if profile:
             join_room(_profile_room(profile["id"]))
+            _register_profile_socket(int(profile["id"]))
         emit("connected", {"ok": True, "profile": profile})
         if not profile:
             emit("profile_required", {"ok": True, "profiles": []})
@@ -296,6 +349,10 @@ def register_socketio_handlers(socketio):
         emit("torrent_snapshot", {"profile_id": profile["id"], "torrents": rows, "summary": cached_summary(profile["id"], rows), "speed_status": _speed_status_from_rows(profile["id"], rows)})
         emit("poller_settings", {"profile_id": int(profile["id"]), "settings": poller_control.get_settings(int(profile["id"])), "runtime": poller_control.snapshot(int(profile["id"]))})
         emit("download_plan_update", {"profile_id": int(profile["id"]), "settings": download_planner.get_settings(int(profile["id"]))})
+
+    @socketio.on("disconnect")
+    def handle_disconnect():
+        _unregister_profile_socket()
 
     @socketio.on("select_profile")
     def handle_select_profile(data):
@@ -314,6 +371,7 @@ def register_socketio_handlers(socketio):
             emit("rtorrent_error", {"error": "Profile access denied or profile does not exist"})
             return
         join_room(_profile_room(profile_id))
+        _register_profile_socket(profile_id)
         try:
             _apply_configured_speed_limits(profile, force=True)
         except Exception as exc:

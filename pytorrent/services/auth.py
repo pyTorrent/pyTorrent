@@ -725,38 +725,12 @@ def _request_profile_id() -> int | None:
         payload = request.get_json(silent=True) or {}
     except Exception:
         payload = {}
-    raw_id = (
-        request.args.get("profile_id")
-        or request.form.get("profile_id")
-        or payload.get("profile_id")
-        or request.headers.get("X-PyTorrent-Profile-Id")
-    )
+    raw_id = request.args.get("profile_id") or request.form.get("profile_id") or payload.get("profile_id")
     if raw_id not in (None, ""):
         try:
             return int(raw_id)
         except (TypeError, ValueError):
             return None
-    raw_name = (
-        request.args.get("profile_name")
-        or request.form.get("profile_name")
-        or payload.get("profile_name")
-        or request.headers.get("X-PyTorrent-Profile-Name")
-    )
-    if raw_name:
-        from . import preferences
-        visible = visible_profile_ids(current_user_id())
-        with connect() as conn:
-            if visible is None:
-                row = conn.execute("SELECT id FROM rtorrent_profiles WHERE lower(name)=lower(?) ORDER BY is_default DESC, id LIMIT 1", (str(raw_name).strip(),)).fetchone()
-            elif visible:
-                placeholders = ",".join("?" for _ in visible)
-                row = conn.execute(
-                    f"SELECT id FROM rtorrent_profiles WHERE id IN ({placeholders}) AND lower(name)=lower(?) ORDER BY is_default DESC, id LIMIT 1",
-                    (*tuple(visible), str(raw_name).strip()),
-                ).fetchone()
-            else:
-                row = None
-        return int(row["id"]) if row else None
     from . import preferences
     profile = preferences.active_profile()
     if profile:

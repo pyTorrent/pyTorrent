@@ -34,6 +34,19 @@ def _log_status(profile: dict, status: str, message: str, *, error: str = "", re
     )
 
 
+
+
+def _has_startup_overrides(profile_id: int) -> bool:
+    """Return true only when this profile has overrides explicitly marked for startup apply."""
+    if not profile_id:
+        return False
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM rtorrent_config_overrides WHERE profile_id=? AND apply_on_start=1 LIMIT 1",
+            (int(profile_id),),
+        ).fetchone()
+    return bool(row)
+
 def _rtorrent_ready(profile: dict) -> tuple[bool, str]:
     """Check rTorrent before applying saved runtime overrides."""
     try:
@@ -44,9 +57,13 @@ def _rtorrent_ready(profile: dict) -> tuple[bool, str]:
 
 
 def _apply_profile(socketio, profile: dict) -> None:
-    """Apply saved config only after the target rTorrent is reachable."""
+    """Apply saved config only when this profile has startup overrides enabled."""
     profile_id = int(profile.get("id") or 0)
     if not profile_id or profile_id in _applied_profiles:
+        return
+    if not _has_startup_overrides(profile_id):
+        _applied_profiles.add(profile_id)
+        _last_status.pop(profile_id, None)
         return
     ok, error = _rtorrent_ready(profile)
     if not ok:
@@ -54,8 +71,10 @@ def _apply_profile(socketio, profile: dict) -> None:
         return
     result = rtorrent.apply_startup_overrides(profile)
     if result.get("skipped"):
+        # The startup apply job may find nothing to write after an earlier guard or a concurrent settings change.
+        # Treat this as complete without creating an operation log entry; only actionable startup states are logged.
         _applied_profiles.add(profile_id)
-        _log_status(profile, "skipped", "No saved rTorrent startup config overrides to apply", result=result)
+        _last_status.pop(profile_id, None)
         return
     _applied_profiles.add(profile_id)
     _log_status(profile, "applied", "Saved rTorrent startup config overrides applied", result=result)

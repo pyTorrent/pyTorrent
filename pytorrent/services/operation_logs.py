@@ -326,10 +326,18 @@ def _result_summary(result: dict) -> dict:
     results = result.get("results") if isinstance(result.get("results"), list) else []
     errors = result.get("errors") if isinstance(result.get("errors"), list) else []
     ignored_errors = result.get("ignored_errors") if isinstance(result.get("ignored_errors"), list) else []
+    skipped = [item for item in results if isinstance(item, dict) and item.get("skipped")]
     return {
         "result_count": len(results) if results is not None else result.get("count"),
         "error_count": len(errors or []) + len(ignored_errors or []),
+        "skipped_count": len(skipped),
     }
+
+
+def _result_items_by_hash(result: dict) -> dict[str, dict]:
+    """Index per-torrent action results so job log details show skipped broken hashes inline."""
+    rows = result.get("results") if isinstance((result or {}).get("results"), list) else []
+    return {str(item.get("hash")): item for item in rows if isinstance(item, dict) and item.get("hash")}
 
 
 def record_job_event(profile_id: int, action: str, status: str, payload: dict | None, result: dict | None = None, error: str = "", job_id: str | None = None, user_id: int | None = None) -> None:
@@ -340,6 +348,7 @@ def record_job_event(profile_id: int, action: str, status: str, payload: dict | 
     ctx = payload.get("job_context") or {}
     items = ctx.get("items") or []
     by_hash = {str(item.get("hash")): item for item in items if item}
+    result_by_hash = _result_items_by_hash(result)
     event_type = _job_event_type(str(status))
     severity = _job_severity(str(status))
     context_source = str(ctx.get("source") or payload.get("source") or "user")
@@ -374,8 +383,12 @@ def record_job_event(profile_id: int, action: str, status: str, payload: dict | 
         return
     for h in hashes:
         item = by_hash.get(str(h)) or {}
-        name = str(item.get("name") or h)
-        row_details = {**base_details, "item": item}
+        result_item = result_by_hash.get(str(h)) or {}
+        name = str(result_item.get("name") or item.get("name") or h)
+        row_details = {**base_details, "item": item, "result_item": result_item}
+        if result_item.get("skipped"):
+            row_details["skipped"] = result_item.get("skipped")
+            row_details["skipped_reason"] = result_item.get("skipped_reason")
         record(profile_id, "torrent_removed" if action == "remove" and status == "done" else event_type, f"{_job_action_label(action)} {status}: {name}", severity=severity, source=source, torrent_hash=str(h), torrent_name=name, action=action, details=row_details, user_id=user_id)
 
 
@@ -386,8 +399,33 @@ def record_worker_event(profile_id: int, action: str, status: str, message: str,
     record(profile_id, _job_event_type(status), message, severity=_job_severity(status), source="worker", action=action, details=merged, user_id=user_id)
 
 
+def _torrent_complete(row: dict | None) -> bool:
+    """Return completion state from either full-list rows or lightweight live-stat patches."""
+    # Note: Low CPU mode often updates only live fields, so completion must be detected from partial patches too.
+    row = row or {}
+    try:
+        progress = float(row.get("progress") or 0)
+    except Exception:
+        progress = 0.0
+    return bool(row.get("complete")) or progress >= 100
+
+
+def _torrent_detail(old: dict, patch: dict | None = None) -> dict:
+    """Build stable details for torrent operation logs without requiring a full refreshed row."""
+    # Note: Prefer fresh values from the patch, but fall back to cached full-row metadata for readable logs.
+    patch = patch or {}
+    return {
+        "ratio": patch.get("ratio", old.get("ratio")),
+        "size": patch.get("size", old.get("size")),
+        "path": patch.get("path", old.get("path")),
+        "label": patch.get("label", old.get("label")),
+        "tracker": patch.get("tracker", old.get("tracker")),
+    }
+
+
 def record_cache_diff(profile_id: int, added: list[dict], removed: list[str], updated: list[dict], old_rows: dict[str, dict]) -> None:
     """Record torrent cache changes detected by the poller without depending on manual jobs."""
+    # Note: This covers full-list polling; live-only completion patches are handled by the same transition logic below.
     for row in added or []:
         record(profile_id, "torrent_added", f"Torrent added: {row.get('name') or row.get('hash')}", source="poller", torrent_hash=row.get("hash"), torrent_name=row.get("name"), details={"size": row.get("size"), "path": row.get("path"), "label": row.get("label"), "tracker": row.get("tracker")})
     for h in removed or []:
@@ -396,10 +434,11 @@ def record_cache_diff(profile_id: int, added: list[dict], removed: list[str], up
     for patch in updated or []:
         h = str(patch.get("hash") or "")
         old = old_rows.get(h) or {}
-        was_complete = bool(old.get("complete")) or float(old.get("progress") or 0) >= 100
-        is_complete = bool(patch.get("complete", old.get("complete"))) or float(patch.get("progress", old.get("progress") or 0) or 0) >= 100
+        merged = {**old, **patch}
+        was_complete = _torrent_complete(old)
+        is_complete = _torrent_complete(merged)
         if h and not was_complete and is_complete:
-            record(profile_id, "torrent_completed", f"Torrent completed: {old.get('name') or h}", source="poller", torrent_hash=h, torrent_name=old.get("name"), details={"ratio": patch.get("ratio", old.get("ratio")), "size": old.get("size"), "path": old.get("path"), "label": old.get("label"), "tracker": old.get("tracker")})
+            record(profile_id, "torrent_completed", f"Torrent completed: {old.get('name') or patch.get('name') or h}", source="poller", torrent_hash=h, torrent_name=old.get("name") or patch.get("name"), details=_torrent_detail(old, patch))
 
 
 def list_logs(profile_id: int, *, limit: int = 200, offset: int = 0, event_type: str = "", q: str = "", hide_jobs: bool = False, hide_automations: bool = False) -> dict:

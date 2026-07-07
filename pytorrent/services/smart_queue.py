@@ -1437,7 +1437,7 @@ def _disable_when_idle(profile_id: int, user_id: int, torrents: list[dict[str, A
     settings = get_settings(profile_id, user_id)
     return {'ok': True, 'enabled': False, 'auto_stopped_idle': True, 'paused': [], 'resumed': [], 'stopped': [], 'started': [], 'checked': len(torrents), 'settings': settings, 'message': 'Smart Queue stopped because there is no active or waiting work.'}
 
-def check(profile: dict | None = None, user_id: int | None = None, force: bool = False) -> dict[str, Any]:
+def check(profile: dict | None = None, user_id: int | None = None, force: bool = False, cleanup_disabled: bool = True) -> dict[str, Any]:
     profile = profile or active_profile()
     if not profile:
         return {'ok': False, 'error': 'No active rTorrent profile'}
@@ -1467,15 +1467,16 @@ def check(profile: dict | None = None, user_id: int | None = None, force: bool =
         return {'ok': True, 'enabled': bool(settings.get('enabled')), 'cooldown_skipped': True, 'cooldown_remaining_seconds': remaining, 'surge_refill_remaining_seconds': surge_refill_remaining(settings), 'settings': settings}
     if not force and not int(settings.get('enabled') or 0):
         restored: list[str] = []
-        try:
-            # Note: When Smart Queue is disabled, only technical labels are cleaned up, without starting or pausing torrents.
-            torrents = rtorrent.list_torrents(profile)
-            restored = _cleanup_auto_labels(rtorrent.client_for(profile), profile_id, torrents, set(), True)
-        except Exception:
-            restored = []
+        if cleanup_disabled:
+            try:
+                # Note: Optional maintenance cleanup is intentionally separated from the disabled queue status path.
+                torrents = rtorrent.list_torrents(profile)
+                restored = _cleanup_auto_labels(rtorrent.client_for(profile), profile_id, torrents, set(), True)
+            except Exception:
+                restored = []
         # Note: Disabled checks are frequent poller passes; record only the first waiting-state row.
-        disabled_log_recorded = _record_disabled_waiting_once(profile_id, user_id, {'labels_restored': restored})
-        return {'ok': True, 'enabled': False, 'paused': [], 'resumed': [], 'stopped': [], 'started': [], 'labels_restored': restored, 'disabled_log_recorded': disabled_log_recorded, 'message': 'Smart Queue disabled, waiting for start'}
+        disabled_log_recorded = _record_disabled_waiting_once(profile_id, user_id, {'labels_restored': restored, 'cleanup_disabled': bool(cleanup_disabled)})
+        return {'ok': True, 'enabled': False, 'paused': [], 'resumed': [], 'stopped': [], 'started': [], 'labels_restored': restored, 'disabled_log_recorded': disabled_log_recorded, 'cleanup_skipped': not bool(cleanup_disabled), 'message': 'Smart Queue disabled, waiting for start'}
 
     torrents = rtorrent.list_torrents(profile)
     # Note: Stalled labels block automatic starting only; a manually started Stalled item still counts as a running slot.

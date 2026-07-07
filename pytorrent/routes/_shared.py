@@ -36,8 +36,13 @@ from .auth_api import register_auth_routes
 register_auth_routes(bp)
 
 
-def _request_profile_selector() -> tuple[int | None, str]:
-    """Return the optional rTorrent profile selector supplied by external API clients."""
+def _request_profile_selector() -> int | None:
+    """Return the explicit rTorrent profile_id supplied by API clients.
+
+    The API contract is intentionally uniform: clients pass profile_id in
+    query parameters, form data or JSON payload. Profile headers and legacy
+    alias fields are not accepted.
+    """
     payload = {}
     if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
         try:
@@ -45,64 +50,49 @@ def _request_profile_selector() -> tuple[int | None, str]:
         except Exception:
             payload = {}
 
-    profile_id = (
-        request.args.get("profile_id")
-        or request.form.get("profile_id")
-        or payload.get("rtorrent_profile_id")
-        or request.headers.get("X-PyTorrent-Profile-Id")
-    )
-    profile_name = (
-        request.args.get("profile_name")
-        or request.form.get("profile_name")
-        or payload.get("rtorrent_profile_name")
-        or request.headers.get("X-PyTorrent-Profile-Name")
-        or ""
-    )
-
+    profile_id = request.args.get("profile_id") or request.form.get("profile_id") or payload.get("profile_id")
+    if profile_id in (None, ""):
+        return None
     try:
-        return (int(profile_id), "") if profile_id not in (None, "") else (None, str(profile_name or "").strip())
+        return int(profile_id)
     except (TypeError, ValueError):
         raise ValueError("profile_id must be an integer")
 
 
-def _profile_by_name(profile_name: str, user_id: int | None = None):
-    name = str(profile_name or "").strip()
-    if not name:
-        return None
-    user_id = user_id or default_user_id()
-    visible = auth.visible_profile_ids(user_id)
-    with connect() as conn:
-        if visible is None:
-            return conn.execute(
-                "SELECT * FROM rtorrent_profiles WHERE lower(name)=lower(?) ORDER BY is_default DESC, id LIMIT 1",
-                (name,),
-            ).fetchone()
-        if not visible:
-            return None
-        placeholders = ",".join("?" for _ in visible)
-        return conn.execute(
-            f"SELECT * FROM rtorrent_profiles WHERE id IN ({placeholders}) AND lower(name)=lower(?) ORDER BY is_default DESC, id LIMIT 1",
-            (*tuple(visible), name),
-        ).fetchone()
 
+def _profile_selector_present() -> bool:
+    if request.args.get("profile_id") or request.form.get("profile_id"):
+        return True
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        try:
+            payload = request.get_json(silent=True) or {}
+        except Exception:
+            payload = {}
+        return bool(payload.get("profile_id"))
+    return False
+
+
+def _requires_explicit_profile(require_write: bool) -> bool:
+    profile_write_path = request.path.startswith(auth.RTORRENT_WRITE_PREFIXES) or request.path.startswith(auth.RTORRENT_CONFIG_PREFIXES)
+    return bool((require_write or profile_write_path) and request.method in {"POST", "PUT", "PATCH", "DELETE"})
 
 def request_profile(require_write: bool = False):
-    """Resolve API profile context from profile_id/profile_name, then active profile for compatibility."""
+    """Resolve API profile context from explicit profile_id, then active profile for read-only UI compatibility."""
+    if _requires_explicit_profile(require_write) and not _profile_selector_present():
+        abort(400, description="profile_id is required for profile-scoped write API requests")
     try:
-        profile_id, profile_name = _request_profile_selector()
+        profile_id = _request_profile_selector()
     except ValueError:
         raise
     user_id = default_user_id()
     profile = None
     if profile_id:
         profile = preferences.get_profile(int(profile_id), user_id)
-    elif profile_name:
-        profile = _profile_by_name(profile_name, user_id)
-    else:
+    elif not _requires_explicit_profile(require_write):
         profile = preferences.active_profile(user_id)
         if not profile and auth.can_access_profile(1, user_id):
             profile = preferences.get_profile(1, user_id)
-    if not profile and (profile_id or profile_name):
+    if not profile and profile_id:
         abort(404)
     if not profile:
         return None
@@ -189,16 +179,22 @@ def cleanup_summary() -> dict:
             (profile_id,),
             conn=conn,
         ) if profile_id else _table_count("operation_logs", conn=conn)
-        jobs_total = _table_count("jobs", conn=conn)
-        jobs_clearable = _table_count("jobs", "WHERE status NOT IN ('pending', 'running')", conn=conn)
-        smart_queue_history_total = _table_count("smart_queue_history", conn=conn)
-        automation_history_total = _table_count("automation_history", conn=conn)
+        # Note: Cleanup counters are profile-scoped to match the cleanup buttons shown in the UI.
+        jobs_total = _table_count("jobs", "WHERE profile_id=?", (profile_id,), conn=conn) if profile_id else 0
+        jobs_clearable = _table_count("jobs", "WHERE profile_id=? AND status NOT IN ('pending', 'running')", (profile_id,), conn=conn) if profile_id else 0
+        jobs_global_total = _table_count("jobs", conn=conn)
+        jobs_global_clearable = _table_count("jobs", "WHERE status NOT IN ('pending', 'running')", conn=conn)
+        smart_queue_history_total = _table_count("smart_queue_history", "WHERE profile_id=?", (profile_id,), conn=conn) if profile_id else 0
+        automation_history_total = _table_count("automation_history", "WHERE profile_id=?", (profile_id,), conn=conn) if profile_id else 0
         cache_summary = _active_profile_cache_summary(profile_id if profile_id else None, conn=conn)
     operation_log_retention = operation_logs.get_settings(profile_id) if profile_id else operation_logs.get_settings(0)
     poller_runtime = poller_control.snapshot(profile_id) if profile_id else {}
     return {
         "jobs_total": jobs_total,
         "jobs_clearable": jobs_clearable,
+        "jobs_global_total": jobs_global_total,
+        "jobs_global_clearable": jobs_global_clearable,
+        "profile_id": profile_id,
         "smart_queue_history_total": smart_queue_history_total,
         "operation_logs_total": operation_logs_total,
         "automation_history_total": automation_history_total,
@@ -236,12 +232,24 @@ def active_default_download_path(profile: dict | None) -> str:
         return ""
 
 
+def _unique_hashes(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    unique: list[str] = []
+    for value in values or []:
+        torrent_hash = str(value or "").strip()
+        if not torrent_hash or torrent_hash in seen:
+            continue
+        seen.add(torrent_hash)
+        unique.append(torrent_hash)
+    return unique
+
+
 def enrich_bulk_payload(profile: dict, action_name: str, data: dict) -> dict:
     payload = dict(data or {})
     hashes = payload.get("hashes") or []
     if isinstance(hashes, str):
         hashes = [hashes]
-    hashes = [str(h) for h in hashes if h]
+    hashes = _unique_hashes([str(h) for h in hashes if h])
     payload["hashes"] = hashes
     payload["job_context"] = {
         "source": "api",
@@ -268,6 +276,8 @@ def enrich_bulk_payload(profile: dict, action_name: str, data: dict) -> dict:
         payload["job_context"]["move_data"] = bool(payload.get("move_data"))
     if action_name == "remove":
         payload["job_context"]["remove_data"] = bool(payload.get("remove_data"))
+    if action_name == "recreate_files":
+        payload["job_context"]["mode"] = "rtorrent_stop_close_queue_flags_check_hash_restore"
     if action_name == "profile_transfer":
         payload["job_context"]["target_profile_id"] = int(payload.get("target_profile_id") or 0)
         payload["job_context"]["target_path"] = str(payload.get("target_path") or payload.get("path") or "")

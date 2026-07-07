@@ -379,7 +379,7 @@ def _mark_running(job_id: str, attempts: int) -> bool:
 
 
 def _emit_torrent_refresh(profile: dict, action_name: str) -> None:
-    if action_name not in {"add_magnet", "add_torrent_raw", "remove", "move", "profile_transfer", "start", "stop", "pause", "resume", "unpause", "set_label", "set_ratio_group", "recheck"}:
+    if action_name not in {"add_magnet", "add_torrent_raw", "remove", "move", "profile_transfer", "start", "stop", "pause", "resume", "unpause", "set_label", "set_ratio_group", "recheck", "recreate_files"}:
         return
     try:
         diff = torrent_cache.refresh(profile)
@@ -394,12 +394,12 @@ def _emit_torrent_refresh(profile: dict, action_name: str) -> None:
 
 
 def _schedule_delayed_torrent_refresh(profile: dict, action_name: str) -> None:
-    if action_name not in {"start", "stop", "pause", "resume", "unpause"} or not _socketio:
+    if action_name not in {"start", "stop", "pause", "resume", "unpause", "recheck", "recreate_files"} or not _socketio:
         return
 
     def delayed_refresh():
         sleep_fn = getattr(_socketio, "sleep", time.sleep)
-        for delay in (0.75, 1.75):
+        for delay in (0.75, 1.75, 4.0):
             sleep_fn(delay)
             _emit_torrent_refresh(profile, action_name)
 
@@ -608,9 +608,16 @@ def _safe_json(value, fallback):
         return fallback
 
 
+def _job_skipped_items(result: dict) -> list[dict]:
+    """Return per-torrent items skipped during a job, including broken info-hashes."""
+    rows = result.get("results") if isinstance((result or {}).get("results"), list) else []
+    return [item for item in rows if isinstance(item, dict) and item.get("skipped")]
+
+
 def _job_summary(row: dict, payload: dict, result: dict) -> str:
     ctx = payload.get("job_context") or {}
     count = int(ctx.get("hash_count") or len(payload.get("hashes") or []) or result.get("count") or 0)
+    skipped_items = _job_skipped_items(result)
     parts = []
     if ctx.get("bulk_label"):
         parts.append(f"{ctx.get('bulk_label')} of {ctx.get('bulk_parts')}")
@@ -624,6 +631,8 @@ def _job_summary(row: dict, payload: dict, result: dict) -> str:
         parts.append("move data")
     if result.get("count") is not None:
         parts.append(f"done: {result.get('count')}")
+    if skipped_items:
+        parts.append(f"skipped broken hash: {len(skipped_items)}")
     if result.get("errors"):
         parts.append(f"errors: {len(result.get('errors') or [])}")
     return "; ".join(parts)
@@ -643,6 +652,7 @@ def _public_job(row) -> dict:
     d["hash_count"] = int(ctx.get("hash_count") or len(payload.get("hashes") or []) or result.get("count") or 0)
     d["is_bulk"] = bool(ctx.get("bulk") or d["hash_count"] > 1)
     d["summary"] = _job_summary(d, payload, result)
+    d["skipped_items"] = _job_skipped_items(result)
     d["source"] = str(ctx.get("source") or "user")
     d["source_label"] = str(ctx.get("rule_name") or ctx.get("source") or "user")
     d["is_forced"] = bool(payload.get("force_job") or payload.get("priority_job"))
@@ -654,24 +664,32 @@ def _public_job(row) -> dict:
     return d
 
 
-def _job_scope_sql(writable: bool = False) -> tuple[str, tuple]:
+def _job_scope_sql(writable: bool = False, profile_id: int | None = None) -> tuple[str, tuple]:
+    clauses: list[str] = []
+    params: list[int] = []
     visible = auth.writable_profile_ids() if writable else auth.visible_profile_ids()
-    if visible is None:
+    if visible is not None:
+        if not visible:
+            return " WHERE 1=0", ()
+        placeholders = ",".join("?" for _ in visible)
+        clauses.append(f"profile_id IN ({placeholders})")
+        params.extend(int(pid) for pid in visible)
+    if profile_id is not None:
+        clauses.append("profile_id=?")
+        params.append(int(profile_id))
+    if not clauses:
         return "", ()
-    if not visible:
-        return " WHERE 1=0", ()
-    placeholders = ",".join("?" for _ in visible)
-    return f" WHERE profile_id IN ({placeholders})", tuple(visible)
+    return " WHERE " + " AND ".join(clauses), tuple(params)
 
 
-def list_jobs(limit: int = 200, offset: int = 0):
+def list_jobs(limit: int = 200, offset: int = 0, profile_id: int | None = None):
     limit = max(1, min(int(limit or 50), 500))
     offset = max(0, int(offset or 0))
-    where, params = _job_scope_sql()
+    where, params = _job_scope_sql(profile_id=profile_id)
     with connect() as conn:
         rows = conn.execute(f"SELECT * FROM jobs{where} ORDER BY created_at DESC LIMIT ? OFFSET ?", (*params, limit, offset)).fetchall()
         total = conn.execute(f"SELECT COUNT(*) AS n FROM jobs{where}", params).fetchone()["n"]
-    return {"rows": [_public_job(r) for r in rows], "total": total, "limit": limit, "offset": offset}
+    return {"rows": [_public_job(r) for r in rows], "total": total, "limit": limit, "offset": offset, "profile_id": profile_id}
 
 
 def cancel_job(job_id: str) -> bool:
@@ -685,18 +703,19 @@ def cancel_job(job_id: str) -> bool:
     return True
 
 
-def clear_jobs() -> int:
-    where, params = _job_scope_sql(writable=True)
+def clear_jobs(profile_id: int | None = None) -> int:
+    where, params = _job_scope_sql(writable=True, profile_id=profile_id)
     status_clause = "status NOT IN ('pending', 'running')"
+    # Note: Job cleanup is profile-scoped by default at the API layer; profile_id=None preserves admin/global maintenance callers.
     sql = f"DELETE FROM jobs{where} AND {status_clause}" if where else f"DELETE FROM jobs WHERE {status_clause}"
     with connect() as conn:
         cur = conn.execute(sql, params)
         return int(cur.rowcount or 0)
 
 
-def emergency_clear_jobs() -> int:
+def emergency_clear_jobs(profile_id: int | None = None) -> int:
     now = utcnow()
-    where, params = _job_scope_sql(writable=True)
+    where, params = _job_scope_sql(writable=True, profile_id=profile_id)
     status_clause = "status IN ('pending', 'running')"
     update_sql = f"UPDATE jobs SET status='cancelled', error='Emergency cancelled by user', finished_at=COALESCE(finished_at, ?), updated_at=?{where} AND {status_clause}" if where else "UPDATE jobs SET status='cancelled', error='Emergency cancelled by user', finished_at=COALESCE(finished_at, ?), updated_at=? WHERE status IN ('pending', 'running')"
     with connect() as conn:

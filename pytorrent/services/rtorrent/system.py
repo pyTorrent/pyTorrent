@@ -1,10 +1,20 @@
 from __future__ import annotations
 from typing import Any
 from threading import RLock
+import time
 from .client import *
 from .config import default_download_path
 from ...utils import human_size
 
+
+_PATH_BROWSE_EMPTY_CHECK_THRESHOLD = 500
+_PATH_BROWSE_DEFAULT_MAX_DIRS = 3000
+_PATH_BROWSE_HARD_MAX_DIRS = 50000
+_PATH_BROWSE_SEARCH_MIN_CHARS = 2
+_PATH_BROWSE_LISTING_CACHE_TTL_SECONDS = 900
+_PATH_BROWSE_LISTING_CACHE_MAX_ENTRIES = 50000
+_PATH_BROWSE_LISTING_CACHE: dict[tuple[int, str], tuple[float, dict[str, Any]]] = {}
+_PATH_BROWSE_LISTING_CACHE_LOCK = RLock()
 
 
 def _rtorrent_home_path(profile: dict) -> str:
@@ -68,39 +78,195 @@ def _safe_browse_base(profile: dict, requested_path: str | None) -> tuple[str, s
     allowed = _remote_accessible_directory(profile, [requested])
     return (allowed or fallback), fallback, not bool(allowed)
 
-def browse_path(profile: dict, path: str | None = None) -> dict:
-    """List allowed rTorrent directories through execute.capture without exposing the full filesystem."""
-    c = client_for(profile)
-    base, fallback_root, used_fallback = _safe_browse_base(profile, path)
-    script = (
-        'base=$1; '
-        '[ -d "$base" ] || exit 2; '
-        'dfline=$(df -Pk "$base" 2>/dev/null | awk "NR==2{print \\$2,\\$3,\\$4,\\$5}"); '
-        'dir_count=0; file_count=0; '
+def _shell_single_quote(value: str) -> str:
+    return "'" + str(value).replace("'", "'\\''") + "'"
+
+
+def _path_browse_script(search_mode: bool) -> str:
+    # Note: Directory browsing runs through rTorrent RPC by design. Keep the remote command
+    # simple and non-destructive: one first-level listing, no per-directory empty checks,
+    # no internal max-seconds timeout. The UI shows a long-running notice after 59 seconds
+    # while the backend request is still allowed to finish and populate cache.
+    return (
+        'base=$1; empty_threshold=$2; max_dirs=$3; query=$4; '
+        'case "$max_dirs" in ""|*[!0-9]*) max_dirs=0;; esac; '
+        '[ -d "$base" ] || { printf "E\tDirectory does not exist\n"; exit 0; }; '
+        'dfline=$(df -Pk "$base" 2>/dev/null | awk "NR==2{print \\$2,\\$3,\\$4,\\$5}" || true); '
+        'dir_count=0; file_count=0; printed=0; '
         'for p in "$base"/* "$base"/.[!.]* "$base"/..?*; do '
         '[ -e "$p" ] || continue; '
         '[ -L "$p" ] && continue; '
         'if [ -d "$p" ]; then '
         'dir_count=$((dir_count+1)); '
-        '[ -r "$p" ] || continue; '
-        '[ -x "$p" ] || continue; '
-        'physical=$(cd -P -- "$p" 2>/dev/null && pwd -P) || continue; '
-        '[ -n "$physical" ] || continue; '
-        '[ "$physical" = "/" ] && continue; '
-        'name=${p##*/}; empty=1; '
-        'if find "$physical" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null | grep -q .; then empty=0; fi; '
-        'printf "D\\t%s\\t%s\\t%s\\n" "$name" "$physical" "$empty"; '
+        'if { [ "$max_dirs" -le 0 ] || [ "$printed" -lt "$max_dirs" ]; } && [ -r "$p" ] && [ -x "$p" ]; then '
+        'name=${p##*/}; printf "D\t%s\t%s\tU\n" "$name" "$p"; printed=$((printed+1)); '
+        'fi; '
         'elif [ -f "$p" ]; then file_count=$((file_count+1)); fi; '
         'done; '
-        'printf "M\\t%s\\t%s\\n" "$dir_count" "$file_count"; '
-        '[ -n "$dfline" ] && printf "F\\t%s\\n" "$dfline"'
+        'printf "M\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" "$dir_count" "$file_count" "0" "$empty_threshold" "$max_dirs" "$dir_count" "$query" "0" "0"; '
+        '[ -n "$dfline" ] && printf "F\t%s\n" "$dfline"; '
+        'exit 0'
     )
-    output = _rt_execute(c, "execute.capture", "sh", "-c", script, "pytorrent-browse", base)
+
+
+def _path_listing_cache_key(profile: dict, base: str) -> tuple[int, str]:
+    return (int(profile.get("id") or 0), _remote_clean_path(base or ""))
+
+
+def _clone_path_listing(payload: dict[str, Any], *, include_dirs: bool = True) -> dict[str, Any]:
+    cloned = dict(payload)
+    if include_dirs:
+        cloned["dirs"] = [dict(item) for item in payload.get("dirs") or []]
+    else:
+        cloned.pop("dirs", None)
+    return cloned
+
+
+def _cached_path_listing(profile: dict, base: str) -> dict[str, Any] | None:
+    # Return the cached object directly. Callers must not mutate it; slicing creates
+    # a fresh response with only the requested visible directories. This avoids copying
+    # tens of thousands of directory dictionaries on every cache hit.
+    key = _path_listing_cache_key(profile, base)
+    now = time.monotonic()
+    with _PATH_BROWSE_LISTING_CACHE_LOCK:
+        cached = _PATH_BROWSE_LISTING_CACHE.get(key)
+        if not cached:
+            return None
+        created, payload = cached
+        if now - created > _PATH_BROWSE_LISTING_CACHE_TTL_SECONDS:
+            _PATH_BROWSE_LISTING_CACHE.pop(key, None)
+            return None
+        return payload
+
+
+def _store_path_listing(profile: dict, base: str, payload: dict[str, Any]) -> None:
+    key = _path_listing_cache_key(profile, base)
+    cached_payload = _clone_path_listing(payload)
+    cached_payload["dirs"] = cached_payload.get("dirs", [])[:_PATH_BROWSE_LISTING_CACHE_MAX_ENTRIES]
+    with _PATH_BROWSE_LISTING_CACHE_LOCK:
+        _PATH_BROWSE_LISTING_CACHE[key] = (time.monotonic(), cached_payload)
+        if len(_PATH_BROWSE_LISTING_CACHE) > 128:
+            oldest = sorted(_PATH_BROWSE_LISTING_CACHE.items(), key=lambda item: item[1][0])[:32]
+            for old_key, _ in oldest:
+                _PATH_BROWSE_LISTING_CACHE.pop(old_key, None)
+
+
+def _slice_path_listing(payload: dict[str, Any], *, limit: int, query: str, search_too_short: bool) -> dict[str, Any]:
+    # Build the response from cached metadata plus only the visible directory rows.
+    # Do not clone or JSON-build the full cached list unless the caller explicitly
+    # asks for all=1. This keeps normal cached browse calls cheap.
+    result = _clone_path_listing(payload, include_dirs=False)
+    all_dirs = payload.get("dirs") or []
+    effective_query = "" if search_too_short else str(query or "").strip()
+    if effective_query:
+        query_lc = effective_query.lower()
+        matched_count = 0
+        visible_dirs: list[dict[str, Any]] = []
+        for item in all_dirs:
+            if query_lc not in str(item.get("name") or "").lower():
+                continue
+            matched_count += 1
+            if limit == 0 or len(visible_dirs) < limit:
+                visible_dirs.append(dict(item))
+        result["matched_dir_count"] = matched_count
+    else:
+        result["matched_dir_count"] = None
+        selected = all_dirs if limit == 0 else all_dirs[:limit]
+        visible_dirs = [dict(item) for item in selected]
+    result["dirs"] = visible_dirs
+    result["displayed_dir_count"] = len(visible_dirs)
+    result["max_dirs"] = limit
+    result["search"] = query
+    result["effective_search"] = effective_query
+    result["search_too_short"] = search_too_short
+    result["search_timed_out"] = False
+    result["search_partial"] = False
+    result["search_min_chars"] = _PATH_BROWSE_SEARCH_MIN_CHARS
+    result["listing_cache_ttl_seconds"] = _PATH_BROWSE_LISTING_CACHE_TTL_SECONDS
+    result["warning"] = f"Type at least {_PATH_BROWSE_SEARCH_MIN_CHARS} characters to search this folder." if search_too_short else ""
+    return result
+
+
+def browse_path(profile: dict, path: str | None = None, *, max_dirs: int | None = None, search: str | None = None, cache_only: bool = False) -> dict:
+    """List allowed rTorrent directories through one lightweight remote listing and cache it for search/show-all."""
+    c = client_for(profile)
+    base, fallback_root, used_fallback = _safe_browse_base(profile, path)
+    try:
+        limit = int(max_dirs if max_dirs is not None else _PATH_BROWSE_DEFAULT_MAX_DIRS)
+    except Exception:
+        limit = _PATH_BROWSE_DEFAULT_MAX_DIRS
+    if limit < 0:
+        limit = 0
+    if limit > _PATH_BROWSE_HARD_MAX_DIRS:
+        limit = _PATH_BROWSE_HARD_MAX_DIRS
+    query = str(search or "").strip()
+    search_too_short = bool(query) and len(query) < _PATH_BROWSE_SEARCH_MIN_CHARS
+
+    cached = _cached_path_listing(profile, base)
+    if cached is not None:
+        cached["listing_cached"] = True
+        return _slice_path_listing(cached, limit=limit, query=query, search_too_short=search_too_short)
+    if cache_only:
+        return {
+            "path": base,
+            "parent": posixpath.dirname(base.rstrip("/")) or "/",
+            "root": fallback_root,
+            "allowed_roots": [fallback_root],
+            "access_policy": "rtorrent-permissions",
+            "fallback": used_fallback,
+            "dirs": [],
+            "source": "rtorrent",
+            "dir_count": None,
+            "file_count": None,
+            "displayed_dir_count": 0,
+            "matched_dir_count": None,
+            "search": query,
+            "effective_search": "" if search_too_short else query,
+            "search_too_short": search_too_short,
+            "search_timed_out": False,
+            "search_partial": False,
+            "search_min_chars": _PATH_BROWSE_SEARCH_MIN_CHARS,
+            "listing_cached": False,
+            "listing_cache_ttl_seconds": _PATH_BROWSE_LISTING_CACHE_TTL_SECONDS,
+            "warning": "No cached folder listing is ready yet. Wait for the running browse request to finish or try again.",
+            "empty_check_performed": False,
+            "empty_check_skipped": True,
+            "empty_check_threshold": _PATH_BROWSE_EMPTY_CHECK_THRESHOLD,
+            "max_dirs": limit,
+            "default_max_dirs": _PATH_BROWSE_DEFAULT_MAX_DIRS,
+            "hard_max_dirs": _PATH_BROWSE_HARD_MAX_DIRS,
+            "total": 0,
+            "used": 0,
+            "free": 0,
+            "total_h": human_size(0),
+            "used_h": human_size(0),
+            "free_h": human_size(0),
+            "used_percent": 0,
+        }
+
+    # Note: The first browse intentionally collects the first-level directory list once. Search and show-all then
+    # filter this cached list in Python instead of starting another remote filesystem scan.
+    script = _path_browse_script(False)
+    output = _rt_execute(
+        c,
+        "execute.capture",
+        "sh",
+        "-c",
+        script,
+        "pytorrent-browse",
+        base,
+        str(_PATH_BROWSE_EMPTY_CHECK_THRESHOLD),
+        str(_PATH_BROWSE_LISTING_CACHE_MAX_ENTRIES),
+        "",
+    )
     dirs = []
     dir_count = 0
     file_count = 0
+    empty_check_performed = True
+    search_timed_out = False
     disk_total = disk_used = disk_free = 0
     disk_percent = 0
+    remote_error = ""
     for line in str(output or "").splitlines():
         if "\t" not in line:
             continue
@@ -108,16 +274,23 @@ def browse_path(profile: dict, path: str | None = None) -> dict:
         if marker == "D" and "\t" in rest:
             parts = rest.split("\t", 2)
             name, full_path = parts[0], parts[1]
-            is_empty = len(parts) > 2 and parts[2] == "1"
+            empty_token = parts[2] if len(parts) > 2 else "U"
+            is_empty = None if empty_token == "U" else empty_token == "1"
             if name not in {".", ".."}:
-                dirs.append({"name": name, "path": full_path, "empty": is_empty})
+                dirs.append({"name": name, "path": full_path, "empty": is_empty, "empty_check_skipped": is_empty is None})
         elif marker == "M" and "\t" in rest:
-            first, second = rest.split("\t", 1)
+            parts = rest.split("\t")
             try:
-                dir_count = int(first or 0)
-                file_count = int(second or 0)
+                dir_count = int(parts[0] or 0)
+                file_count = int(parts[1] or 0) if len(parts) > 1 else 0
+                empty_check_performed = (parts[2] if len(parts) > 2 else "1") == "1"
+                if len(parts) > 7:
+                    search_timed_out = (parts[7] or "0") == "1"
             except Exception:
                 dir_count = file_count = 0
+                empty_check_performed = True
+        elif marker == "E":
+            remote_error = rest.strip()
         elif marker == "F":
             parts = rest.split()
             if len(parts) >= 4:
@@ -132,17 +305,34 @@ def browse_path(profile: dict, path: str | None = None) -> dict:
     parent = posixpath.dirname(base.rstrip("/")) or "/"
     if parent == base or parent == "/" or not _remote_accessible_directory(profile, [parent]):
         parent = base
-    return {
+    full_payload = {
         "path": base,
         "parent": parent,
         "root": fallback_root,
         "allowed_roots": [fallback_root],
         "access_policy": "rtorrent-permissions",
         "fallback": used_fallback,
-        "dirs": dirs[:300],
+        "dirs": dirs,
         "source": "rtorrent",
         "dir_count": dir_count,
         "file_count": file_count,
+        "displayed_dir_count": len(dirs),
+        "matched_dir_count": None,
+        "search": "",
+        "effective_search": "",
+        "search_too_short": False,
+        "search_timed_out": search_timed_out,
+        "search_partial": search_timed_out,
+        "search_min_chars": _PATH_BROWSE_SEARCH_MIN_CHARS,
+        "listing_cached": False,
+        "listing_cache_ttl_seconds": _PATH_BROWSE_LISTING_CACHE_TTL_SECONDS,
+        "warning": remote_error or ("Folder listing timed out. Showing partial results." if search_timed_out else ""),
+        "empty_check_performed": empty_check_performed,
+        "empty_check_skipped": not empty_check_performed,
+        "empty_check_threshold": _PATH_BROWSE_EMPTY_CHECK_THRESHOLD,
+        "max_dirs": 0,
+        "default_max_dirs": _PATH_BROWSE_DEFAULT_MAX_DIRS,
+        "hard_max_dirs": _PATH_BROWSE_HARD_MAX_DIRS,
         "total": disk_total,
         "used": disk_used,
         "free": disk_free,
@@ -151,6 +341,37 @@ def browse_path(profile: dict, path: str | None = None) -> dict:
         "free_h": human_size(disk_free),
         "used_percent": disk_percent,
     }
+    if not search_timed_out and not remote_error:
+        _store_path_listing(profile, base, full_payload)
+    return _slice_path_listing(full_payload, limit=limit, query=query, search_too_short=search_too_short)
+
+
+def check_directory_rename_state(profile: dict, path: str) -> dict:
+    """Check a single remote directory before inline rename."""
+    c = client_for(profile)
+    source = _remote_clean_path(path or "")
+    if not source or source == "/":
+        raise ValueError("Cannot rename this directory")
+    script = (
+        'src=$1; '
+        'if [ ! -d "$src" ]; then printf "ERR\tDirectory does not exist"; exit 0; fi; '
+        'if [ -L "$src" ]; then printf "ERR\tCannot rename this directory"; exit 0; fi; '
+        '[ -r "$src" ] || { printf "ERR\tCannot read directory"; exit 0; }; '
+        '[ -x "$src" ] || { printf "ERR\tCannot access directory"; exit 0; }; '
+        'physical=$(cd -P -- "$src" 2>/dev/null && pwd -P) || { printf "ERR\tCannot access directory"; exit 0; }; '
+        '[ -n "$physical" ] || { printf "ERR\tCannot access directory"; exit 0; }; '
+        '[ "$physical" = "/" ] && { printf "ERR\tCannot rename this directory"; exit 0; }; '
+        'empty=1; '
+        'if find "$physical" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null | grep -q .; then empty=0; fi; '
+        'printf "OK\t%s\t%s" "$physical" "$empty"'
+    )
+    output = str(_rt_execute(c, "execute.capture", "sh", "-c", script, "pytorrent-rename-check", source) or "").strip()
+    if not output.startswith("OK\t"):
+        raise RuntimeError(output.split("\t", 1)[1] if "\t" in output else "Cannot check directory")
+    parts = output.split("\t")
+    full_path = parts[1] if len(parts) > 1 else source
+    is_empty = len(parts) > 2 and parts[2] == "1"
+    return {"path": full_path, "name": posixpath.basename(full_path.rstrip("/")), "empty": is_empty, "empty_check_skipped": False}
 
 
 def _safe_directory_name(name: str) -> str:

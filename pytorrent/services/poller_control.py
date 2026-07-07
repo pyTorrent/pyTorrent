@@ -6,20 +6,84 @@ from typing import Any
 from ..db import connect, utcnow
 from ..config import POLL_INTERVAL, MIN_POLL_INTERVAL_SECONDS
 
+POLLING_PROFILES = {"auto", "low_cpu", "real_time", "custom"}
+
+PROFILE_PRESETS = {
+    "auto": {
+        "adaptive_enabled": True,
+        "safe_fallback_enabled": True,
+        "active_interval_seconds": 3.0,
+        "idle_interval_seconds": 15.0,
+        "error_interval_seconds": 30.0,
+        "live_stats_interval_seconds": 3.0,
+        "torrent_list_interval_seconds": 30.0,
+        "system_stats_interval_seconds": 5.0,
+        "tracker_stats_interval_seconds": 300.0,
+        "disk_stats_interval_seconds": 60.0,
+        "queue_stats_interval_seconds": 15.0,
+        "slow_stats_interval_seconds": 60.0,
+        "heartbeat_interval_seconds": 15.0,
+        "background_live_stats_interval_seconds": 30.0,
+        "background_torrent_list_interval_seconds": 300.0,
+        "background_system_stats_interval_seconds": 60.0,
+        "background_queue_stats_interval_seconds": 60.0,
+        "background_slow_stats_interval_seconds": 300.0,
+        "traffic_history_interval_seconds": 60.0,
+        "api_cache_max_age_seconds": 30.0,
+    },
+    "low_cpu": {
+        "adaptive_enabled": True,
+        "safe_fallback_enabled": True,
+        "active_interval_seconds": 10.0,
+        "idle_interval_seconds": 30.0,
+        "error_interval_seconds": 60.0,
+        "live_stats_interval_seconds": 10.0,
+        "torrent_list_interval_seconds": 180.0,
+        "system_stats_interval_seconds": 30.0,
+        "tracker_stats_interval_seconds": 900.0,
+        "disk_stats_interval_seconds": 300.0,
+        "queue_stats_interval_seconds": 60.0,
+        "slow_stats_interval_seconds": 300.0,
+        "heartbeat_interval_seconds": 30.0,
+        "background_live_stats_interval_seconds": 60.0,
+        "background_torrent_list_interval_seconds": 600.0,
+        "background_system_stats_interval_seconds": 60.0,
+        "background_queue_stats_interval_seconds": 300.0,
+        "background_slow_stats_interval_seconds": 900.0,
+        "traffic_history_interval_seconds": 60.0,
+        "api_cache_max_age_seconds": 60.0,
+    },
+    "real_time": {
+        "adaptive_enabled": True,
+        "safe_fallback_enabled": True,
+        "active_interval_seconds": 3.0,
+        "idle_interval_seconds": 10.0,
+        "error_interval_seconds": 30.0,
+        "live_stats_interval_seconds": 3.0,
+        "torrent_list_interval_seconds": 30.0,
+        "system_stats_interval_seconds": 5.0,
+        "tracker_stats_interval_seconds": 300.0,
+        "disk_stats_interval_seconds": 60.0,
+        "queue_stats_interval_seconds": 15.0,
+        "slow_stats_interval_seconds": 60.0,
+        "heartbeat_interval_seconds": 15.0,
+        "background_live_stats_interval_seconds": 10.0,
+        "background_torrent_list_interval_seconds": 60.0,
+        "background_system_stats_interval_seconds": 30.0,
+        "background_queue_stats_interval_seconds": 30.0,
+        "background_slow_stats_interval_seconds": 120.0,
+        "traffic_history_interval_seconds": 60.0,
+        "api_cache_max_age_seconds": 10.0,
+    },
+}
+
 DEFAULTS = {
-    "adaptive_enabled": True,
-    "safe_fallback_enabled": True,
-    "active_interval_seconds": 3.0,
-    "idle_interval_seconds": 15.0,
-    "error_interval_seconds": 30.0,
-    "live_stats_interval_seconds": 3.0,
-    "torrent_list_interval_seconds": 30.0,
-    "system_stats_interval_seconds": 5.0,
-    "tracker_stats_interval_seconds": 300.0,
-    "disk_stats_interval_seconds": 60.0,
-    "queue_stats_interval_seconds": 15.0,
-    "slow_stats_interval_seconds": 60.0,
-    "heartbeat_interval_seconds": 15.0,
+    **PROFILE_PRESETS["auto"],
+    "polling_profile": "auto",
+    "background_mode_enabled": True,
+    "keep_traffic_history_in_background": True,
+    "allow_api_force_refresh": True,
+    "run_smart_queue_cleanup_while_disabled": False,
     "emit_heartbeat_on_change": True,
     "slow_response_threshold_ms": 8000.0,
     "slowdown_multiplier": 2.0,
@@ -38,6 +102,13 @@ SAFE_FALLBACK_MINIMUMS = {
     "queue_stats_interval_seconds": 15.0,
     "slow_stats_interval_seconds": 60.0,
     "heartbeat_interval_seconds": 15.0,
+    "background_live_stats_interval_seconds": 10.0,
+    "background_torrent_list_interval_seconds": 60.0,
+    "background_system_stats_interval_seconds": 30.0,
+    "background_queue_stats_interval_seconds": 30.0,
+    "background_slow_stats_interval_seconds": 120.0,
+    "traffic_history_interval_seconds": 60.0,
+    "api_cache_max_age_seconds": 5.0,
 }
 
 
@@ -57,23 +128,55 @@ def _coerce_float(value: Any, default: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, number))
 
 
+def _coerce_bool(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
+def _profile_name(raw: Any, *, has_existing_settings: bool = False) -> str:
+    if raw is None and has_existing_settings:
+        return "custom"
+    value = str(raw or DEFAULTS["polling_profile"]).strip().lower()
+    return value if value in POLLING_PROFILES else DEFAULTS["polling_profile"]
+
+
 def normalize_settings(data: dict | None) -> dict:
-    raw = {**DEFAULTS, **(data or {})}
+    incoming = dict(data or {})
+    profile_name = _profile_name(incoming.get("polling_profile"), has_existing_settings=bool(incoming))
+    raw = {**DEFAULTS, **incoming}
+    if profile_name != "custom":
+        raw.update(PROFILE_PRESETS[profile_name])
+        raw["polling_profile"] = profile_name
     settings = {
-        "adaptive_enabled": bool(raw.get("adaptive_enabled")),
-        "safe_fallback_enabled": bool(raw.get("safe_fallback_enabled", True)),
-        "active_interval_seconds": _coerce_float(raw.get("active_interval_seconds"), DEFAULTS["active_interval_seconds"], MIN_POLL_INTERVAL_SECONDS, 30.0),
-        "idle_interval_seconds": _coerce_float(raw.get("idle_interval_seconds"), DEFAULTS["idle_interval_seconds"], MIN_POLL_INTERVAL_SECONDS, 120.0),
-        "error_interval_seconds": _coerce_float(raw.get("error_interval_seconds"), DEFAULTS["error_interval_seconds"], MIN_POLL_INTERVAL_SECONDS, 300.0),
-        "live_stats_interval_seconds": _coerce_float(raw.get("live_stats_interval_seconds"), DEFAULTS["live_stats_interval_seconds"], MIN_POLL_INTERVAL_SECONDS, 60.0),
-        "torrent_list_interval_seconds": _coerce_float(raw.get("torrent_list_interval_seconds"), DEFAULTS["torrent_list_interval_seconds"], MIN_POLL_INTERVAL_SECONDS, 120.0),
-        "system_stats_interval_seconds": _coerce_float(raw.get("system_stats_interval_seconds"), DEFAULTS["system_stats_interval_seconds"], MIN_POLL_INTERVAL_SECONDS, 120.0),
-        "tracker_stats_interval_seconds": _coerce_float(raw.get("tracker_stats_interval_seconds"), DEFAULTS["tracker_stats_interval_seconds"], MIN_POLL_INTERVAL_SECONDS, 1800.0),
-        "disk_stats_interval_seconds": _coerce_float(raw.get("disk_stats_interval_seconds"), DEFAULTS["disk_stats_interval_seconds"], MIN_POLL_INTERVAL_SECONDS, 1800.0),
-        "queue_stats_interval_seconds": _coerce_float(raw.get("queue_stats_interval_seconds"), DEFAULTS["queue_stats_interval_seconds"], MIN_POLL_INTERVAL_SECONDS, 1800.0),
-        "slow_stats_interval_seconds": _coerce_float(raw.get("slow_stats_interval_seconds"), DEFAULTS["slow_stats_interval_seconds"], MIN_POLL_INTERVAL_SECONDS, 1800.0),
-        "heartbeat_interval_seconds": _coerce_float(raw.get("heartbeat_interval_seconds"), DEFAULTS["heartbeat_interval_seconds"], MIN_POLL_INTERVAL_SECONDS, 300.0),
-        "emit_heartbeat_on_change": bool(raw.get("emit_heartbeat_on_change")),
+        "polling_profile": profile_name,
+        "adaptive_enabled": _coerce_bool(raw.get("adaptive_enabled"), DEFAULTS["adaptive_enabled"]),
+        "safe_fallback_enabled": _coerce_bool(raw.get("safe_fallback_enabled"), True),
+        "background_mode_enabled": _coerce_bool(raw.get("background_mode_enabled"), True),
+        "keep_traffic_history_in_background": _coerce_bool(raw.get("keep_traffic_history_in_background"), True),
+        "allow_api_force_refresh": _coerce_bool(raw.get("allow_api_force_refresh"), True),
+        "run_smart_queue_cleanup_while_disabled": _coerce_bool(raw.get("run_smart_queue_cleanup_while_disabled"), False),
+        "active_interval_seconds": _coerce_float(raw.get("active_interval_seconds"), DEFAULTS["active_interval_seconds"], MIN_POLL_INTERVAL_SECONDS, 300.0),
+        "idle_interval_seconds": _coerce_float(raw.get("idle_interval_seconds"), DEFAULTS["idle_interval_seconds"], MIN_POLL_INTERVAL_SECONDS, 600.0),
+        "error_interval_seconds": _coerce_float(raw.get("error_interval_seconds"), DEFAULTS["error_interval_seconds"], MIN_POLL_INTERVAL_SECONDS, 900.0),
+        "live_stats_interval_seconds": _coerce_float(raw.get("live_stats_interval_seconds"), DEFAULTS["live_stats_interval_seconds"], MIN_POLL_INTERVAL_SECONDS, 300.0),
+        "torrent_list_interval_seconds": _coerce_float(raw.get("torrent_list_interval_seconds"), DEFAULTS["torrent_list_interval_seconds"], MIN_POLL_INTERVAL_SECONDS, 1800.0),
+        "system_stats_interval_seconds": _coerce_float(raw.get("system_stats_interval_seconds"), DEFAULTS["system_stats_interval_seconds"], MIN_POLL_INTERVAL_SECONDS, 600.0),
+        "tracker_stats_interval_seconds": _coerce_float(raw.get("tracker_stats_interval_seconds"), DEFAULTS["tracker_stats_interval_seconds"], MIN_POLL_INTERVAL_SECONDS, 3600.0),
+        "disk_stats_interval_seconds": _coerce_float(raw.get("disk_stats_interval_seconds"), DEFAULTS["disk_stats_interval_seconds"], MIN_POLL_INTERVAL_SECONDS, 3600.0),
+        "queue_stats_interval_seconds": _coerce_float(raw.get("queue_stats_interval_seconds"), DEFAULTS["queue_stats_interval_seconds"], MIN_POLL_INTERVAL_SECONDS, 3600.0),
+        "slow_stats_interval_seconds": _coerce_float(raw.get("slow_stats_interval_seconds"), DEFAULTS["slow_stats_interval_seconds"], MIN_POLL_INTERVAL_SECONDS, 3600.0),
+        "heartbeat_interval_seconds": _coerce_float(raw.get("heartbeat_interval_seconds"), DEFAULTS["heartbeat_interval_seconds"], MIN_POLL_INTERVAL_SECONDS, 900.0),
+        "background_live_stats_interval_seconds": _coerce_float(raw.get("background_live_stats_interval_seconds"), DEFAULTS["background_live_stats_interval_seconds"], MIN_POLL_INTERVAL_SECONDS, 1800.0),
+        "background_torrent_list_interval_seconds": _coerce_float(raw.get("background_torrent_list_interval_seconds"), DEFAULTS["background_torrent_list_interval_seconds"], MIN_POLL_INTERVAL_SECONDS, 3600.0),
+        "background_system_stats_interval_seconds": _coerce_float(raw.get("background_system_stats_interval_seconds"), DEFAULTS["background_system_stats_interval_seconds"], MIN_POLL_INTERVAL_SECONDS, 1800.0),
+        "background_queue_stats_interval_seconds": _coerce_float(raw.get("background_queue_stats_interval_seconds"), DEFAULTS["background_queue_stats_interval_seconds"], MIN_POLL_INTERVAL_SECONDS, 3600.0),
+        "background_slow_stats_interval_seconds": _coerce_float(raw.get("background_slow_stats_interval_seconds"), DEFAULTS["background_slow_stats_interval_seconds"], MIN_POLL_INTERVAL_SECONDS, 3600.0),
+        "traffic_history_interval_seconds": _coerce_float(raw.get("traffic_history_interval_seconds"), DEFAULTS["traffic_history_interval_seconds"], MIN_POLL_INTERVAL_SECONDS, 1800.0),
+        "api_cache_max_age_seconds": _coerce_float(raw.get("api_cache_max_age_seconds"), DEFAULTS["api_cache_max_age_seconds"], 0.0, 1800.0),
+        "emit_heartbeat_on_change": _coerce_bool(raw.get("emit_heartbeat_on_change"), True),
         "slow_response_threshold_ms": _coerce_float(raw.get("slow_response_threshold_ms"), DEFAULTS["slow_response_threshold_ms"], 100.0, 60000.0),
         "slowdown_multiplier": _coerce_float(raw.get("slowdown_multiplier"), DEFAULTS["slowdown_multiplier"], 1.0, 10.0),
         "recovery_after_errors": int(_coerce_float(raw.get("recovery_after_errors"), 3, 1, 20)),
@@ -107,6 +210,7 @@ def save_settings(profile_id: int, data: dict) -> dict:
     settings = normalize_settings(data)
     with connect() as conn:
         conn.execute("INSERT OR REPLACE INTO poller_settings(profile_id,settings_json,updated_at) VALUES(?,?,?)", (int(profile_id), json.dumps(settings), utcnow()))
+    state_for(profile_id).last_heartbeat_at = 0.0
     return settings
 
 
@@ -117,6 +221,7 @@ class ProfilePollState:
     last_live_at: float = 0.0
     last_list_at: float = 0.0
     last_system_at: float = 0.0
+    last_history_at: float = 0.0
     last_slow_at: float = 0.0
     last_tracker_at: float = 0.0
     last_disk_at: float = 0.0
@@ -136,6 +241,7 @@ class ProfilePollState:
     skipped_emissions: int = 0
     emitted_payload_size: int = 0
     rtorrent_call_count: int = 0
+    connected_clients: int = 0
     live_poll_count: int = 0
     list_poll_count: int = 0
     live_updated_total: int = 0
@@ -156,6 +262,7 @@ class ProfilePollState:
     last_live_requires_full_refresh: bool = False
     adaptive_mode: str = "normal"
     slow_task_running: bool = False
+    queue_task_running: bool = False
     system_task_running: bool = False
     stats: dict[str, Any] = field(default_factory=dict)
 
@@ -172,6 +279,18 @@ def state_for(profile_id: int) -> ProfilePollState:
     return state
 
 
+def set_connected_clients(profile_id: int, count: int) -> None:
+    state_for(profile_id).connected_clients = max(0, int(count or 0))
+
+
+def has_connected_clients(state: ProfilePollState) -> bool:
+    return int(state.connected_clients or 0) > 0
+
+
+def background_mode_active(settings: dict, state: ProfilePollState) -> bool:
+    return bool(settings.get("background_mode_enabled")) and not has_connected_clients(state)
+
+
 def interval_for(settings: dict, state: ProfilePollState) -> float:
     if not settings.get("adaptive_enabled"):
         return float(settings["active_interval_seconds"])
@@ -184,15 +303,35 @@ def interval_for(settings: dict, state: ProfilePollState) -> float:
 
 
 def effective_live_interval(settings: dict, state: ProfilePollState) -> float:
+    if background_mode_active(settings, state):
+        return max(MIN_POLL_INTERVAL_SECONDS, float(settings.get("background_live_stats_interval_seconds") or DEFAULTS["background_live_stats_interval_seconds"]))
     return max(MIN_POLL_INTERVAL_SECONDS, interval_for(settings, state), float(settings.get("live_stats_interval_seconds") or DEFAULTS["live_stats_interval_seconds"]))
 
 
 def effective_list_interval(settings: dict, state: ProfilePollState) -> float:
-    return max(MIN_POLL_INTERVAL_SECONDS, float(settings.get("torrent_list_interval_seconds") or DEFAULTS["torrent_list_interval_seconds"]))
+    key = "background_torrent_list_interval_seconds" if background_mode_active(settings, state) else "torrent_list_interval_seconds"
+    return max(MIN_POLL_INTERVAL_SECONDS, float(settings.get(key) or DEFAULTS[key]))
+
+
+def effective_system_interval(settings: dict, state: ProfilePollState) -> float:
+    key = "background_system_stats_interval_seconds" if background_mode_active(settings, state) else "system_stats_interval_seconds"
+    interval = max(MIN_POLL_INTERVAL_SECONDS, float(settings.get(key) or DEFAULTS[key]))
+    if background_mode_active(settings, state) and settings.get("keep_traffic_history_in_background"):
+        interval = min(interval, max(MIN_POLL_INTERVAL_SECONDS, float(settings.get("traffic_history_interval_seconds") or DEFAULTS["traffic_history_interval_seconds"])))
+    return interval
+
+
+def effective_queue_interval(settings: dict, state: ProfilePollState) -> float:
+    key = "background_queue_stats_interval_seconds" if background_mode_active(settings, state) else "queue_stats_interval_seconds"
+    return max(MIN_POLL_INTERVAL_SECONDS, float(settings.get(key) or DEFAULTS[key]))
+
+
+def effective_slow_interval(settings: dict, state: ProfilePollState) -> float:
+    key = "background_slow_stats_interval_seconds" if background_mode_active(settings, state) else "slow_stats_interval_seconds"
+    return max(MIN_POLL_INTERVAL_SECONDS, float(settings.get(key) or DEFAULTS[key]))
 
 
 def effective_fast_interval(settings: dict, state: ProfilePollState) -> float:
-    # Note: Kept for compatibility with older diagnostics; the fast interval now means lightweight live stats.
     return effective_live_interval(settings, state)
 
 
@@ -209,11 +348,11 @@ def should_fast_poll(now: float, settings: dict, state: ProfilePollState) -> boo
 
 
 def should_system_poll(now: float, settings: dict, state: ProfilePollState) -> bool:
-    return (now - state.last_system_at) >= float(settings["system_stats_interval_seconds"])
+    return (now - state.last_system_at) >= effective_system_interval(settings, state)
 
 
 def should_slow_poll(now: float, settings: dict, state: ProfilePollState) -> bool:
-    return (now - state.last_slow_at) >= float(settings["slow_stats_interval_seconds"])
+    return (now - state.last_slow_at) >= effective_slow_interval(settings, state)
 
 
 def should_tracker_poll(now: float, settings: dict, state: ProfilePollState) -> bool:
@@ -225,7 +364,7 @@ def should_disk_poll(now: float, settings: dict, state: ProfilePollState) -> boo
 
 
 def should_queue_poll(now: float, settings: dict, state: ProfilePollState) -> bool:
-    return (now - state.last_queue_at) >= float(settings["queue_stats_interval_seconds"])
+    return (now - state.last_queue_at) >= effective_queue_interval(settings, state)
 
 
 def should_heartbeat(now: float, settings: dict, state: ProfilePollState, changed: bool) -> bool:
@@ -290,6 +429,9 @@ def reset_runtime_stats(profile_id: int) -> dict:
     state.last_live_error = ""
     state.last_list_error = ""
     state.last_live_requires_full_refresh = False
+    state.slow_task_running = False
+    state.queue_task_running = False
+    state.system_task_running = False
     state.stats = {}
     return snapshot(profile_id)
 
@@ -312,9 +454,6 @@ def mark_tick(state: ProfilePollState, started_at: float, active: bool, ok: bool
     adaptive_enabled = bool(effective_settings.get("adaptive_enabled", DEFAULTS["adaptive_enabled"]))
 
     if not adaptive_enabled:
-        # Adaptive mode is explicitly disabled for this rTorrent profile. Keep metrics,
-        # but do not enter slowdown/recovery or preserve a stale adaptive state from
-        # earlier ticks; otherwise refreshes remain slow even with the toggle off.
         state.error_count = 0 if ok else state.error_count + 1
         state.slow_count = 0
         state.adaptive_mode = "fixed"
@@ -333,7 +472,7 @@ def mark_tick(state: ProfilePollState, started_at: float, active: bool, ok: bool
         if not ok and state.error_count >= recovery_after:
             state.adaptive_mode = "recovery"
         elif ok and state.slow_count == 0:
-            state.adaptive_mode = "normal" if state.last_active else "idle"
+            state.adaptive_mode = "background" if background_mode_active(effective_settings, state) else ("normal" if state.last_active else "idle")
     state.sleep_hint = max(MIN_POLL_INTERVAL_SECONDS, min(10.0, state.sleep_hint))
     state.stats = {
         "profile_id": state.profile_id,
@@ -345,11 +484,16 @@ def mark_tick(state: ProfilePollState, started_at: float, active: bool, ok: bool
         "effective_interval_seconds": state.effective_interval_seconds,
         "live_stats_interval_seconds": effective_live_interval(effective_settings, state),
         "torrent_list_interval_seconds": effective_list_interval(effective_settings, state),
+        "system_stats_interval_seconds": effective_system_interval(effective_settings, state),
+        "queue_stats_interval_seconds": effective_queue_interval(effective_settings, state),
+        "slow_stats_interval_seconds": effective_slow_interval(effective_settings, state),
         "configured_min_interval_seconds": MIN_POLL_INTERVAL_SECONDS,
         "last_error": state.last_error,
         "duration_ms": state.last_tick_ms,
         "emitted_payload_size": state.emitted_payload_size,
         "rtorrent_call_count": state.rtorrent_call_count,
+        "connected_clients": state.connected_clients,
+        "background_mode_active": background_mode_active(effective_settings, state),
         "skipped_emissions": state.skipped_emissions,
         "adaptive_enabled": adaptive_enabled,
         "adaptive_mode": state.adaptive_mode,
@@ -373,6 +517,9 @@ def mark_tick(state: ProfilePollState, started_at: float, active: bool, ok: bool
         "last_list_ok": state.last_list_ok,
         "last_live_error": state.last_live_error,
         "last_list_error": state.last_list_error,
+        "slow_task_running": state.slow_task_running,
+        "queue_task_running": state.queue_task_running,
+        "system_task_running": state.system_task_running,
         "updated_at": utcnow(),
     }
     return dict(state.stats)
@@ -388,12 +535,17 @@ def snapshot(profile_id: int, settings: dict | None = None) -> dict:
     data.setdefault("adaptive_mode", state.adaptive_mode if runtime_ready else ("fixed" if not data.get("adaptive_enabled") else "waiting"))
     data.setdefault("live_stats_interval_seconds", effective_live_interval(effective_settings, state))
     data.setdefault("torrent_list_interval_seconds", effective_list_interval(effective_settings, state))
+    data.setdefault("system_stats_interval_seconds", effective_system_interval(effective_settings, state))
+    data.setdefault("queue_stats_interval_seconds", effective_queue_interval(effective_settings, state))
+    data.setdefault("slow_stats_interval_seconds", effective_slow_interval(effective_settings, state))
     data.setdefault("configured_min_interval_seconds", MIN_POLL_INTERVAL_SECONDS)
     if not runtime_ready:
         data["last_ok"] = None
     data.update({
         "live_poll_count": state.live_poll_count,
         "list_poll_count": state.list_poll_count,
+        "connected_clients": state.connected_clients,
+        "background_mode_active": background_mode_active(effective_settings, state),
         "last_live_duration_ms": state.last_live_duration_ms,
         "last_list_duration_ms": state.last_list_duration_ms,
         "last_live_updated_count": state.last_live_updated_count,
@@ -410,5 +562,8 @@ def snapshot(profile_id: int, settings: dict | None = None) -> dict:
         "last_list_ok": state.last_list_ok,
         "last_live_error": state.last_live_error,
         "last_list_error": state.last_list_error,
+        "slow_task_running": state.slow_task_running,
+        "queue_task_running": state.queue_task_running,
+        "system_task_running": state.system_task_running,
     })
     return data

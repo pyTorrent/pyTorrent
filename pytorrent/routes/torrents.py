@@ -12,12 +12,34 @@ def torrents():
     profile = request_profile()
     if not profile:
         return ok({"torrents": [], "summary": cached_summary(0, []), "error": "No rTorrent profile"})
-    rows = torrent_cache.snapshot(profile["id"])
+    profile_id = int(profile["id"])
+    settings = poller_control.get_settings(profile_id)
+    refresh_arg = str(request.args.get("refresh") or "").lower() in {"1", "true", "yes", "force"}
+    max_age = float(settings.get("api_cache_max_age_seconds") or 0)
+    refresh_result = None
+    if refresh_arg and bool(settings.get("allow_api_force_refresh")):
+        refresh_result = torrent_cache.refresh(profile)
+    elif max_age > 0:
+        refresh_result = torrent_cache.refresh_if_stale(profile, max_age)
+    rows = torrent_cache.snapshot(profile_id)
+    refresh_meta = None
+    if isinstance(refresh_result, dict):
+        refresh_meta = {
+            "ok": bool(refresh_result.get("ok")),
+            "skipped": bool(refresh_result.get("skipped")),
+            "age_seconds": refresh_result.get("age_seconds"),
+            "error": refresh_result.get("error", ""),
+            "added": len(refresh_result.get("added") or []),
+            "updated": len(refresh_result.get("updated") or []),
+            "removed": len(refresh_result.get("removed") or []),
+        }
     return ok({
-        "profile_id": profile["id"],
+        "profile_id": profile_id,
         "torrents": rows,
-        "summary": cached_summary(profile["id"], rows),
-        "error": torrent_cache.error(profile["id"]),
+        "summary": cached_summary(profile_id, rows),
+        "error": torrent_cache.error(profile_id),
+        "cache_age_seconds": torrent_cache.age_seconds(profile_id),
+        "refresh": refresh_meta,
     })
 
 
@@ -652,7 +674,7 @@ def torrent_action(action_name: str):
     if not profile:
         return jsonify({"ok": False, "error": "No profile"}), 400
     data = request.get_json(silent=True) or {}
-    allowed = {"start", "pause", "unpause", "stop", "resume", "recheck", "reannounce", "remove", "move", "profile_transfer", "set_label", "set_ratio_group"}
+    allowed = {"start", "pause", "unpause", "stop", "resume", "recheck", "recreate_files", "reannounce", "remove", "move", "profile_transfer", "set_label", "set_ratio_group"}
     if action_name not in allowed:
         return jsonify({"ok": False, "error": "Unknown action"}), 400
     if action_name == "profile_transfer":
@@ -662,7 +684,7 @@ def torrent_action(action_name: str):
             return jsonify({"ok": False, "error": str(exc)}), 403
         except Exception as exc:
             return jsonify({"ok": False, "error": str(exc)}), 400
-    if action_name in {"move", "remove", "profile_transfer"}:
+    if action_name in {"move", "remove", "profile_transfer", "recreate_files"}:
         # Note: Large move/remove/profile-transfer requests are split into ordered bulk parts; smaller requests keep the old single-job response shape.
         jobs = enqueue_bulk_parts(profile, action_name, data)
         first_job_id = jobs[0]["job_id"] if jobs else None

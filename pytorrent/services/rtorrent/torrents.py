@@ -7,6 +7,48 @@ from .system import disk_usage_for_default_path
 XMLRPC_DEFAULT_SIZE_LIMIT_BYTES = 512 * 1024
 
 
+def _unique_torrent_hashes(torrent_hashes: list[str]) -> list[str]:
+    seen: set[str] = set()
+    unique: list[str] = []
+    for value in torrent_hashes or []:
+        torrent_hash = str(value or "").strip()
+        if not torrent_hash or torrent_hash in seen:
+            continue
+        seen.add(torrent_hash)
+        unique.append(torrent_hash)
+    return unique
+
+
+def _is_missing_info_hash_error(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return "could not find info-hash" in msg or ("info-hash" in msg and "not found" in msg)
+
+
+def _missing_info_hash_item(torrent_hash: str, exc: Exception, context: dict | None = None) -> dict:
+    """Return a consistent per-torrent skip record for stale or broken rTorrent hashes."""
+    context = context or {}
+    item = {
+        "hash": torrent_hash,
+        "ok": False,
+        "error": str(exc),
+        "skipped": "missing_info_hash",
+        "skipped_reason": "rTorrent could not find this info-hash, so pyTorrent skipped it and continued the job.",
+    }
+    for key in ("name", "path", "size", "label"):
+        value = context.get(key)
+        if value not in (None, ""):
+            item[key] = value
+    return item
+
+
+def _job_context_item(payload: dict | None, torrent_hash: str) -> dict:
+    """Read optional job metadata captured when the user queued the action."""
+    for item in ((payload or {}).get("job_context") or {}).get("items") or []:
+        if str((item or {}).get("hash") or "") == str(torrent_hash):
+            return dict(item or {})
+    return {}
+
+
 def _parse_xmlrpc_size_limit(value) -> int:
     """Parse rTorrent XML-RPC size values such as 524288, 16M or 8K."""
     text = str(value or '').strip().lower()
@@ -747,6 +789,135 @@ def resume_paused_hash(c: ScgiRtorrentClient, torrent_hash: str) -> dict:
     return result
 
 
+
+def _file_rows_for_recreate(c: ScgiRtorrentClient, h: str) -> list[dict]:
+    """Return rTorrent file targets for recreate-files."""
+    rows = c.f.multicall(h, "", "f.path=") or []
+    files = []
+    for index, row in enumerate(rows):
+        path = ""
+        try:
+            path = str((row or [""])[0] or "")
+        except Exception:
+            path = ""
+        files.append({"index": index, "target": f"{h}:f{index}", "path": path})
+    return files
+
+
+def _is_missing_rtorrent_method_error(exc: Exception) -> bool:
+    """Return True when rTorrent rejects a method name, not the command itself."""
+    msg = str(exc).lower()
+    return any(text in msg for text in ("not defined", "no such method", "unknown method"))
+
+
+def _set_file_recreate_flag(c: ScgiRtorrentClient, target: str, field: str, value: int) -> str:
+    """Set one rTorrent recreate flag using new and legacy XML-RPC method names."""
+    # Note: Some rTorrent builds expose f.<field>.set, older builds expose f.set_<field>.
+    methods = (f"f.{field}.set", f"f.set_{field}")
+    errors = []
+    for method in methods:
+        try:
+            c.call(method, target, int(value))
+            return method
+        except Exception as exc:
+            errors.append(f"{method}: {exc}")
+            if not _is_missing_rtorrent_method_error(exc):
+                break
+    raise RuntimeError("Cannot set rTorrent file flag: " + "; ".join(errors))
+
+
+def _read_file_recreate_flags(c: ScgiRtorrentClient, h: str) -> dict:
+    """Read recreate-related flags for diagnostics after queueing file recreation."""
+    summary = {"create_queued": 0, "resize_queued": 0, "checked_files": 0}
+    try:
+        rows = c.f.multicall(h, "", "f.create_queued=", "f.resize_queued=") or []
+    except Exception as exc:
+        summary["read_error"] = str(exc)
+        return summary
+    summary["checked_files"] = len(rows)
+    for row in rows:
+        try:
+            summary["create_queued"] += 1 if int((row or [0, 0])[0] or 0) else 0
+            summary["resize_queued"] += 1 if int((row or [0, 0])[1] or 0) else 0
+        except Exception:
+            continue
+    return summary
+
+
+def recreate_files_hash(c: ScgiRtorrentClient, torrent_hash: str) -> dict:
+    """Delete local data and make rTorrent download the torrent files again.
+
+    rTorrent recreate flags are only consumed after the underlying files are missing
+    or truncated. This action therefore removes the torrent data on the rTorrent host
+    first, queues per-file create/resize flags, runs a hash check, and restores the
+    previous running state only when the torrent was active before the operation.
+    """
+    h = str(torrent_hash or "")
+    if not h:
+        return {"hash": h, "ok": False, "error": "missing hash"}
+
+    before = _download_runtime_state(c, h)
+    result: dict = {"hash": h, "before": before, "commands": [], "errors": []}
+    try:
+        files = _file_rows_for_recreate(c, h)
+        result["file_count"] = len(files)
+        if not files:
+            result.update({"ok": False, "error": "torrent has no file rows", "after": _download_runtime_state(c, h)})
+            return result
+
+        was_running = bool(before.get("state")) and not bool(before.get("paused"))
+        was_open = bool(before.get("open"))
+        data_path = _safe_rm_rf_path(_torrent_data_path(c, h))
+        result["removed_path"] = data_path
+
+        # Note: Recreate means re-download in pyTorrent, so data must be removed before rTorrent can rebuild it.
+        for method in ("d.stop", "d.close"):
+            try:
+                c.call(method, h)
+                result["commands"].append(method)
+            except Exception as exc:
+                result["errors"].append(f"{method}: {exc}")
+
+        _run_remote_rm(c, data_path)
+        result["commands"].append("remote.rm_rf")
+
+        command_names = set()
+        for item in files:
+            target = item["target"]
+            # Note: value 1 matches rTorrent Ctrl-E behavior; value 0 only clears the recreate queue.
+            command_names.add(_set_file_recreate_flag(c, target, "create_queued", 1))
+            command_names.add(_set_file_recreate_flag(c, target, "resize_queued", 1))
+
+        result["commands"].extend(sorted(command_names))
+        result["updated_files"] = len(files)
+        result["queued_flags_before_check"] = _read_file_recreate_flags(c, h)
+
+        # Note: Hash check after deletion makes rTorrent mark pieces missing and start a real download.
+        try:
+            c.call("d.open", h)
+            result["commands"].append("d.open")
+        except Exception as exc:
+            result["errors"].append(f"d.open: {exc}")
+        c.call("d.check_hash", h)
+        result["commands"].append("d.check_hash")
+        result["queued_flags_after_check"] = _read_file_recreate_flags(c, h)
+
+        if was_running:
+            c.call("d.start", h)
+            result["commands"].append("d.start")
+        elif not was_open:
+            try:
+                c.call("d.close", h)
+                result["commands"].append("d.close_restore")
+            except Exception as exc:
+                result["errors"].append(f"d.close_restore: {exc}")
+
+        result["after"] = _download_runtime_state(c, h)
+        result["ok"] = True
+    except Exception as exc:
+        result.update({"ok": False, "error": str(exc), "after": _download_runtime_state(c, h)})
+    return result
+
 def start_or_resume_hash(c: ScgiRtorrentClient, torrent_hash: str, prefer_start: bool = False) -> dict:
     """Start stopped torrents and recover open/inactive paused torrents.
 
@@ -837,6 +1008,7 @@ def _move_profile_transfer_data(source_client: ScgiRtorrentClient, torrent_hash:
 
 def transfer_profile(source_profile: dict, target_profile: dict, torrent_hashes: list[str], payload: dict | None = None, checkpoint=None, resume_state: dict | None = None) -> dict:
     """Move torrent entries between rTorrent profiles; data moving is delegated to a separate helper."""
+    torrent_hashes = _unique_torrent_hashes(torrent_hashes)
     payload = payload or {}
     resume_state = resume_state or {}
     target_path = _remote_clean_path(payload.get("target_path") or payload.get("path") or "")
@@ -863,6 +1035,11 @@ def transfer_profile(source_profile: dict, target_profile: dict, torrent_hashes:
     source_client = client_for(source_profile)
     target_client = client_for(target_profile)
 
+    def missing_transfer_item(torrent_hash: str, exc: Exception, base: dict | None = None) -> dict:
+        item = dict(base or {})
+        item.update(_missing_info_hash_item(torrent_hash, exc, _job_context_item(payload, torrent_hash)))
+        return item
+
     def mark_done(torrent_hash: str, results: list) -> None:
         completed_hashes.add(str(torrent_hash))
         if checkpoint:
@@ -882,12 +1059,24 @@ def transfer_profile(source_profile: dict, target_profile: dict, torrent_hashes:
         try:
             data, exported = _read_exported_torrent_bytes(source_profile, h)
         except RuntimeError as export_exc:
+            if _is_missing_info_hash_error(export_exc):
+                item.update(missing_transfer_item(h, export_exc, item))
+                results.append(item)
+                mark_done(h, results)
+                continue
             if "Cannot find torrent source file in rTorrent" not in str(export_exc):
                 raise
             item["ok"] = False
             item["error"] = str(export_exc)
             item["skipped"] = "missing_torrent_metadata"
             item["hint"] = "rTorrent did not expose a readable .torrent source and could not save one from its session."
+            results.append(item)
+            mark_done(h, results)
+            continue
+        except Exception as export_exc:
+            if not _is_missing_info_hash_error(export_exc):
+                raise
+            item.update(missing_transfer_item(h, export_exc, item))
             results.append(item)
             mark_done(h, results)
             continue
@@ -913,7 +1102,15 @@ def transfer_profile(source_profile: dict, target_profile: dict, torrent_hashes:
             was_active = was_state
         moved_to = ""
         if move_data:
-            move_result = _move_profile_transfer_data(source_client, h, target_path)
+            try:
+                move_result = _move_profile_transfer_data(source_client, h, target_path)
+            except Exception as move_exc:
+                if not _is_missing_info_hash_error(move_exc):
+                    raise
+                item.update(missing_transfer_item(h, move_exc, item))
+                results.append(item)
+                mark_done(h, results)
+                continue
             item.update(move_result)
             moved_to = str(move_result.get("moved_to") or "")
         # Note: The default keeps the torrent status from the source profile; explicit actions override it.
@@ -943,7 +1140,13 @@ def transfer_profile(source_profile: dict, target_profile: dict, torrent_hashes:
                 item["post_action_applied"] = post_action
             except Exception as post_exc:
                 item["post_action_error"] = str(post_exc)
-        source_client.call("d.erase", h)
+        try:
+            source_client.call("d.erase", h)
+        except Exception as erase_exc:
+            if not _is_missing_info_hash_error(erase_exc):
+                raise
+            item["source_erase_skipped"] = "missing_info_hash"
+            item["source_erase_error"] = str(erase_exc)
         item["target_started"] = start_on_target
         item["label"] = target_label
         item["previous_label"] = label
@@ -955,6 +1158,7 @@ def transfer_profile(source_profile: dict, target_profile: dict, torrent_hashes:
     return {"ok": True, "count": moved_count, "requested_count": len(torrent_hashes), "move_data": move_data, "target_profile_id": int(target_profile.get("id") or 0), "target_path": target_path, "label": label_value, "post_action": post_action, "results": results, "errors": errors}
 
 def action(profile: dict, torrent_hashes: list[str], name: str, payload: dict | None = None, checkpoint=None, resume_state: dict | None = None) -> dict:
+    torrent_hashes = _unique_torrent_hashes(torrent_hashes)
     payload = payload or {}
     resume_state = resume_state or {}
     completed_hashes = set(str(x) for x in (resume_state.get("completed_hashes") or []))
@@ -970,6 +1174,18 @@ def action(profile: dict, torrent_hashes: list[str], name: str, payload: dict | 
         return [h for h in torrent_hashes if str(h) not in completed_hashes]
 
     c = client_for(profile)
+
+    def missing_item(torrent_hash: str, exc: Exception, base: dict | None = None) -> dict:
+        # Note: Broken hashes are terminal for a single torrent only; the rest of the job must continue.
+        item = dict(base or {})
+        item.update(_missing_info_hash_item(torrent_hash, exc, _job_context_item(payload, torrent_hash)))
+        return item
+
+    def mark_missing(torrent_hash: str, exc: Exception, results: list, base: dict | None = None) -> None:
+        item = missing_item(torrent_hash, exc, base)
+        results.append(item)
+        mark_done(torrent_hash, item, results)
+
     methods = {
         "stop": "d.stop",
         "recheck": "d.check_hash",
@@ -980,20 +1196,32 @@ def action(profile: dict, torrent_hashes: list[str], name: str, payload: dict | 
         label = str(payload.get("label") or "").strip()
         results = previous_results
         for h in pending_hashes():
-            c.call("d.custom1.set", h, label)
             item = {"hash": h, "label": label}
+            try:
+                c.call("d.custom1.set", h, label)
+            except Exception as exc:
+                if not _is_missing_info_hash_error(exc):
+                    raise
+                mark_missing(h, exc, results, item)
+                continue
             results.append(item)
             mark_done(h, item, results)
-        return {"ok": True, "count": len(torrent_hashes), "label": label, "results": results}
+        return {"ok": True, "count": len([item for item in results if not item.get("error")]), "requested_count": len(torrent_hashes), "label": label, "results": results}
     if name == "set_ratio_group":
         group = str(payload.get("ratio_group") or "").strip()
         results = previous_results
         for h in pending_hashes():
-            c.call("d.custom.set", h, "py_ratio_group", group)
             item = {"hash": h, "ratio_group": group}
+            try:
+                c.call("d.custom.set", h, "py_ratio_group", group)
+            except Exception as exc:
+                if not _is_missing_info_hash_error(exc):
+                    raise
+                mark_missing(h, exc, results, item)
+                continue
             results.append(item)
             mark_done(h, item, results)
-        return {"ok": True, "count": len(torrent_hashes), "ratio_group": group, "results": results}
+        return {"ok": True, "count": len([item for item in results if not item.get("error")]), "requested_count": len(torrent_hashes), "ratio_group": group, "results": results}
     if name == "move":
         path = _remote_clean_path(payload.get("path") or "")
         move_data = bool(payload.get("move_data"))
@@ -1009,7 +1237,10 @@ def action(profile: dict, torrent_hashes: list[str], name: str, payload: dict | 
             item = {"hash": h, "path": path, "move_data": move_data, "keep_seeding": keep_seeding}
             try:
                 was_state = int(c.call("d.state", h) or 0)
-            except Exception:
+            except Exception as state_exc:
+                if _is_missing_info_hash_error(state_exc):
+                    mark_missing(h, state_exc, results, item)
+                    continue
                 was_state = 0
             try:
                 was_active = int(c.call("d.is_active", h) or 0)
@@ -1017,13 +1248,25 @@ def action(profile: dict, torrent_hashes: list[str], name: str, payload: dict | 
                 was_active = was_state
             if move_data:
                 if was_state == 0:
-                    c.call("d.directory.set", h, path)
+                    try:
+                        c.call("d.directory.set", h, path)
+                    except Exception as exc:
+                        if not _is_missing_info_hash_error(exc):
+                            raise
+                        mark_missing(h, exc, results, item)
+                        continue
                     item["move_data"] = False
                     item["skipped"] = "state is 0; data is not present, only directory updated"
                     results.append(item)
                     mark_done(h, item, results)
                     continue
-                src = _remote_clean_path(_torrent_data_path(c, h))
+                try:
+                    src = _remote_clean_path(_torrent_data_path(c, h))
+                except Exception as path_exc:
+                    if not _is_missing_info_hash_error(path_exc):
+                        raise
+                    mark_missing(h, path_exc, results, item)
+                    continue
                 if not src:
                     raise ValueError(f"Cannot determine source path for {h}")
                 dst = _remote_join(path, posixpath.basename(src.rstrip("/")))
@@ -1054,34 +1297,73 @@ def action(profile: dict, torrent_hashes: list[str], name: str, payload: dict | 
                     except Exception as exc:
                         item["start_after_move_error"] = str(exc)
             else:
-                c.call("d.directory.set", h, path)
+                try:
+                    c.call("d.directory.set", h, path)
+                except Exception as exc:
+                    if not _is_missing_info_hash_error(exc):
+                        raise
+                    mark_missing(h, exc, results, item)
+                    continue
             results.append(item)
             mark_done(h, item, results)
-        return {"ok": True, "count": len(torrent_hashes), "move_data": move_data, "keep_seeding": keep_seeding, "results": results}
+        return {"ok": True, "count": len([item for item in results if not item.get("error")]), "requested_count": len(torrent_hashes), "move_data": move_data, "keep_seeding": keep_seeding, "results": results}
     if name == "pause":
         # Note: The app pause action is now a pure d.pause so later resume works without stop/start.
         results = previous_results
         for h in pending_hashes():
-            item = pause_hash(c, h)
+            try:
+                item = pause_hash(c, h)
+            except Exception as exc:
+                if not _is_missing_info_hash_error(exc):
+                    raise
+                mark_missing(h, exc, results, {"hash": h})
+                continue
             results.append(item)
             mark_done(h, item, results)
-        return {"ok": True, "count": len(torrent_hashes), "remove_data": False, "results": results}
+        return {"ok": True, "count": len([item for item in results if not item.get("error")]), "requested_count": len(torrent_hashes), "remove_data": False, "results": results}
     if name in {"resume", "unpause"}:
         # Note: Resume/Unpause keeps native rTorrent resume semantics; Start is the recovery action for stuck open/inactive torrents.
         results = previous_results
         for h in pending_hashes():
-            item = resume_paused_hash(c, h)
+            try:
+                item = resume_paused_hash(c, h)
+            except Exception as exc:
+                if not _is_missing_info_hash_error(exc):
+                    raise
+                mark_missing(h, exc, results, {"hash": h})
+                continue
             results.append(item)
             mark_done(h, item, results)
-        return {"ok": True, "count": len(torrent_hashes), "remove_data": False, "results": results}
+        return {"ok": True, "count": len([item for item in results if not item.get("error")]), "requested_count": len(torrent_hashes), "remove_data": False, "results": results}
     if name == "start":
         # Note: Start recovers stuck Paused/open-inactive rows with Stop -> Start while keeping normal stopped rows on d.start.
         results = previous_results
         for h in pending_hashes():
-            item = start_or_resume_hash(c, h)
+            try:
+                item = start_or_resume_hash(c, h)
+            except Exception as exc:
+                if not _is_missing_info_hash_error(exc):
+                    raise
+                mark_missing(h, exc, results, {"hash": h})
+                continue
             results.append(item)
             mark_done(h, item, results)
-        return {"ok": True, "count": len(torrent_hashes), "remove_data": False, "results": results}
+        return {"ok": True, "count": len([item for item in results if not item.get("error")]), "requested_count": len(torrent_hashes), "remove_data": False, "results": results}
+
+    if name == "recreate_files":
+        # Queue rTorrent file recreation with the same direct file-target setter style used by file-priority updates.
+        results = previous_results
+        for h in pending_hashes():
+            try:
+                item = recreate_files_hash(c, h)
+            except Exception as exc:
+                if not _is_missing_info_hash_error(exc):
+                    raise
+                mark_missing(h, exc, results, {"hash": h})
+                continue
+            results.append(item)
+            mark_done(h, item, results)
+        return {"ok": True, "count": len([item for item in results if not item.get("error")]), "requested_count": len(torrent_hashes), "remove_data": False, "results": results}
 
     method = methods.get(name)
     if not method:
@@ -1090,15 +1372,21 @@ def action(profile: dict, torrent_hashes: list[str], name: str, payload: dict | 
     results = previous_results
     for h in pending_hashes():
         item = {"hash": h}
-        if remove_data:
-            item = _remove_torrent_data(c, h)
-        c.call(method, h)
+        try:
+            if remove_data:
+                item = _remove_torrent_data(c, h)
+            c.call(method, h)
+        except Exception as exc:
+            if not _is_missing_info_hash_error(exc):
+                raise
+            mark_missing(h, exc, results, item)
+            continue
         if name == "recheck":
             # Note: Recheck is tracked so even very fast checks still receive the after-check start/stop policy.
             _mark_post_check_watch(int(profile.get("id") or 0), h)
         results.append(item)
         mark_done(h, item, results)
-    return {"ok": True, "count": len(torrent_hashes), "remove_data": remove_data, "results": results}
+    return {"ok": True, "count": len([item for item in results if not item.get("error")]), "requested_count": len(torrent_hashes), "remove_data": remove_data, "results": results}
 
 def add_magnet(profile: dict, uri: str, start: bool = True, directory: str = "", label: str = "") -> dict:
     c = client_for(profile)

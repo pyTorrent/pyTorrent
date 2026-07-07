@@ -22,6 +22,21 @@ class TorrentCache:
         with self._lock:
             return self._errors.get(profile_id, "")
 
+    def age_seconds(self, profile_id: int) -> float | None:
+        with self._lock:
+            updated = self._updated_at.get(int(profile_id))
+        return None if not updated else max(0.0, time() - updated)
+
+    def is_stale(self, profile_id: int, max_age_seconds: float) -> bool:
+        age = self.age_seconds(profile_id)
+        return age is None or age >= max(0.0, float(max_age_seconds or 0))
+
+    def refresh_if_stale(self, profile: dict, max_age_seconds: float) -> dict:
+        profile_id = int(profile["id"])
+        if self.is_stale(profile_id, max_age_seconds):
+            return self.refresh(profile)
+        return {"ok": True, "profile_id": profile_id, "skipped": True, "age_seconds": self.age_seconds(profile_id)}
+
     def clear_profile(self, profile_id: int) -> int:
         """Clear cached torrent rows for one profile and return removed row count."""
         # Note: Cleanup clears only in-memory rows for the selected profile; rTorrent data is untouched.
@@ -43,6 +58,7 @@ class TorrentCache:
             live = {t["hash"]: t for t in rows if t.get("hash")}
             with self._lock:
                 old = dict(self._data.get(profile_id, {}))
+                old_for_logs = {h: dict(row) for h, row in old.items()}
                 if not old:
                     self._errors[profile_id] = ""
                     return {"ok": True, "profile_id": profile_id, "updated": [], "missing": [], "unknown": list(live.keys()), "requires_full_refresh": bool(live)}
@@ -63,6 +79,9 @@ class TorrentCache:
                 self._data[profile_id] = old
                 self._errors[profile_id] = ""
                 self._updated_at[profile_id] = time()
+            if updated:
+                # Note: Low CPU mode can postpone full-list polling, so live completion transitions must still reach operation logs.
+                operation_logs.record_cache_diff(profile_id, [], [], updated, old_for_logs)
             return {"ok": True, "profile_id": profile_id, "updated": updated, "missing": missing, "unknown": unknown, "requires_full_refresh": bool(missing or unknown)}
         except Exception as exc:
             with self._lock:

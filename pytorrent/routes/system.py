@@ -1,5 +1,6 @@
 from __future__ import annotations
 from ._shared import *
+import bisect
 import posixpath
 from ..services import operation_logs
 from ..services.frontend_assets import static_hash
@@ -157,19 +158,38 @@ def port_check_post():
 def jobs_list():
     limit = int(request.args.get("limit", 50))
     offset = int(request.args.get("offset", 0))
-    data = list_jobs(limit, offset)
-    return ok({"jobs": data["rows"], "total": data["total"], "limit": data["limit"], "offset": data["offset"]})
+    scope = str(request.args.get("scope") or "profile").lower()
+    profile_id = None
+    if scope != "global":
+        profile = request_profile()
+        if not profile:
+            return jsonify({"ok": False, "error": "No profile"}), 400
+        profile_id = int(profile["id"])
+    elif not is_admin():
+        abort(403)
+    # Note: The UI reads profile-scoped jobs by default; scope=global remains an explicit admin diagnostics view.
+    data = list_jobs(limit, offset, profile_id=profile_id)
+    return ok({"jobs": data["rows"], "total": data["total"], "limit": data["limit"], "offset": data["offset"], "profile_id": profile_id, "scope": scope if scope == "global" else "profile"})
 
 
 
 @bp.post("/jobs/clear")
 def jobs_clear():
+    scope = str(request.args.get("scope") or "profile").lower()
+    profile_id = None
+    if scope != "global":
+        profile = request_profile(require_write=True)
+        if not profile:
+            return jsonify({"ok": False, "error": "No profile"}), 400
+        profile_id = int(profile["id"])
+    elif not is_admin():
+        abort(403)
     if str(request.args.get("force") or "").lower() in {"1", "true", "yes"}:
-        # Note: Emergency cleanup keeps the endpoint behavior unchanged, while force=1 enables rescue mode.
-        deleted = emergency_clear_jobs()
-        return ok({"deleted": deleted, "emergency": True})
-    deleted = clear_jobs()
-    return ok({"deleted": deleted, "emergency": False})
+        # Note: Emergency cleanup can still be global, but only when an admin explicitly requests scope=global.
+        deleted = emergency_clear_jobs(profile_id=profile_id)
+        return ok({"deleted": deleted, "emergency": True, "profile_id": profile_id, "scope": scope if scope == "global" else "profile"})
+    deleted = clear_jobs(profile_id=profile_id)
+    return ok({"deleted": deleted, "emergency": False, "profile_id": profile_id, "scope": scope if scope == "global" else "profile"})
 
 
 
@@ -181,7 +201,7 @@ def cleanup_status():
 
 @bp.post("/cleanup/cache")
 def cleanup_profile_cache():
-    profile = request_profile()
+    profile = request_profile(require_write=True)
     if not profile:
         return jsonify({"ok": False, "error": "No profile"}), 400
     profile_id = int(profile["id"])
@@ -210,8 +230,12 @@ def cleanup_profile_cache():
 
 @bp.post("/cleanup/jobs")
 def cleanup_jobs():
-    deleted = clear_jobs()
-    return ok({"deleted": deleted, "cleanup": cleanup_summary()})
+    profile = request_profile(require_write=True)
+    if not profile:
+        return jsonify({"ok": False, "error": "No profile"}), 400
+    # Note: Cleanup from the UI removes only finished jobs for the active profile.
+    deleted = clear_jobs(profile_id=int(profile["id"]))
+    return ok({"deleted": deleted, "profile_id": int(profile["id"]), "cleanup": cleanup_summary()})
 
 
 @bp.post("/cleanup/database/vacuum")
@@ -228,7 +252,7 @@ def cleanup_database_vacuum():
 
 @bp.post("/cleanup/smart-queue")
 def cleanup_smart_queue():
-    profile = request_profile()
+    profile = request_profile(require_write=True)
     if not profile:
         return jsonify({"ok": False, "error": "No profile"}), 400
     profile_id = int(profile["id"])
@@ -246,7 +270,7 @@ def cleanup_smart_queue():
 
 @bp.post("/cleanup/operation-logs")
 def cleanup_operation_logs():
-    profile = request_profile()
+    profile = request_profile(require_write=True)
     if not profile:
         return jsonify({"ok": False, "error": "No profile"}), 400
     # Note: Operation log cleanup removes only profile-scoped log entries; torrents, jobs and settings stay intact.
@@ -257,7 +281,7 @@ def cleanup_operation_logs():
 
 @bp.post("/cleanup/planner")
 def cleanup_planner():
-    profile = request_profile()
+    profile = request_profile(require_write=True)
     if not profile:
         return jsonify({"ok": False, "error": "No profile"}), 400
     # Note: Planner cleanup removes only the active profile action history, not saved Planner settings.
@@ -267,7 +291,7 @@ def cleanup_planner():
 
 @bp.post("/cleanup/automations")
 def cleanup_automations():
-    profile = request_profile()
+    profile = request_profile(require_write=True)
     if not profile:
         return jsonify({"ok": False, "error": "No profile"}), 400
     profile_id = int(profile["id"])
@@ -287,7 +311,7 @@ def cleanup_automations():
 
 @bp.post("/cleanup/poller-diagnostics")
 def cleanup_poller_diagnostics():
-    profile = request_profile()
+    profile = request_profile(require_write=True)
     if not profile:
         return jsonify({"ok": False, "error": "No profile"}), 400
     profile_id = int(profile["id"])
@@ -297,9 +321,10 @@ def cleanup_poller_diagnostics():
 
 @bp.post("/cleanup/all")
 def cleanup_all():
-    deleted_jobs = clear_jobs()
-    active_profile = request_profile()
+    active_profile = request_profile(require_write=True)
     active_profile_id = int(active_profile["id"]) if active_profile else 0
+    # Note: Full cleanup is now consistently profile-scoped; it no longer clears job history from other profiles.
+    deleted_jobs = clear_jobs(profile_id=active_profile_id) if active_profile_id else 0
     deleted_logs = operation_logs.clear(active_profile_id) if active_profile_id else 0
     deleted_planner = download_planner.clear_history(active_profile_id) if active_profile_id else 0
     with connect() as conn:
@@ -353,22 +378,62 @@ def _remote_path_contains(base: str, candidate: str) -> bool:
 
 
 def _path_has_cached_torrents(profile_id: int, path: str) -> bool:
-    # Note: The cache check prevents renaming folders that are currently known as torrent locations.
+    # Note: Kept for single-path callers. Bulk path browser annotation uses a sorted
+    # torrent-path index so large folders do not perform dirs * torrents scans.
     if not str(path or "").strip():
         return False
     return any(_remote_path_contains(path, item.get("path") or "") for item in torrent_cache.snapshot(profile_id))
 
 
+def _build_torrent_path_index(profile_id: int) -> list[str]:
+    paths = []
+    for item in torrent_cache.snapshot(profile_id):
+        path = posixpath.normpath(str(item.get("path") or "").rstrip("/") or "/")
+        if path and path != "/":
+            paths.append(path)
+    return sorted(set(paths))
+
+
+def _path_index_contains(index: list[str], base: str) -> bool:
+    base = posixpath.normpath(str(base or "").rstrip("/") or "/")
+    if not base or base == "/" or not index:
+        return False
+    pos = bisect.bisect_left(index, base)
+    if pos < len(index):
+        candidate = index[pos]
+        return candidate == base or candidate.startswith(base.rstrip("/") + "/")
+    return False
+
+
+def _rename_state_for_path(profile: dict, item: dict, torrent_path_index: list[str] | None = None) -> dict:
+    item_path = item.get("path") or ""
+    if torrent_path_index is None:
+        has_torrents = _path_has_cached_torrents(int(profile.get("id") or 0), item_path)
+    else:
+        has_torrents = _path_index_contains(torrent_path_index, item_path)
+    empty_value = item.get("empty")
+    empty_unknown = empty_value is None
+    item["has_torrents"] = has_torrents
+    if has_torrents:
+        item["can_rename"] = False
+        item["rename_reason"] = "Folder contains a known torrent path"
+    elif empty_unknown:
+        item["can_rename"] = None
+        item["rename_reason"] = "Check if this folder can be renamed"
+    else:
+        is_empty = bool(empty_value)
+        item["can_rename"] = is_empty
+        item["rename_reason"] = "Rename folder" if is_empty else "Only empty folders can be renamed"
+    return item
+
+
 def _annotate_path_directories(profile: dict, payload: dict) -> dict:
     dirs = payload.get("dirs") or []
+    if not dirs:
+        return payload
+    torrent_path_index = _build_torrent_path_index(int(profile.get("id") or 0))
     for item in dirs:
-        item_path = item.get("path") or ""
-        has_torrents = _path_has_cached_torrents(int(profile.get("id") or 0), item_path)
-        is_empty = bool(item.get("empty"))
-        item["has_torrents"] = has_torrents
-        item["can_rename"] = is_empty and not has_torrents
-        # Note: The picker exposes a short reason so disabled rename buttons explain the safety rule.
-        item["rename_reason"] = "Rename folder" if item["can_rename"] else ("Folder contains a known torrent path" if has_torrents else "Only empty folders can be renamed")
+        _rename_state_for_path(profile, item, torrent_path_index)
     return payload
 
 
@@ -402,8 +467,17 @@ def path_browse():
     if not profile:
         return jsonify({"ok": False, "error": "No profile"}), 400
     base = request.args.get("path") or ""
+    search = request.args.get("search") or ""
+    max_dirs = request.args.get("max_dirs")
+    cache_only = str(request.args.get("cache_only") or "").lower() in {"1", "true", "yes"}
+    if str(request.args.get("all") or "").lower() in {"1", "true", "yes"}:
+        max_dirs = "0"
     try:
-        return ok(_annotate_path_directories(profile, rtorrent.browse_path(profile, base)))
+        parsed_max_dirs = int(max_dirs) if max_dirs not in {None, ""} else None
+    except Exception:
+        parsed_max_dirs = None
+    try:
+        return ok(_annotate_path_directories(profile, rtorrent.browse_path(profile, base, max_dirs=parsed_max_dirs, search=search, cache_only=cache_only)))
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
 
@@ -417,6 +491,21 @@ def path_directory_create():
     try:
         # Note: This endpoint only creates an empty directory and does not alter any torrent state.
         result = rtorrent.create_directory(profile, data.get("parent") or "", data.get("name") or "")
+        return ok({"directory": result})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+
+@bp.post("/path/directories/check-rename")
+def path_directory_check_rename():
+    profile = _path_profile_from_request(require_write_access=True)
+    if not profile:
+        return jsonify({"ok": False, "error": "No profile"}), 400
+    data = request.get_json(silent=True) or {}
+    try:
+        # Note: Large directory listings skip per-folder empty checks; this endpoint checks one selected folder lazily.
+        result = rtorrent.check_directory_rename_state(profile, data.get("path") or "")
+        result = _rename_state_for_path(profile, result)
         return ok({"directory": result})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400

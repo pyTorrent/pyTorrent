@@ -152,6 +152,11 @@ def _is_rt_method_missing(exc: Exception) -> bool:
     return "not defined" in msg or "no such method" in msg or "unknown method" in msg
 
 
+def _is_rt_target_style_error(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return "unsupported target type" in msg or "target must be" in msg or "target type" in msg
+
+
 def _rt_execute_methods(method: str) -> list[str]:
     # Note: execute2.* is tried only when the base execute.* method does not exist to avoid false retry errors.
     methods = [method]
@@ -190,6 +195,8 @@ def _rt_execute(c: ScgiRtorrentClient, method: str, *args):
                         break
                     transient_seen = transient_seen or _is_transient_scgi_error(exc)
                     errors.append(f"{_rt_execute_preview(method_name, call_args)}: {exc}")
+                    if not _is_rt_target_style_error(exc):
+                        break
         if transient_seen and attempt < attempts:
             time.sleep(_scgi_retry_delay(attempt))
             continue
