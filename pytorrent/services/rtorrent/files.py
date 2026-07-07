@@ -266,7 +266,6 @@ def _image_file_preview(profile: dict, selected: dict, remote_path: str, max_byt
         "summary": {},
         "fields": [
             {"key": "Type", "value": "Image preview"},
-            {"key": "Preview limit", "value": human_size(max_bytes)},
         ],
         "raw": [],
     }

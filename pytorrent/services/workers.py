@@ -12,9 +12,11 @@ from .torrent_cache import torrent_cache
 from .torrent_summary import cached_summary
 
 LIGHT_ACTIONS = {"start", "stop", "pause", "resume", "unpause", "set_label", "set_ratio_group", "reannounce", "set_limits"}
+PRIORITY_ACTIONS = {"add_torrent_raw"}
 WATCHDOG_INTERVAL_SECONDS = 30
 
 _heavy_executor = ThreadPoolExecutor(max_workers=WORKERS, thread_name_prefix="pytorrent-heavy-job")
+_priority_executor = ThreadPoolExecutor(max_workers=max(1, min(WORKERS, 4)), thread_name_prefix="pytorrent-priority-job")
 _light_executor = ThreadPoolExecutor(max_workers=max(4, min(WORKERS, 16)), thread_name_prefix="pytorrent-light-job")
 _socketio = None
 _heavy_semaphores: dict[int, tuple[int, threading.Semaphore]] = {}
@@ -104,8 +106,10 @@ def _is_ordered_job(row) -> bool:
 
 
 def _is_priority_job(row) -> bool:
+    # Note: Uploaded torrent files are treated as top-priority jobs so they can enter rTorrent before regular queued work.
     payload = _job_payload(row)
-    return bool(payload.get('priority_job') or payload.get('force_job')) or str((row or {}).get('action') or '') == 'set_limits'
+    action = str((row or {}).get("action") or "")
+    return bool(payload.get("priority_job") or payload.get("force_job")) or action in PRIORITY_ACTIONS or action == "set_limits"
 
 
 def _is_light_job(row) -> bool:
@@ -211,18 +215,25 @@ def _checkpoint_job(job_id: str, state: dict, progress_current: int | None = Non
 
 
 def _submit_job(job_id: str, action_name: str | None = None):
+    row = _job_row(job_id)
     if action_name is None:
-        row = _job_row(job_id)
         action_name = str((row or {}).get("action") or "")
-    executor = _light_executor if _is_light_action(str(action_name or "")) else _heavy_executor
+    # Note: Priority jobs use a dedicated executor; heavy semaphores still protect per-profile concurrency limits.
+    if row and _is_priority_job(row):
+        executor = _priority_executor
+    else:
+        executor = _light_executor if _is_light_action(str(action_name or "")) else _heavy_executor
     executor.submit(_run, job_id)
 
 
 def enqueue(action_name: str, profile_id: int, payload: dict, user_id: int | None = None, max_attempts: int = 2, force: bool = False) -> str:
     user_id = user_id or auth.current_user_id() or default_user_id()
     job_id = uuid.uuid4().hex
+    payload = dict(payload or {})
+    if action_name in PRIORITY_ACTIONS:
+        # Note: Raw torrent uploads should be inserted and picked up ahead of normal background jobs.
+        payload["priority_job"] = True
     if force:
-        payload = dict(payload or {})
         payload['force_job'] = True
         payload['priority_job'] = True
     now = utcnow()
