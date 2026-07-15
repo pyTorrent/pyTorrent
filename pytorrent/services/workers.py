@@ -155,12 +155,46 @@ def _has_prior_ordered_jobs(profile_ids: set[int], rowid: int) -> bool:
             """,
             (rowid,),
         ).fetchall()
+    return _has_ordered_blocker_rows(profile_ids, rows)
+
+
+def _has_ordered_blocker_rows(profile_ids: set[int], rows) -> bool:
     for row in rows:
         if not _is_ordered_job(row) or _is_priority_job(row):
             continue
         if profile_ids.intersection(_ordered_profile_ids(row)):
             return True
     return False
+
+
+def _has_active_ordered_blockers(profile_ids: set[int]) -> bool:
+    if not profile_ids:
+        return False
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT rowid AS _rowid, profile_id, action, payload_json
+            FROM jobs
+            WHERE status IN ('pending', 'running')
+            ORDER BY rowid
+            """
+        ).fetchall()
+    return _has_ordered_blocker_rows(profile_ids, rows)
+
+
+def _prepare_enqueue_payload(action_name: str, profile_id: int, payload: dict, force: bool) -> dict:
+    payload = dict(payload or {})
+    if action_name in PRIORITY_ACTIONS:
+        # Note: Raw torrent uploads use priority scheduling, but they are marked as forced only when they bypass real ordered blockers.
+        payload["priority_job"] = True
+        if _has_active_ordered_blockers({int(profile_id)}):
+            payload["force_job"] = True
+            payload["force_reason"] = "ordered_queue_blocker"
+    if force:
+        payload["force_job"] = True
+        payload["priority_job"] = True
+        payload["force_reason"] = payload.get("force_reason") or "manual"
+    return payload
 
 
 def _wait_for_prior_ordered_jobs(job_id: str, profile_ids: set[int], rowid: int) -> bool:
@@ -229,13 +263,7 @@ def _submit_job(job_id: str, action_name: str | None = None):
 def enqueue(action_name: str, profile_id: int, payload: dict, user_id: int | None = None, max_attempts: int = 2, force: bool = False) -> str:
     user_id = user_id or auth.current_user_id() or default_user_id()
     job_id = uuid.uuid4().hex
-    payload = dict(payload or {})
-    if action_name in PRIORITY_ACTIONS:
-        # Note: Raw torrent uploads should be inserted and picked up ahead of normal background jobs.
-        payload["priority_job"] = True
-    if force:
-        payload['force_job'] = True
-        payload['priority_job'] = True
+    payload = _prepare_enqueue_payload(action_name, int(profile_id), payload, force)
     now = utcnow()
     progress_total = len((payload or {}).get("hashes") or [])
     with connect() as conn:
@@ -417,6 +445,105 @@ def _schedule_delayed_torrent_refresh(profile: dict, action_name: str) -> None:
     _socketio.start_background_task(delayed_refresh)
 
 
+def _fail_missing_profile(job_id: str, job: dict) -> None:
+    _set_job(job_id, "failed", "rTorrent profile does not exist", finished=True)
+    operation_logs.record_worker_event(
+        int(job.get("profile_id") or 0),
+        str(job.get("action") or ""),
+        "failed",
+        "Job failed: rTorrent profile does not exist",
+        job_id=job_id,
+        user_id=int(job.get("user_id") or 0),
+        error="profile not found",
+    )
+    _emit("job_update", {"id": job_id, "profile_id": job.get("profile_id"), "status": "failed", "error": "profile not found"})
+
+
+def _acquire_ordered_locks(job_id: str, job: dict) -> list[threading.Lock] | None:
+    if not _is_ordered_job(job) or _is_priority_job(job):
+        return []
+    involved_profile_ids = _ordered_profile_ids(job)
+    if not _wait_for_prior_ordered_jobs(job_id, involved_profile_ids, int(job["_rowid"])):
+        return None
+    ordered_locks = _ordered_locks_for(job)
+    for lock in ordered_locks:
+        lock.acquire()
+    return ordered_locks
+
+
+def _load_running_payload(job_id: str, job: dict) -> dict:
+    payload = json.loads(job.get("payload_json") or "{}")
+    payload["__job_id"] = job_id
+    payload["__resume_state"] = _job_state(job)
+    return payload
+
+
+def _emit_job_started(job_id: str, profile: dict, job: dict, payload: dict, attempts: int, event_meta: dict) -> None:
+    operation_logs.record_job_event(profile["id"], job["action"], "started", payload, job_id=job_id, user_id=int(job.get("user_id") or 0))
+    _emit("operation_started", {
+        "job_id": job_id,
+        "action": job["action"],
+        "profile_id": profile["id"],
+        "hashes": payload.get("hashes") or [],
+        "hash_count": len(payload.get("hashes") or []),
+        "bulk": len(payload.get("hashes") or []) > 1,
+        **event_meta,
+    })
+    _emit("job_update", {"id": job_id, "profile_id": profile["id"], "status": "running", "attempts": attempts})
+
+
+def _emit_destination_profile_refresh(job: dict, payload: dict, action_name: str) -> None:
+    if action_name != "profile_transfer":
+        return
+    try:
+        target_profile = get_profile(int(payload.get("target_profile_id") or 0), int(job.get("user_id") or 0))
+        if target_profile:
+            _emit_torrent_refresh(target_profile, action_name)
+    except Exception:
+        pass
+
+
+def _finish_running_job(job_id: str, profile: dict, job: dict, payload: dict, result: dict | None, event_meta: dict) -> None:
+    _set_job(job_id, "done", result=result, finished=True)
+    operation_logs.record_job_event(profile["id"], job["action"], "done", payload, result=result or {}, job_id=job_id, user_id=int(job.get("user_id") or 0))
+    _emit("operation_finished", {
+        "job_id": job_id,
+        "action": job["action"],
+        "profile_id": profile["id"],
+        "hashes": payload.get("hashes") or [],
+        "hash_count": len(payload.get("hashes") or []),
+        "bulk": len(payload.get("hashes") or []) > 1,
+        "result": result,
+        **event_meta,
+    })
+    action_name = str(job["action"] or "")
+    _emit_disk_refresh_requested(int(profile["id"]), action_name, payload, result or {})
+    _emit_torrent_refresh(profile, action_name)
+    _emit_destination_profile_refresh(job, payload, action_name)
+    _schedule_delayed_torrent_refresh(profile, action_name)
+    _emit("job_update", {"id": job_id, "profile_id": profile["id"], "status": "done", "result": result})
+
+
+def _handle_job_exception(job_id: str, job: dict, payload: dict, exc: Exception) -> None:
+    fresh = _job_row(job_id) or {}
+    attempts = int(fresh.get("attempts") or 1)
+    max_attempts = int(fresh.get("max_attempts") or 2)
+    # Note: Emergency cancel keeps an exception from a cancelled job from moving it back to retry or failed.
+    if fresh and fresh.get("status") != "running":
+        return
+    status = "pending" if attempts < max_attempts else "failed"
+    _set_job(job_id, status, str(exc), finished=(status == "failed"))
+    if status == "failed":
+        operation_logs.record_job_event(int(job.get("profile_id") or 0), job.get("action"), "failed", payload, error=str(exc), job_id=job_id, user_id=int(job.get("user_id") or 0))
+    else:
+        # Note: Retried attempts are logged explicitly so transient failures are not lost between final states.
+        operation_logs.record_job_event(int(job.get("profile_id") or 0), job.get("action"), "retry", payload, error=str(exc), job_id=job_id, user_id=int(job.get("user_id") or 0))
+    _emit("operation_failed", {"job_id": job_id, "action": job.get("action"), "profile_id": job.get("profile_id"), "hashes": payload.get("hashes") or [], "error": str(exc), **_job_event_meta(payload)})
+    _emit("job_update", {"id": job_id, "profile_id": job.get("profile_id"), "status": status, "error": str(exc), "attempts": attempts})
+    if status == "pending":
+        _submit_job(job_id, job.get("action"))
+
+
 def _run(job_id: str):
     if not _claim_runner(job_id):
         return
@@ -430,71 +557,30 @@ def _run(job_id: str):
             return
         profile = get_profile(int(job["profile_id"]), int(job["user_id"]))
         if not profile:
-            _set_job(job_id, "failed", "rTorrent profile does not exist", finished=True)
-            operation_logs.record_worker_event(int(job.get("profile_id") or 0), str(job.get("action") or ""), "failed", "Job failed: rTorrent profile does not exist", job_id=job_id, user_id=int(job.get("user_id") or 0), error="profile not found")
-            _emit("job_update", {"id": job_id, "profile_id": job.get("profile_id"), "status": "failed", "error": "profile not found"})
+            _fail_missing_profile(job_id, job)
             return
-        profile_id = int(profile["id"])
-        if _is_ordered_job(job) and not _is_priority_job(job):
-            involved_profile_ids = _ordered_profile_ids(job)
-            if not _wait_for_prior_ordered_jobs(job_id, involved_profile_ids, int(job["_rowid"])):
-                return
-            ordered_locks = _ordered_locks_for(job)
-            for lock in ordered_locks:
-                lock.acquire()
+        acquired_locks = _acquire_ordered_locks(job_id, job)
+        if acquired_locks is None:
+            return
+        ordered_locks = acquired_locks
         sem = _get_sem(profile, light=_is_light_job(job))
         sem.acquire()
         job = _job_row(job_id)
         if not job or job["status"] == "cancelled":
             return
-        payload = json.loads(job.get("payload_json") or "{}")
-        payload["__job_id"] = job_id
-        payload["__resume_state"] = _job_state(job)
+        payload = _load_running_payload(job_id, job)
         attempts = int(job.get("attempts") or 0) + 1
         if not _mark_running(job_id, attempts):
             return
         event_meta = _job_event_meta(payload)
-        operation_logs.record_job_event(profile["id"], job["action"], "started", payload, job_id=job_id, user_id=int(job.get("user_id") or 0))
-        _emit("operation_started", {"job_id": job_id, "action": job["action"], "profile_id": profile["id"], "hashes": payload.get("hashes") or [], "hash_count": len(payload.get("hashes") or []), "bulk": len(payload.get("hashes") or []) > 1, **event_meta})
-        _emit("job_update", {"id": job_id, "profile_id": profile["id"], "status": "running", "attempts": attempts})
+        _emit_job_started(job_id, profile, job, payload, attempts, event_meta)
         result = _execute(profile, job["action"], payload, user_id=int(job.get("user_id") or 0))
         fresh = _job_row(job_id)
         if fresh and fresh["status"] != "running":
             return
-        _set_job(job_id, "done", result=result, finished=True)
-        operation_logs.record_job_event(profile["id"], job["action"], "done", payload, result=result or {}, job_id=job_id, user_id=int(job.get("user_id") or 0))
-        _emit("operation_finished", {"job_id": job_id, "action": job["action"], "profile_id": profile["id"], "hashes": payload.get("hashes") or [], "hash_count": len(payload.get("hashes") or []), "bulk": len(payload.get("hashes") or []) > 1, "result": result, **event_meta})
-        action_name = str(job["action"] or "")
-        _emit_disk_refresh_requested(int(profile["id"]), action_name, payload, result or {})
-        _emit_torrent_refresh(profile, action_name)
-        if action_name == "profile_transfer":
-            # Note: Refresh the destination profile cache as well so users see transferred torrents immediately after switching.
-            try:
-                target_profile = get_profile(int(payload.get("target_profile_id") or 0), int(job.get("user_id") or 0))
-                if target_profile:
-                    _emit_torrent_refresh(target_profile, action_name)
-            except Exception:
-                pass
-        _schedule_delayed_torrent_refresh(profile, action_name)
-        _emit("job_update", {"id": job_id, "profile_id": profile["id"], "status": "done", "result": result})
+        _finish_running_job(job_id, profile, job, payload, result, event_meta)
     except Exception as exc:
-        fresh = _job_row(job_id) or {}
-        attempts = int(fresh.get("attempts") or 1)
-        max_attempts = int(fresh.get("max_attempts") or 2)
-        # Note: Emergency cancel keeps an exception from a cancelled job from moving it back to retry or failed.
-        if fresh and fresh.get("status") != "running":
-            return
-        status = "pending" if attempts < max_attempts else "failed"
-        _set_job(job_id, status, str(exc), finished=(status == "failed"))
-        if status == "failed":
-            operation_logs.record_job_event(int(job.get("profile_id") or 0), job.get("action"), "failed", payload, error=str(exc), job_id=job_id, user_id=int(job.get("user_id") or 0))
-        else:
-            # Note: Retried attempts are logged explicitly so transient failures are not lost between final states.
-            operation_logs.record_job_event(int(job.get("profile_id") or 0), job.get("action"), "retry", payload, error=str(exc), job_id=job_id, user_id=int(job.get("user_id") or 0))
-        _emit("operation_failed", {"job_id": job_id, "action": job.get("action"), "profile_id": job.get("profile_id"), "hashes": payload.get("hashes") or [], "error": str(exc), **_job_event_meta(payload)})
-        _emit("job_update", {"id": job_id, "profile_id": job.get("profile_id"), "status": status, "error": str(exc), "attempts": attempts})
-        if status == "pending":
-            _submit_job(job_id, job.get("action"))
+        _handle_job_exception(job_id, job, payload, exc)
     finally:
         if sem:
             sem.release()
@@ -666,7 +752,7 @@ def _public_job(row) -> dict:
     d["skipped_items"] = _job_skipped_items(result)
     d["source"] = str(ctx.get("source") or "user")
     d["source_label"] = str(ctx.get("rule_name") or ctx.get("source") or "user")
-    d["is_forced"] = bool(payload.get("force_job") or payload.get("priority_job"))
+    d["is_forced"] = bool(payload.get("force_job"))
     items = ctx.get("items") or []
     if d["is_bulk"]:
         d["items_preview"] = ""

@@ -34,8 +34,18 @@ RT_PROXY_ALLOW_NET="${RTORRENT_SCGI_PROXY_ALLOW_NET:-127.0.0.1}"
 RT_PROXY_TARGET_NETWORK_EXPLICIT="${RTORRENT_SCGI_PROXY_TARGET_NETWORK+x}"
 RT_PROXY_TARGET_NETWORK="${RTORRENT_SCGI_PROXY_TARGET_NETWORK:-tcp}"
 RT_PROXY_TARGET_ADDRESS="${RTORRENT_SCGI_PROXY_TARGET_ADDRESS:-127.0.0.1:5000}"
-RT_PROXY_BINARY_URL="${RTORRENT_SCGI_PROXY_BINARY_URL:-https://github.com/pyTorrent/rtorrent-scgi-proxy/raw/refs/heads/master/dist/rtorrent-scgi-proxy-linux-amd64}"
+RT_PROXY_BINARY_URL="${RTORRENT_SCGI_PROXY_BINARY_URL:-https://raw.githubusercontent.com/pyTorrent/rtorrent-scgi-proxy/refs/heads/master/dist/rtorrent-scgi-proxy-linux-amd64}"
+RT_PROXY_BINARY_PATH="${RTORRENT_SCGI_PROXY_BINARY_PATH:-}"
 RT_PROXY_TARGET_URI="${RTORRENT_SCGI_PROXY_TARGET_URI:-/RPC2}"
+RT_PROXY_CONFIG_DIR="${RTORRENT_SCGI_PROXY_CONFIG_DIR:-/etc/rtorrent-scgi-proxy}"
+RT_PROXY_CONFIG_FILE="${RTORRENT_SCGI_PROXY_CONFIG_FILE:-${RT_PROXY_CONFIG_DIR}/config.yaml}"
+RT_PROXY_LOG_DIR="${RTORRENT_SCGI_PROXY_LOG_DIR:-/var/log/rtorrent-scgi-proxy}"
+RT_PROXY_CONTROL_LISTEN="${RTORRENT_SCGI_PROXY_CONTROL_LISTEN:-127.0.0.1:5051}"
+RT_PROXY_DEBUG_RPC="${RTORRENT_SCGI_PROXY_DEBUG_RPC:-true}"
+RT_PROXY_ACCESS_LOG="${RTORRENT_SCGI_PROXY_ACCESS_LOG:-true}"
+RT_PROXY_SYSTEM_PROXY="${RTORRENT_SCGI_PROXY_SYSTEM_PROXY:-true}"
+RT_PROXY_SYSTEM_DISK_PATHS="${RTORRENT_SCGI_PROXY_SYSTEM_DISK_PATHS:-/,/home}"
+RT_PROXY_BACKEND_READ_ONLY="${RTORRENT_SCGI_PROXY_BACKEND_READ_ONLY:-false}"
 ASSUME_YES=0
 INTERACTIVE=1
 SKIP_PROFILE=0
@@ -77,6 +87,11 @@ Options:
   --proxy-allow-net VALUE       SCGI proxy ALLOW_NET. Default: 127.0.0.1.
   --proxy-target-network tcp|unix
   --proxy-target-address VALUE
+  --proxy-config-dir PATH      Config directory. Default: /etc/rtorrent-scgi-proxy.
+  --proxy-config-file PATH     YAML config path. Default: /etc/rtorrent-scgi-proxy/config.yaml.
+  --proxy-log-dir PATH         Log directory. Default: /var/log/rtorrent-scgi-proxy.
+  --proxy-control-listen HOST:PORT
+  --proxy-binary-url URL       Proxy binary URL. Default: GitHub dist symlink.
   --skip-profile                Do not create/update pyTorrent rTorrent profile.
   -h, --help                    Show this help.
 
@@ -163,6 +178,11 @@ parse_args() {
             --proxy-allow-net) RT_PROXY_ALLOW_NET="$2"; shift 2 ;;
             --proxy-target-network) RT_PROXY_TARGET_NETWORK="$2"; RT_PROXY_TARGET_NETWORK_EXPLICIT=1; shift 2 ;;
             --proxy-target-address) RT_PROXY_TARGET_ADDRESS="$2"; shift 2 ;;
+            --proxy-config-dir) RT_PROXY_CONFIG_DIR="$2"; RT_PROXY_CONFIG_FILE="${RT_PROXY_CONFIG_DIR}/config.yaml"; shift 2 ;;
+            --proxy-config-file) RT_PROXY_CONFIG_FILE="$2"; shift 2 ;;
+            --proxy-log-dir) RT_PROXY_LOG_DIR="$2"; shift 2 ;;
+            --proxy-control-listen) RT_PROXY_CONTROL_LISTEN="$2"; shift 2 ;;
+            --proxy-binary-url) RT_PROXY_BINARY_URL="$2"; shift 2 ;;
             --skip-profile) SKIP_PROFILE=1; shift ;;
             -h|--help) usage; exit 0 ;;
             *) fail "Unknown option: $1" ;;
@@ -543,40 +563,188 @@ ensure_scgi_proxy_socket_access() {
     if [[ -n "${RT_PROXY_TARGET_ADDRESS}" ]]; then
         local socket_dir
         socket_dir="$(dirname "${RT_PROXY_TARGET_ADDRESS}")"
-        if [[ -d "${socket_dir}" && "${socket_dir}" == /run/* ]]; then
+        if [[ -d "${socket_dir}" ]]; then
             chgrp "${RTORRENT_USER}" "${socket_dir}" 2>/dev/null || true
             chmod g+rx "${socket_dir}" 2>/dev/null || true
         fi
     fi
 }
 
-install_scgi_proxy() {
-    # Note: The proxy exposes a TCP SCGI endpoint for pyTorrent when rTorrent listens on a Unix socket.
-    [[ "${INSTALL_SCGI_PROXY}" == "yes" ]] || return 0
-    if ! id -u "${RT_PROXY_USER}" >/dev/null 2>&1; then
-        local shell_path="/usr/sbin/nologin"
-        [[ -x "${shell_path}" ]] || shell_path="/sbin/nologin"
-        [[ -x "${shell_path}" ]] || shell_path="/usr/bin/nologin"
-        useradd --system --no-create-home --shell "${shell_path}" "${RT_PROXY_USER}"
+yaml_quote() {
+    local value="$1"
+    value="${value//\\/\\\\}"
+    value="${value//\"/\\\"}"
+    printf '"%s"' "${value}"
+}
+
+write_yaml_list_from_csv() {
+    local csv="$1" indent="$2" item
+    IFS=',' read -ra items <<< "${csv}"
+    for item in "${items[@]}"; do
+        item="${item# }"
+        item="${item% }"
+        [[ -n "${item}" ]] || continue
+        printf '%s- ' "${indent}"
+        yaml_quote "${item}"
+        printf '\n'
+    done
+}
+
+proxy_backend_url() {
+    if [[ "${RT_PROXY_TARGET_NETWORK}" == "unix" ]]; then
+        printf 'unix://%s\n' "${RT_PROXY_TARGET_ADDRESS}"
+    else
+        printf 'tcp://%s\n' "${RT_PROXY_TARGET_ADDRESS}"
     fi
-    ensure_scgi_proxy_socket_access
-    curl -fL "${RT_PROXY_BINARY_URL}" -o /usr/local/bin/rtorrent-scgi-proxy
-    chmod 0755 /usr/local/bin/rtorrent-scgi-proxy
-    cat > /etc/rtorrent-scgi-proxy.env <<ENV
-LISTEN_ADDR=${RT_PROXY_LISTEN}
-TOKEN=${RT_PROXY_TOKEN}
-TARGET_NETWORK=${RT_PROXY_TARGET_NETWORK}
-TARGET_ADDRESS=${RT_PROXY_TARGET_ADDRESS}
-TARGET_URI=${RT_PROXY_TARGET_URI}
-ALLOW_NET=${RT_PROXY_ALLOW_NET}
-READ_TIMEOUT=15s
-WRITE_TIMEOUT=30s
-DIAL_TIMEOUT=5s
-MAX_HEADER_BYTES=65536
-MAX_CONTENT_BYTES=10485760
-ENV
-    chmod 0600 /etc/rtorrent-scgi-proxy.env
-    chown root:root /etc/rtorrent-scgi-proxy.env
+}
+
+is_elf_binary() {
+    local file="$1" magic
+    magic="$(dd if="${file}" bs=4 count=1 2>/dev/null | od -An -tx1 | tr -d ' \n')"
+    [[ "${magic}" == "7f454c46" ]]
+}
+
+download_scgi_proxy_binary_from_url() {
+    local url tmp first_line target_name target_url target_version
+    url="$1"
+    tmp="$(mktemp)"
+    curl -fL "${url}" -o "${tmp}"
+
+    # The default raw URL points to a Git symlink. GitHub raw returns the symlink
+    # target name, for example: rtorrent-scgi-proxy-1.3.5-linux-amd64.
+    # Detect that target, extract the version, and download the real ELF binary
+    # from the same dist directory.
+    if ! is_elf_binary "${tmp}"; then
+        first_line="$(head -n 1 "${tmp}" | tr -d '\r')"
+        if [[ "${first_line}" =~ ^(rtorrent-scgi-proxy-([0-9][0-9A-Za-z._-]*)-linux-amd64)$ ]]; then
+            target_name="${BASH_REMATCH[1]}"
+            target_version="${BASH_REMATCH[2]}"
+            target_url="${url%/*}/${target_name}"
+            log "Resolved rtorrent-scgi-proxy version from dist symlink: ${target_version}"
+            curl -fL "${target_url}" -o "${tmp}"
+        fi
+    fi
+
+    is_elf_binary "${tmp}" || fail "Downloaded SCGI proxy is not an ELF binary. Use a raw GitHub URL in RTORRENT_SCGI_PROXY_BINARY_URL: ${url}"
+    install -m 0755 "${tmp}" /usr/local/bin/rtorrent-scgi-proxy
+    rm -f "${tmp}"
+}
+
+install_scgi_proxy_binary() {
+    local project_dir bundled_binary
+    project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    bundled_binary="${project_dir}/scripts/vendor/rtorrent-scgi-proxy-linux-amd64"
+    if [[ -n "${RT_PROXY_BINARY_PATH}" ]]; then
+        [[ -f "${RT_PROXY_BINARY_PATH}" ]] || fail "SCGI proxy binary not found: ${RT_PROXY_BINARY_PATH}"
+        install -m 0755 "${RT_PROXY_BINARY_PATH}" /usr/local/bin/rtorrent-scgi-proxy
+    elif [[ -n "${RT_PROXY_BINARY_URL}" ]]; then
+        if ! download_scgi_proxy_binary_from_url "${RT_PROXY_BINARY_URL}"; then
+            [[ -f "${bundled_binary}" ]] || fail "Cannot download SCGI proxy binary and bundled fallback is missing."
+            log "SCGI proxy download failed; using bundled binary: ${bundled_binary}"
+            install -m 0755 "${bundled_binary}" /usr/local/bin/rtorrent-scgi-proxy
+        fi
+    elif [[ -f "${bundled_binary}" ]]; then
+        install -m 0755 "${bundled_binary}" /usr/local/bin/rtorrent-scgi-proxy
+    else
+        fail "No SCGI proxy binary source configured."
+    fi
+}
+
+write_scgi_proxy_config() {
+    local backend_url
+    backend_url="$(proxy_backend_url)"
+    install -d -m 0750 -o root -g "${RT_PROXY_USER}" "${RT_PROXY_CONFIG_DIR}"
+    install -d -m 0700 -o "${RT_PROXY_USER}" -g "${RT_PROXY_USER}" "${RT_PROXY_LOG_DIR}"
+
+    cat > "${RT_PROXY_CONFIG_FILE}" <<YAML
+listen_addr: $(yaml_quote "${RT_PROXY_LISTEN}")
+control_listen_addr: $(yaml_quote "${RT_PROXY_CONTROL_LISTEN}")
+startup_diagnostics: true
+
+token: $(yaml_quote "${RT_PROXY_TOKEN}")
+target_uri: $(yaml_quote "${RT_PROXY_TARGET_URI}")
+
+allow_net:
+$(write_yaml_list_from_csv "${RT_PROXY_ALLOW_NET}" "  ")
+
+read_timeout: "15s"
+write_timeout: "30s"
+dial_timeout: "5s"
+
+max_header_bytes: 65536
+max_content_bytes: 10485760
+max_concurrent_requests: 64
+max_concurrent_per_backend: 16
+
+backends:
+  default:
+    url: $(yaml_quote "${backend_url}")
+    uri: $(yaml_quote "${RT_PROXY_TARGET_URI}")
+    read_only: ${RT_PROXY_BACKEND_READ_ONLY}
+
+system_proxy:
+  enabled: ${RT_PROXY_SYSTEM_PROXY}
+  disk_paths:
+$(write_yaml_list_from_csv "${RT_PROXY_SYSTEM_DISK_PATHS}" "    ")
+
+health:
+  enabled: true
+  token_required: false
+
+metrics:
+  enabled: true
+  token_required: false
+
+api:
+  enabled: true
+  allow_net:
+$(write_yaml_list_from_csv "${RT_PROXY_ALLOW_NET}" "    ")
+  token_required: false
+  expose_backend_addresses: false
+
+access_log:
+  enabled: ${RT_PROXY_ACCESS_LOG}
+  path: $(yaml_quote "${RT_PROXY_LOG_DIR}/access.log")
+  include_health: true
+  include_metrics: false
+
+debug_rpc:
+  enabled: ${RT_PROXY_DEBUG_RPC}
+  path: $(yaml_quote "${RT_PROXY_LOG_DIR}/rpc.log")
+  include_params: false
+  redact_methods:
+    - "system.*"
+    - "execute.*"
+    - "load.*"
+    - "d.custom*"
+
+rpc_acl:
+  allow_methods: []
+  deny_methods: []
+YAML
+    chown root:"${RT_PROXY_USER}" "${RT_PROXY_CONFIG_FILE}"
+    chmod 0640 "${RT_PROXY_CONFIG_FILE}"
+}
+
+write_scgi_proxy_logrotate() {
+    [[ -d /etc/logrotate.d ]] || return 0
+    cat > /etc/logrotate.d/rtorrent-scgi-proxy <<ROTATE
+${RT_PROXY_LOG_DIR}/*.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+    create 0600 ${RT_PROXY_USER} ${RT_PROXY_USER}
+    su ${RT_PROXY_USER} ${RT_PROXY_USER}
+}
+ROTATE
+    chmod 0644 /etc/logrotate.d/rtorrent-scgi-proxy
+}
+
+write_scgi_proxy_systemd() {
     local supplementary_groups=""
     if [[ "${RT_PROXY_TARGET_NETWORK}" == "unix" ]] && getent group "${RTORRENT_USER}" >/dev/null 2>&1; then
         supplementary_groups="SupplementaryGroups=${RTORRENT_USER}"
@@ -596,10 +764,15 @@ Type=simple
 User=${RT_PROXY_USER}
 Group=${RT_PROXY_USER}
 ${supplementary_groups}
-EnvironmentFile=/etc/rtorrent-scgi-proxy.env
-ExecStart=/usr/local/bin/rtorrent-scgi-proxy
+ExecStartPre=/usr/local/bin/rtorrent-scgi-proxy --check-config --config ${RT_PROXY_CONFIG_FILE}
+ExecStart=/usr/local/bin/rtorrent-scgi-proxy --config ${RT_PROXY_CONFIG_FILE}
 Restart=on-failure
 RestartSec=2
+TimeoutStopSec=30
+KillSignal=SIGTERM
+LogsDirectory=rtorrent-scgi-proxy
+ConfigurationDirectory=rtorrent-scgi-proxy
+ReadWritePaths=${RT_PROXY_LOG_DIR}
 
 NoNewPrivileges=yes
 PrivateTmp=yes
@@ -611,13 +784,35 @@ ProtectControlGroups=yes
 MemoryDenyWriteExecute=yes
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 LockPersonality=yes
+CapabilityBoundingSet=
+SystemCallArchitectures=native
 
 [Install]
 WantedBy=multi-user.target
 SERVICE
-    systemctl daemon-reload
-    systemctl enable --now rtorrent-scgi-proxy
 }
+
+install_scgi_proxy() {
+    # Note: The proxy exposes a TCP SCGI endpoint for pyTorrent when rTorrent listens on a Unix socket.
+    [[ "${INSTALL_SCGI_PROXY}" == "yes" ]] || return 0
+    if ! id -u "${RT_PROXY_USER}" >/dev/null 2>&1; then
+        local shell_path="/usr/sbin/nologin"
+        [[ -x "${shell_path}" ]] || shell_path="/sbin/nologin"
+        [[ -x "${shell_path}" ]] || shell_path="/usr/bin/nologin"
+        useradd --system --no-create-home --shell "${shell_path}" "${RT_PROXY_USER}"
+    fi
+    ensure_scgi_proxy_socket_access
+    install_scgi_proxy_binary
+    write_scgi_proxy_config
+    write_scgi_proxy_logrotate
+    write_scgi_proxy_systemd
+    systemctl daemon-reload
+    /usr/local/bin/rtorrent-scgi-proxy --check-config --config "${RT_PROXY_CONFIG_FILE}"
+    systemctl enable --now rtorrent-scgi-proxy
+    log "Installed rtorrent-scgi-proxy config: ${RT_PROXY_CONFIG_FILE}"
+    log "Installed rtorrent-scgi-proxy logs: ${RT_PROXY_LOG_DIR}"
+}
+
 
 print_summary() {
     # Note: Print only actionable installation facts, not release notes.

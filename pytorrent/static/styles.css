@@ -114,7 +114,6 @@ body {
 }
 body {
   overflow: hidden;
-  overflow-x: hidden;
   font-size: calc(13px * var(--ui-scale));
   min-height: 100vh;
   min-height: 100dvh;
@@ -4255,7 +4254,7 @@ body,
 #toolsModal .tools-nav .nav-link {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   gap: 0.4rem;
   width: 100%;
   min-height: 2.35rem;
@@ -4264,10 +4263,8 @@ body,
   border-radius: 0.75rem;
   background: rgba(var(--bs-secondary-bg-rgb), 0.28);
   line-height: 1.15;
-  text-align: left;
-  white-space: normal;
-  justify-content: center;
   text-align: center;
+  white-space: normal;
 }
 
 #toolsModal .tools-nav .nav-link:hover {
@@ -5333,7 +5330,8 @@ body,
   font-size: 0.82rem;
 }
 
-.media-info-image-empty {
+.media-info-image-empty,
+.media-info-pdf-empty {
   align-items: center;
   background: var(--bs-tertiary-bg);
   border: 1px solid var(--bs-border-color);
@@ -5350,12 +5348,20 @@ body,
   font-size: 1.8rem;
 }
 
+.media-info-pdf-empty > i {
+  color: var(--bs-danger);
+  font-size: 1.8rem;
+}
+
 .media-info-image-empty b,
-.media-info-image-empty span {
+.media-info-image-empty span,
+.media-info-pdf-empty b,
+.media-info-pdf-empty span {
   display: block;
 }
 
-.media-info-image-empty span {
+.media-info-image-empty span,
+.media-info-pdf-empty span {
   color: var(--bs-secondary-color);
   margin-top: 0.15rem;
 }
@@ -5425,33 +5431,6 @@ body,
   display: block;
   height: 100%;
   width: 100%;
-}
-
-.media-info-pdf-empty {
-  align-items: center;
-  background: var(--bs-tertiary-bg);
-  border: 1px solid var(--bs-border-color);
-  border-radius: 0.9rem;
-  display: grid;
-  gap: 1rem;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  margin-bottom: 1rem;
-  padding: 1rem;
-}
-
-.media-info-pdf-empty > i {
-  color: var(--bs-danger);
-  font-size: 1.8rem;
-}
-
-.media-info-pdf-empty b,
-.media-info-pdf-empty span {
-  display: block;
-}
-
-.media-info-pdf-empty span {
-  color: var(--bs-secondary-color);
-  margin-top: 0.15rem;
 }
 
 @media (max-width: 560px) {

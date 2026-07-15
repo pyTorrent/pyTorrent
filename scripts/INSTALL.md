@@ -272,9 +272,25 @@ sudo bash scripts/install_pytorrent_only.sh \
   --rtorrent-socket /run/rtorrent/rtorrent.sock \
   --install-scgi-proxy yes \
   --proxy-listen 127.0.0.1:5050 \
-  --proxy-allow-net 127.0.0.1 \
-  --scgi-url scgi://127.0.0.1:5050/proxy/change-me-long-random-token
+  --proxy-control-listen 127.0.0.1:5051 \
+  --proxy-allow-net 127.0.0.1
 ```
+
+The installer now writes the proxy configuration as YAML to `/etc/rtorrent-scgi-proxy/config.yaml`, creates `/var/log/rtorrent-scgi-proxy`, installs `/etc/logrotate.d/rtorrent-scgi-proxy`, and starts `rtorrent-scgi-proxy.service` with `--check-config --config`. pyTorrent receives a generated SCGI URL in the form `scgi://127.0.0.1:5050/proxy/<token>`. By default, the proxy binary is downloaded from the raw GitHub symlink `https://raw.githubusercontent.com/pyTorrent/rtorrent-scgi-proxy/refs/heads/master/dist/rtorrent-scgi-proxy-linux-amd64`. The installer reads the symlink target, recognizes the version from a name like `rtorrent-scgi-proxy-1.3.5-linux-amd64`, logs it, and downloads the real ELF binary from the same `dist` directory.
+
+Useful proxy variables/options:
+
+| Option / variable | Default | Description |
+| --- | --- | --- |
+| `--proxy-config-dir` / `RTORRENT_SCGI_PROXY_CONFIG_DIR` | `/etc/rtorrent-scgi-proxy` | Proxy config directory. |
+| `--proxy-config-file` / `RTORRENT_SCGI_PROXY_CONFIG_FILE` | `/etc/rtorrent-scgi-proxy/config.yaml` | YAML config path. |
+| `--proxy-log-dir` / `RTORRENT_SCGI_PROXY_LOG_DIR` | `/var/log/rtorrent-scgi-proxy` | Access/RPC log directory. |
+| `--proxy-control-listen` / `RTORRENT_SCGI_PROXY_CONTROL_LISTEN` | `127.0.0.1:5051` | Health, metrics and API listener. |
+| `--proxy-binary-url` / `RTORRENT_SCGI_PROXY_BINARY_URL` | `https://raw.githubusercontent.com/pyTorrent/rtorrent-scgi-proxy/refs/heads/master/dist/rtorrent-scgi-proxy-linux-amd64` | Raw GitHub dist symlink for the current Linux amd64 binary. The installer recognizes the version from the symlink target and downloads the real binary from the same `dist` directory. |
+| `RTORRENT_SCGI_PROXY_BINARY_PATH` | empty | Optional local proxy binary. If set, it has priority over downloading. If downloading fails, the bundled `scripts/vendor/rtorrent-scgi-proxy-linux-amd64` is used as fallback when present. |
+| `RTORRENT_SCGI_PROXY_SYSTEM_PROXY` | `true` | Enables local `proxy.system.*` XML-RPC methods. |
+| `RTORRENT_SCGI_PROXY_DEBUG_RPC` | `true` | Enables `/var/log/rtorrent-scgi-proxy/rpc.log`. |
+| `RTORRENT_SCGI_PROXY_ACCESS_LOG` | `true` | Enables `/var/log/rtorrent-scgi-proxy/access.log`. |
 
 Notes:
 
