@@ -26,6 +26,9 @@ PORT = int(os.getenv("PYTORRENT_PORT", "8090"))
 DEBUG = _env_bool("PYTORRENT_DEBUG", False)
 # Note: Offline mode forces local JS/CSS and disables the CDN dependency.
 USE_OFFLINE_LIBS = _env_bool("PYTORRENT_USE_OFFLINE_LIBS", False)
+# cache control on static files
+STATIC_CACHE_MAX_AGE = int(os.getenv("STATIC_CACHE_MAX_AGE", "0"))
+STATIC_CACHE_IMMUTABLE = os.getenv("STATIC_CACHE_IMMUTABLE", "false").lower() in {"1", "true", "yes"}
 # Note: Optional authentication remains disabled unless explicitly enabled in .env.
 AUTH_ENABLE = _env_bool("PYTORRENT_AUTH_ENABLE", False)
 AUTH_PROVIDER = os.getenv("PYTORRENT_AUTH_PROVIDER", "local").strip().lower() or "local"

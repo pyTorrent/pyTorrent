@@ -541,7 +541,6 @@ def delete_user(user_id: int) -> None:
         conn.execute("DELETE FROM users WHERE id=?", (uid,))
 
 
-
 def _public_user(row: dict[str, Any] | None) -> dict[str, Any] | None:
     if not row:
         return None
@@ -671,15 +670,17 @@ def install_guards(app) -> None:
     def _auth_guard():
         if not enabled():
             return None
-        
+
+        endpoint = request.endpoint or ""
+        if endpoint == "static" or endpoint.endswith(".static"):
+            return None
+            
         # Allow unauthenticated health checks for monitoring.
         if request.path == "/api/health" or request.path.startswith("/api/health/"):
             return None
-
         g.api_token_authenticated = False
         if auth_bypassed_request():
             return None
-        
         if request.path.startswith("/api/"):
             token_user = authenticate_api_token(_request_api_token())
             if token_user:
@@ -687,8 +688,7 @@ def install_guards(app) -> None:
                 g.api_token_authenticated = True
         if not getattr(g, "api_user_id", None):
             authenticate_external_user()
-        endpoint = request.endpoint or ""
-        if endpoint in PUBLIC_ENDPOINTS or endpoint.startswith("static"):
+        if endpoint in PUBLIC_ENDPOINTS:
             return None
         if not current_user_id():
             if request.path.startswith("/api/"):
@@ -697,7 +697,9 @@ def install_guards(app) -> None:
         user = current_user()
         if not user or not int(user.get("is_active") or 0):
             logout_user()
-            return jsonify({"ok": False, "error": "Authentication required"}), 401 if request.path.startswith("/api/") else redirect(url_for("main.login"))
+            if request.path.startswith("/api/"):
+                return jsonify({"ok": False, "error": "Authentication required"}), 401
+            return redirect(url_for("main.login"))
         if request.path.startswith("/api/auth/users") and not is_admin(user):
             return jsonify({"ok": False, "error": "Admin only"}), 403
         if request.path.startswith(PROFILE_READ_PREFIXES):

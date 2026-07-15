@@ -14,6 +14,8 @@ from .config import (
     PROXY_FIX_X_PORT,
     PROXY_FIX_X_PREFIX,
     SOCKETIO_CORS_ALLOWED_ORIGINS,
+    STATIC_CACHE_MAX_AGE,
+    STATIC_CACHE_IMMUTABLE
 )
 from .db import init_db
 from .services.frontend_assets import asset_path, bootstrap_css_path, initialize_static_hash, static_hash, validate_offline_assets
@@ -111,10 +113,14 @@ def create_app() -> Flask:
         favicon = request.path in ("/favicon.ico", "/favicon.svg")
         openapi_spec = request.path == "/api/openapi.json"
 
-        if static_file and not tracker_icon:
-            response.headers["Cache-Control"] = "no-cache, must-revalidate"
-        elif favicon:
-            response.headers["Cache-Control"] = "public, max-age=7899999, immutable"
+        if (static_file and not tracker_icon) or favicon:
+            if STATIC_CACHE_MAX_AGE > 0:
+                cache_control = f"public, max-age={STATIC_CACHE_MAX_AGE}"
+                if STATIC_CACHE_IMMUTABLE:
+                    cache_control += ", immutable"
+                response.headers["Cache-Control"] = cache_control
+            else:
+                response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         elif openapi_spec:
             response.headers["Cache-Control"] = "private, no-cache, must-revalidate"
         else:
