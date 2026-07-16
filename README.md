@@ -316,6 +316,56 @@ PYTORRENT_AUTH_PROXY_AUTO_CREATE_ROLE=admin
 PYTORRENT_AUTH_PROXY_AUTO_CREATE_PERMISSION=rw
 ```
 
+Example Angie/Nginx reverse proxy configuration:
+
+```nginx
+location / {
+    auth_request /tinyauth;
+    error_page 401 = @tinyauth_login;
+
+    auth_request_set $auth_user $upstream_http_remote_user;
+    auth_request_set $auth_email $upstream_http_remote_email;
+
+    proxy_set_header Remote-User $auth_user;
+    proxy_set_header Remote-Email $auth_email;
+
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Host $host;
+    proxy_set_header X-Forwarded-Port $server_port;
+
+    proxy_pass http://127.0.0.1:8090;
+}
+
+location = /tinyauth {
+    internal;
+
+    proxy_pass http://192.0.2.10:3000/api/auth/nginx;
+
+    # The auth subrequest needs only headers and cookies. Do not forward
+    # the original POST body, otherwise some proxy versions may wait for
+    # the request body and eventually return 504.
+    proxy_pass_request_body off;
+    proxy_set_header Content-Length "";
+
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Host $http_host;
+    proxy_set_header X-Forwarded-URI $request_uri;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Real-IP $remote_addr;
+
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 10s;
+}
+
+location @tinyauth_login {
+    return 302 https://auth.example.com/login?redirect_uri=$scheme://$http_host$request_uri;
+}
+```
+
+Replace `192.0.2.10:3000`, `127.0.0.1:8090` and `auth.example.com` with the addresses used in your deployment. The `192.0.2.0/24` range is reserved for documentation examples.
+
 Example generic proxy configuration:
 
 ```env
