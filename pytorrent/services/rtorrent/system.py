@@ -826,7 +826,6 @@ def system_status(profile: dict, rows: list[dict] | None = None) -> dict:
     }
 
 
-# Note: Export private cache-backed helpers where the old monolith exposed them through services.rtorrent.
 __all__ = [
     name for name in globals()
     if not name.startswith("__") and name not in {"annotations"}

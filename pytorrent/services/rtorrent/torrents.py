@@ -105,7 +105,8 @@ def validate_torrent_upload_size(profile: dict, data: bytes, start: bool = True,
     }
 
 
-def _mark_post_check_watch(profile_id: int, torrent_hash: str) -> None:
+def register_post_check_watch(profile_id: int, torrent_hash: str) -> None:
+    """Track an explicit recheck so the after-check policy ignores automatic checks during torrent loading."""
     if not torrent_hash:
         return
     _POST_CHECK_WATCH.setdefault(int(profile_id), {})[str(torrent_hash)] = time.time()
@@ -201,16 +202,15 @@ def apply_post_check_policy(profile: dict, rows: list[dict], previous_rows: dict
     changes: list[dict] = []
     for row in rows:
         h = str(row.get("hash") or "")
-        prev = previous_rows.get(h) or {}
         try:
             if h and _cleanup_post_check_label_if_ready(c, row):
                 changes.append({"hash": h, "action": "remove_post_check_label"})
         except Exception as exc:
             changes.append({"hash": h, "action": "remove_post_check_label_failed", "error": str(exc)})
-        was_checking = str(prev.get("status") or "") == "Checking" or int(prev.get("hashing") or 0) > 0
         watched_recheck = _is_post_check_watched(profile_id, h)
         is_checking = str(row.get("status") or "") == "Checking" or int(row.get("hashing") or 0) > 0
-        if not h or not (was_checking or watched_recheck) or is_checking:
+        # Note: Only explicit pyTorrent rechecks use the post-check policy; automatic checks after bulk add must continue normally.
+        if not h or not watched_recheck or is_checking:
             continue
         complete = _row_progress_complete(row)
         try:
@@ -1375,15 +1375,18 @@ def action(profile: dict, torrent_hashes: list[str], name: str, payload: dict | 
         try:
             if remove_data:
                 item = _remove_torrent_data(c, h)
+            if name == "recheck":
+                # Note: Register before the RPC call so very fast checks cannot finish before the watcher exists.
+                register_post_check_watch(int(profile.get("id") or 0), h)
             c.call(method, h)
         except Exception as exc:
+            if name == "recheck":
+                # Note: Failed recheck requests must not leave a stale watcher that affects a later automatic check.
+                _clear_post_check_watch(int(profile.get("id") or 0), h)
             if not _is_missing_info_hash_error(exc):
                 raise
             mark_missing(h, exc, results, item)
             continue
-        if name == "recheck":
-            # Note: Recheck is tracked so even very fast checks still receive the after-check start/stop policy.
-            _mark_post_check_watch(int(profile.get("id") or 0), h)
         results.append(item)
         mark_done(h, item, results)
     return {"ok": True, "count": len([item for item in results if not item.get("error")]), "requested_count": len(torrent_hashes), "remove_data": remove_data, "results": results}
@@ -1440,7 +1443,6 @@ def add_torrent_raw(profile: dict, data: bytes, start: bool = True, directory: s
 
 
 
-# Note: Export all service functions, including compatibility helpers used by routes and older imports.
 __all__ = [
     name for name in globals()
     if not name.startswith("__") and name not in {"annotations"}

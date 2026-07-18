@@ -175,6 +175,9 @@ def torrent_chunk_action(profile: dict, torrent_hash: str, action: str, payload:
     action = str(action or "").strip().lower()
     c = client_for(profile)
     if action == "recheck":
+        # Note: Chunk-view rechecks use the same explicit watcher as bulk rechecks.
+        from .torrents import register_post_check_watch
+        register_post_check_watch(int(profile.get("id") or 0), torrent_hash)
         c.call("d.check_hash", torrent_hash)
         return {"action": action, "message": "Torrent hash check queued", "scope": "torrent"}
     if action == "prioritize_files":

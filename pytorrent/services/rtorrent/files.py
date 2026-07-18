@@ -801,9 +801,6 @@ def torrent_local_file_paths(profile: dict, torrent_hash: str, indexes: list[int
     return out
 
 
-
-
-# Note: Keep split module exports compatible with the previous single rtorrent.py module.
 __all__ = [
     name for name in globals()
     if not name.startswith("__") and name not in {"annotations"}

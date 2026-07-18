@@ -390,6 +390,4 @@ def _remove_torrent_data(c: ScgiRtorrentClient, torrent_hash: str) -> dict:
     return {"hash": torrent_hash, "removed_path": data_path}
 
 
-
-# Note: Focused rTorrent modules share low-level helpers with wildcard imports; keep private helper names available internally.
 __all__ = [name for name in globals() if not name.startswith('__')]

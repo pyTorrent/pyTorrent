@@ -597,10 +597,6 @@ def apply_startup_overrides(profile: dict) -> dict:
     return set_config(profile, values, apply_now=True, apply_on_start=True)
 
 
-
-
-
-# Note: Keep split module exports compatible with the previous single rtorrent.py module.
 __all__ = [
     name for name in globals()
     if not name.startswith("__") and name not in {"annotations"}
