@@ -478,6 +478,12 @@ def path_browse():
         parsed_max_dirs = None
     try:
         return ok(_annotate_path_directories(profile, rtorrent.browse_path(profile, base, max_dirs=parsed_max_dirs, search=search, cache_only=cache_only)))
+    except rtorrent.PathBrowseTimeoutError as exc:
+        # Note: A dedicated 504 distinguishes a bounded remote filesystem timeout from invalid path input.
+        return jsonify({"ok": False, "error": str(exc), "timeout": True}), 504
+    except rtorrent.PathBrowseBusyError as exc:
+        # Note: Only one remote browse scan is allowed per rTorrent host user to avoid overlapping disk walks.
+        return jsonify({"ok": False, "error": str(exc), "busy": True}), 409
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
 

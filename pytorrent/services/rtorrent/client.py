@@ -218,6 +218,48 @@ def _rt_execute_allow_timeout(c: ScgiRtorrentClient, method: str, *args):
         raise
 
 
+def _rt_execute_once(c: ScgiRtorrentClient, method: str, *args):
+    """Run one execute RPC attempt without retrying a command that may already be active remotely."""
+    # Note: Filesystem jobs use this helper so a socket timeout cannot launch the same expensive command again.
+    errors: list[str] = []
+    primary_missing = False
+    for method_index, method_name in enumerate(_rt_execute_methods(method)):
+        if method_name in _UNSUPPORTED_EXEC_METHODS:
+            continue
+        if method_index > 0 and not primary_missing:
+            continue
+        for call_args in _rt_execute_target_variants(method_name, args):
+            try:
+                result = c.call(method_name, *call_args)
+                if method_name == method:
+                    _EXEC_TARGET_STYLE[method_name] = 0 if call_args and call_args[0] == "" else 1
+                return result
+            except Exception as exc:
+                if _is_rt_method_missing(exc):
+                    _UNSUPPORTED_EXEC_METHODS.add(method_name)
+                    if method_name == method:
+                        primary_missing = True
+                    errors.append(f"{method_name}: method not defined")
+                    break
+                errors.append(f"{_rt_execute_preview(method_name, call_args)}: {exc}")
+                if _is_transient_scgi_error(exc):
+                    raise RuntimeError("rTorrent execute failed: " + errors[-1]) from exc
+                if not _is_rt_target_style_error(exc):
+                    break
+    raise RuntimeError("rTorrent execute failed: " + "; ".join(errors))
+
+
+def _rt_execute_once_allow_timeout(c: ScgiRtorrentClient, method: str, *args):
+    """Run one execute RPC attempt and tolerate only an ambiguous socket timeout."""
+    # Note: The caller must verify remote job state after a tolerated timeout instead of starting the job again.
+    try:
+        return _rt_execute_once(c, method, *args)
+    except Exception as exc:
+        if _is_rt_timeout_error(exc):
+            return None
+        raise
+
+
 def _remote_clean_path(path: str) -> str:
     path = str(path or "").strip()
     return posixpath.normpath(path) if path else path

@@ -5,6 +5,7 @@ import time
 from .client import *
 from .config import default_download_path
 from ...utils import human_size
+from ...config import PATH_BROWSE_TIMEOUT_SECONDS
 
 
 _PATH_BROWSE_EMPTY_CHECK_THRESHOLD = 500
@@ -15,6 +16,14 @@ _PATH_BROWSE_LISTING_CACHE_TTL_SECONDS = 900
 _PATH_BROWSE_LISTING_CACHE_MAX_ENTRIES = 50000
 _PATH_BROWSE_LISTING_CACHE: dict[tuple[int, str], tuple[float, dict[str, Any]]] = {}
 _PATH_BROWSE_LISTING_CACHE_LOCK = RLock()
+
+
+class PathBrowseTimeoutError(RuntimeError):
+    """Raised when a remote path listing exceeds its dedicated time limit."""
+
+
+class PathBrowseBusyError(RuntimeError):
+    """Raised when another remote path listing is already using the same rTorrent host user."""
 
 
 def _rtorrent_home_path(profile: dict) -> str:
@@ -82,31 +91,118 @@ def _shell_single_quote(value: str) -> str:
     return "'" + str(value).replace("'", "'\\''") + "'"
 
 
-def _path_browse_script(search_mode: bool) -> str:
-    # Note: Directory browsing runs through rTorrent RPC by design. Keep the remote command
-    # simple and non-destructive: one first-level listing, no per-directory empty checks,
-    # no internal max-seconds timeout. The UI shows a long-running notice after 59 seconds
-    # while the backend request is still allowed to finish and populate cache.
+def _path_browse_worker_script() -> str:
+    """Build one bounded first-level directory scan for the remote rTorrent host."""
+    # Note: find streams directory entries without shell glob sorting and does not inspect child contents or count files.
+    batch_script = (
+        'for p do '
+        '[ -r "$p" ] && [ -x "$p" ] || continue; '
+        'name=${p##*/}; printf "D\t%s\t%s\tU\n" "$name" "$p"; '
+        'done'
+    )
     return (
-        'base=$1; empty_threshold=$2; max_dirs=$3; query=$4; '
-        'case "$max_dirs" in ""|*[!0-9]*) max_dirs=0;; esac; '
+        'base=$1; max_dirs=$2; '
+        'case "$max_dirs" in ""|*[!0-9]*) max_dirs=1;; esac; '
+        '[ "$max_dirs" -gt 0 ] || max_dirs=1; '
         '[ -d "$base" ] || { printf "E\tDirectory does not exist\n"; exit 0; }; '
-        'dfline=$(df -Pk "$base" 2>/dev/null | awk "NR==2{print \\$2,\\$3,\\$4,\\$5}" || true); '
-        'dir_count=0; file_count=0; printed=0; '
-        'for p in "$base"/* "$base"/.[!.]* "$base"/..?*; do '
-        '[ -e "$p" ] || continue; '
-        '[ -L "$p" ] && continue; '
-        'if [ -d "$p" ]; then '
-        'dir_count=$((dir_count+1)); '
-        'if { [ "$max_dirs" -le 0 ] || [ "$printed" -lt "$max_dirs" ]; } && [ -r "$p" ] && [ -x "$p" ]; then '
-        'name=${p##*/}; printf "D\t%s\t%s\tU\n" "$name" "$p"; printed=$((printed+1)); '
-        'fi; '
-        'elif [ -f "$p" ]; then file_count=$((file_count+1)); fi; '
-        'done; '
-        'printf "M\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" "$dir_count" "$file_count" "0" "$empty_threshold" "$max_dirs" "$dir_count" "$query" "0" "0"; '
+        "dfline=$(df -Pk \"$base\" 2>/dev/null | awk 'NR==2{print $2,$3,$4,$5}' || true); "
+        f'find "$base" -mindepth 1 -maxdepth 1 -type d ! -type l -exec sh -c {_shell_single_quote(batch_script)} sh {{}} + 2>/dev/null '
+        '| head -n "$((max_dirs + 1))"; '
+        'printf "M\t-1\t-1\t0\t0\t%s\t-1\t\t0\t0\n" "$max_dirs"; '
         '[ -n "$dfline" ] && printf "F\t%s\n" "$dfline"; '
         'exit 0'
     )
+
+
+def _path_browse_start_script() -> str:
+    """Build the remote launcher that applies locking and a hard timeout around the scan."""
+    # Note: The expensive find process runs outside the synchronous SCGI call, so rTorrent only starts and polls the job.
+    worker = _shell_single_quote(_path_browse_worker_script())
+    return (
+        'base=$1; max_dirs=$2; timeout_seconds=$3; output=$4; status=$5; '
+        'tmp=${output}.tmp; status_tmp=${status}.tmp; '
+        'rm -f "$output" "$status" "$tmp" "$status_tmp"; '
+        'command -v timeout >/dev/null 2>&1 || { printf "%s\n" "ERROR:timeout command is unavailable on the rTorrent host" > "$status"; exit 0; }; '
+        '( '
+        'uid=$(id -u 2>/dev/null || printf "0"); lock=/tmp/pytorrent-path-browse-${uid}.lock; lock_dir=${lock}.d; '
+        'if command -v flock >/dev/null 2>&1; then '
+        'exec 9>"$lock" || { printf "%s\n" "ERROR:cannot create path browse lock" > "$status_tmp"; mv -f "$status_tmp" "$status"; exit 0; }; '
+        'flock -n 9 || { printf "%s\n" "BUSY" > "$status_tmp"; mv -f "$status_tmp" "$status"; exit 0; }; '
+        'else '
+        'mkdir "$lock_dir" 2>/dev/null || { printf "%s\n" "BUSY" > "$status_tmp"; mv -f "$status_tmp" "$status"; exit 0; }; '
+        "trap 'rmdir \"$lock_dir\" 2>/dev/null || true' EXIT HUP INT TERM; "
+        'fi; '
+        f'timeout -k 2 "${{timeout_seconds}}s" sh -c {worker} pytorrent-browse-worker "$base" "$max_dirs" > "$tmp" 2>&1; rc=$?; '
+        'case "$rc" in '
+        '0) mv -f "$tmp" "$output" && result=OK || result="ERROR:cannot store path browse result";; '
+        '124|137|143) rm -f "$tmp"; result=TIMEOUT;; '
+        '*) rm -f "$tmp"; result="ERROR:path browse command failed with status $rc";; '
+        'esac; '
+        'printf "%s\n" "$result" > "$status_tmp"; mv -f "$status_tmp" "$status" '
+        ') >/dev/null 2>&1 & '
+        'printf "OK"'
+    )
+
+
+def _run_path_browse_job(profile: dict, base: str, max_dirs: int) -> str:
+    """Run one remote path scan with a fixed deadline and return its captured output."""
+    # Note: Single-attempt RPC calls prevent socket retries from launching duplicate filesystem scans.
+    timeout_seconds = max(2, int(PATH_BROWSE_TIMEOUT_SECONDS))
+    rpc_timeout = max(3, min(8, int(profile.get("timeout_seconds") or 5)))
+    c = ScgiRtorrentClient(profile["scgi_url"], rpc_timeout)
+    token = uuid.uuid4().hex
+    output_path = f"/tmp/pytorrent-path-browse-{token}.out"
+    status_path = f"/tmp/pytorrent-path-browse-{token}.status"
+    start_script = _path_browse_start_script()
+    poll_script = 'p=$1; [ -f "$p" ] && cat -- "$p" || true'
+    read_script = 'p=$1; [ -r "$p" ] || { printf "ERR\tPath browse result is unavailable"; exit 0; }; cat -- "$p"'
+    cleanup_script = 'rm -f -- "$1" "$2" "${1}.tmp" "${2}.tmp"'
+    deadline = time.monotonic() + timeout_seconds + rpc_timeout + 2
+    try:
+        _rt_execute_once_allow_timeout(
+            c,
+            "execute.throw",
+            "sh",
+            "-c",
+            start_script,
+            "pytorrent-browse-start",
+            base,
+            str(max_dirs),
+            str(timeout_seconds),
+            output_path,
+            status_path,
+        )
+        status = ""
+        while time.monotonic() < deadline:
+            try:
+                status = str(_rt_execute_once(c, "execute.capture", "sh", "-c", poll_script, "pytorrent-browse-poll", status_path) or "").strip()
+            except Exception as exc:
+                if not _is_transient_scgi_error(exc) and not _is_rt_timeout_error(exc):
+                    raise
+                status = ""
+            if status:
+                break
+            time.sleep(0.25)
+        if not status or status == "TIMEOUT":
+            raise PathBrowseTimeoutError(f"Folder listing exceeded {timeout_seconds} seconds")
+        if status == "BUSY":
+            raise PathBrowseBusyError("Another folder listing is already running for this rTorrent user")
+        if status.startswith("ERROR:"):
+            raise RuntimeError(status.split(":", 1)[1] or "Folder listing failed")
+        if status != "OK":
+            raise RuntimeError("Folder listing returned an unknown job status")
+        return str(_rt_execute_once(c, "execute.capture", "sh", "-c", read_script, "pytorrent-browse-read", output_path) or "")
+    finally:
+        try:
+            _rt_execute_once_allow_timeout(c, "execute.throw", "sh", "-c", cleanup_script, "pytorrent-browse-clean", output_path, status_path)
+        except Exception:
+            pass
+
+
+def _path_browse_script(search_mode: bool) -> str:
+    """Keep the legacy helper available for callers that inspect the raw browse command."""
+    # Note: The returned worker is now launched by _run_path_browse_job with locking and a hard timeout.
+    return _path_browse_worker_script()
 
 
 def _path_listing_cache_key(profile: dict, base: str) -> tuple[int, str]:
@@ -183,13 +279,17 @@ def _slice_path_listing(payload: dict[str, Any], *, limit: int, query: str, sear
     result["search_partial"] = False
     result["search_min_chars"] = _PATH_BROWSE_SEARCH_MIN_CHARS
     result["listing_cache_ttl_seconds"] = _PATH_BROWSE_LISTING_CACHE_TTL_SECONDS
-    result["warning"] = f"Type at least {_PATH_BROWSE_SEARCH_MIN_CHARS} characters to search this folder." if search_too_short else ""
+    # Note: Cached timeout/truncation warnings remain visible after normal slicing and local search.
+    result["warning"] = (
+        f"Type at least {_PATH_BROWSE_SEARCH_MIN_CHARS} characters to search this folder."
+        if search_too_short
+        else str(payload.get("warning") or "")
+    )
     return result
 
 
 def browse_path(profile: dict, path: str | None = None, *, max_dirs: int | None = None, search: str | None = None, cache_only: bool = False) -> dict:
     """List allowed rTorrent directories through one lightweight remote listing and cache it for search/show-all."""
-    c = client_for(profile)
     base, fallback_root, used_fallback = _safe_browse_base(profile, path)
     try:
         limit = int(max_dirs if max_dirs is not None else _PATH_BROWSE_DEFAULT_MAX_DIRS)
@@ -228,6 +328,7 @@ def browse_path(profile: dict, path: str | None = None, *, max_dirs: int | None 
             "search_min_chars": _PATH_BROWSE_SEARCH_MIN_CHARS,
             "listing_cached": False,
             "listing_cache_ttl_seconds": _PATH_BROWSE_LISTING_CACHE_TTL_SECONDS,
+            "listing_truncated": False,
             "warning": "No cached folder listing is ready yet. Wait for the running browse request to finish or try again.",
             "empty_check_performed": False,
             "empty_check_skipped": True,
@@ -244,25 +345,12 @@ def browse_path(profile: dict, path: str | None = None, *, max_dirs: int | None 
             "used_percent": 0,
         }
 
-    # Note: The first browse intentionally collects the first-level directory list once. Search and show-all then
-    # filter this cached list in Python instead of starting another remote filesystem scan.
-    script = _path_browse_script(False)
-    output = _rt_execute(
-        c,
-        "execute.capture",
-        "sh",
-        "-c",
-        script,
-        "pytorrent-browse",
-        base,
-        str(_PATH_BROWSE_EMPTY_CHECK_THRESHOLD),
-        str(_PATH_BROWSE_LISTING_CACHE_MAX_ENTRIES),
-        "",
-    )
+    # Note: The first browse collects one bounded first-level directory list; cached search never starts another scan.
+    output = _run_path_browse_job(profile, base, _PATH_BROWSE_LISTING_CACHE_MAX_ENTRIES)
     dirs = []
     dir_count = 0
-    file_count = 0
-    empty_check_performed = True
+    file_count = None
+    empty_check_performed = False
     search_timed_out = False
     disk_total = disk_used = disk_free = 0
     disk_percent = 0
@@ -281,14 +369,17 @@ def browse_path(profile: dict, path: str | None = None, *, max_dirs: int | None 
         elif marker == "M" and "\t" in rest:
             parts = rest.split("\t")
             try:
-                dir_count = int(parts[0] or 0)
-                file_count = int(parts[1] or 0) if len(parts) > 1 else 0
-                empty_check_performed = (parts[2] if len(parts) > 2 else "1") == "1"
+                parsed_dir_count = int(parts[0] or -1)
+                parsed_file_count = int(parts[1] or -1) if len(parts) > 1 else -1
+                dir_count = parsed_dir_count if parsed_dir_count >= 0 else dir_count
+                file_count = parsed_file_count if parsed_file_count >= 0 else None
+                empty_check_performed = (parts[2] if len(parts) > 2 else "0") == "1"
                 if len(parts) > 7:
                     search_timed_out = (parts[7] or "0") == "1"
             except Exception:
-                dir_count = file_count = 0
-                empty_check_performed = True
+                dir_count = len(dirs)
+                file_count = None
+                empty_check_performed = False
         elif marker == "E":
             remote_error = rest.strip()
         elif marker == "F":
@@ -301,6 +392,10 @@ def browse_path(profile: dict, path: str | None = None, *, max_dirs: int | None 
                     disk_percent = int(str(parts[3]).rstrip("%") or 0)
                 except Exception:
                     disk_total = disk_used = disk_free = disk_percent = 0
+    listing_truncated = len(dirs) > _PATH_BROWSE_LISTING_CACHE_MAX_ENTRIES
+    if listing_truncated:
+        dirs = dirs[:_PATH_BROWSE_LISTING_CACHE_MAX_ENTRIES]
+    dir_count = max(dir_count, len(dirs))
     dirs.sort(key=lambda x: x["name"].lower())
     parent = posixpath.dirname(base.rstrip("/")) or "/"
     if parent == base or parent == "/" or not _remote_accessible_directory(profile, [parent]):
@@ -326,7 +421,12 @@ def browse_path(profile: dict, path: str | None = None, *, max_dirs: int | None 
         "search_min_chars": _PATH_BROWSE_SEARCH_MIN_CHARS,
         "listing_cached": False,
         "listing_cache_ttl_seconds": _PATH_BROWSE_LISTING_CACHE_TTL_SECONDS,
-        "warning": remote_error or ("Folder listing timed out. Showing partial results." if search_timed_out else ""),
+        "listing_truncated": listing_truncated,
+        "warning": remote_error or (
+            f"Folder listing was limited to the first {_PATH_BROWSE_LISTING_CACHE_MAX_ENTRIES} accessible directories."
+            if listing_truncated
+            else ("Folder listing timed out. Showing partial results." if search_timed_out else "")
+        ),
         "empty_check_performed": empty_check_performed,
         "empty_check_skipped": not empty_check_performed,
         "empty_check_threshold": _PATH_BROWSE_EMPTY_CHECK_THRESHOLD,
@@ -348,6 +448,7 @@ def browse_path(profile: dict, path: str | None = None, *, max_dirs: int | None 
 
 def check_directory_rename_state(profile: dict, path: str) -> dict:
     """Check a single remote directory before inline rename."""
+    # Note: This lazy first-entry check is called only by the rename action; normal path browsing never inspects directory contents.
     c = client_for(profile)
     source = _remote_clean_path(path or "")
     if not source or source == "/":

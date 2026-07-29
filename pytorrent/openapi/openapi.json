@@ -1048,7 +1048,8 @@
                 "type": "integer"
               },
               "dir_count": {
-                "type": "integer"
+                "type": "integer",
+                "description": "Number of accessible directories captured by the bounded scan. When listing_truncated is true, this is the retained directory count."
               },
               "dirs": {
                 "items": {
@@ -1077,7 +1078,9 @@
                 "type": "boolean"
               },
               "file_count": {
-                "type": "integer"
+                "type": "integer",
+                "nullable": true,
+                "description": "Null because the optimized browse scan lists directories only and does not walk the same folder again to count files."
               },
               "hard_max_dirs": {
                 "description": "Safety cap for all-results directory listings.",
@@ -1119,7 +1122,7 @@
                 "type": "boolean"
               },
               "search_timed_out": {
-                "description": "False for the current cached-listing implementation; remote browse commands no longer use an internal max-seconds timeout.",
+                "description": "Reserved compatibility field. A remote browse timeout now returns HTTP 504 instead of a partial successful response.",
                 "type": "boolean"
               },
               "search_too_short": {
@@ -1127,6 +1130,10 @@
               },
               "warning": {
                 "type": "string"
+              },
+              "listing_truncated": {
+                "description": "True when the remote directory list reached the hard cache cap and additional entries were not retained.",
+                "type": "boolean"
               }
             },
             "type": "object"
@@ -5864,7 +5871,7 @@
     },
     "/api/path/browse": {
       "get": {
-        "description": "Lists directories that the rTorrent process can enter and read through rTorrent RPC. The remote browse command does one first-level listing without per-folder empty checks or an internal max-seconds timeout. Completed listings are cached for 15 minutes; search, show-all and cache-only refresh filter that cached list instead of starting another remote filesystem scan.",
+        "description": "Lists first-level directories that the rTorrent process can enter and read. The scan runs outside the synchronous SCGI request, is limited by PYTORRENT_PATH_BROWSE_TIMEOUT_SECONDS, prevents overlapping scans for the same remote user, skips file counting and never checks whether child directories are empty. Completed listings are cached for 15 minutes; search, show-all and cache-only refresh filter that cache.",
         "parameters": [
           {
             "in": "query",
@@ -5923,6 +5930,26 @@
               }
             },
             "description": "OK"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Another bounded path browse scan is already running for this rTorrent host user."
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "The remote filesystem scan exceeded its configured timeout."
           }
         },
         "security": [

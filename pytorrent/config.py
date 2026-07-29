@@ -79,6 +79,8 @@ PYTORRENT_TMP_DIR = Path(os.getenv("PYTORRENT_TMP_DIR", "/tmp"))
 if not PYTORRENT_TMP_DIR.is_absolute():
     PYTORRENT_TMP_DIR = BASE_DIR / PYTORRENT_TMP_DIR
 REMOTE_READ_CHUNK_BYTES = _env_int("PYTORRENT_REMOTE_READ_CHUNK_BYTES", 1048576, 65536)
+# Note: Path browsing is bounded independently from the general SCGI timeout because slow filesystem scans must not block rTorrent indefinitely.
+PATH_BROWSE_TIMEOUT_SECONDS = _env_int("PYTORRENT_PATH_BROWSE_TIMEOUT_SECONDS", 12, 2)
 
 
 PROXY_FIX_ENABLE = _env_bool("PYTORRENT_PROXY_FIX_ENABLE", False)
