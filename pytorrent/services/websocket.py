@@ -351,7 +351,7 @@ def register_socketio_handlers(socketio):
         emit("download_plan_update", {"profile_id": int(profile["id"]), "settings": download_planner.get_settings(int(profile["id"]))})
 
     @socketio.on("disconnect")
-    def handle_disconnect():
+    def handle_disconnect(reason=None):
         _unregister_profile_socket()
 
     @socketio.on("select_profile")
