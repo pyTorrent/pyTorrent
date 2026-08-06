@@ -326,6 +326,15 @@ location / {
     auth_request_set $auth_user $upstream_http_remote_user;
     auth_request_set $auth_email $upstream_http_remote_email;
 
+    # Required for Socket.IO / WebSocket connections. 
+    proxy_http_version 1.1; 
+    proxy_set_header Upgrade $http_upgrade; 
+    proxy_set_header Connection "upgrade"; 
+    
+    # Prevent long-lived WebSocket connections from timing out. 
+    proxy_read_timeout 3600s; 
+    proxy_send_timeout 3600s;
+
     proxy_set_header Remote-User $auth_user;
     proxy_set_header Remote-Email $auth_email;
 
