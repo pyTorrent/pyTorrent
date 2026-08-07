@@ -19,9 +19,9 @@ fi
 download() {
   url="$1"
   if command -v curl >/dev/null 2>&1; then
-    curl -fL --retry 3 --connect-timeout 15 --output "$TMP_FILE" "$url"
+    curl -fsSL --retry 3 --connect-timeout 15 --output "$TMP_FILE" "$url"
   elif command -v wget >/dev/null 2>&1; then
-    wget -O "$TMP_FILE" "$url"
+    wget -q -O "$TMP_FILE" "$url"
   else
     echo "Missing downloader: install curl or wget" >&2
     return 127

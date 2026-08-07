@@ -5,12 +5,15 @@ set -euo pipefail
 
 APP_USER="${PYTORRENT_USER:-pytorrent}"
 APP_DIR="${PYTORRENT_APP_DIR:-/opt/pytorrent}"
+REPO_URL="${PYTORRENT_REPO_URL:-https://github.com/pyTorrent/pyTorrent.git}"
+REPO_BRANCH="${PYTORRENT_REPO_BRANCH:-master}"
 SERVICE_NAME="${PYTORRENT_SERVICE_NAME:-pytorrent}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 APP_HOST="${PYTORRENT_HOST:-0.0.0.0}"
 APP_PORT="${PYTORRENT_PORT:-8090}"
 PROFILE_NAME="${PYTORRENT_PROFILE_NAME:-Local rTorrent}"
 SCGI_URL="${PYTORRENT_RTORRENT_SCGI_URL:-scgi://127.0.0.1:5000}"
+SCGI_URL_EXPLICIT=0
 LOG_ENABLE="${PYTORRENT_LOG_ENABLE:-true}"
 LOG_DIR="${PYTORRENT_LOG_DIR:-data/logs}"
 LOG_RETENTION_HOURS="${PYTORRENT_LOG_RETENTION_HOURS:-24}"
@@ -26,7 +29,7 @@ CORS_ORIGINS="${PYTORRENT_SOCKETIO_CORS_ALLOWED_ORIGINS:-}"
 LOCAL_ORIGINS="${PYTORRENT_LOCAL_ORIGINS:-}"
 RTORRENT_SOCKET="${RTORRENT_SOCKET:-}"
 RTORRENT_USER="${RTORRENT_USER:-rtorrent}"
-INSTALL_SCGI_PROXY="${PYTORRENT_INSTALL_SCGI_PROXY:-ask}"
+INSTALL_SCGI_PROXY="${PYTORRENT_INSTALL_SCGI_PROXY:-yes}"
 RT_PROXY_USER="${RTORRENT_SCGI_PROXY_USER:-rtproxy}"
 RT_PROXY_LISTEN="${RTORRENT_SCGI_PROXY_LISTEN:-127.0.0.1:5050}"
 RT_PROXY_TOKEN="${RTORRENT_SCGI_PROXY_TOKEN:-}"
@@ -34,6 +37,7 @@ RT_PROXY_ALLOW_NET="${RTORRENT_SCGI_PROXY_ALLOW_NET:-127.0.0.1}"
 RT_PROXY_TARGET_NETWORK_EXPLICIT="${RTORRENT_SCGI_PROXY_TARGET_NETWORK+x}"
 RT_PROXY_TARGET_NETWORK="${RTORRENT_SCGI_PROXY_TARGET_NETWORK:-tcp}"
 RT_PROXY_TARGET_ADDRESS="${RTORRENT_SCGI_PROXY_TARGET_ADDRESS:-127.0.0.1:5000}"
+RT_PROXY_TARGET_ADDRESS_EXPLICIT="${RTORRENT_SCGI_PROXY_TARGET_ADDRESS+x}"
 RT_PROXY_BINARY_URL="${RTORRENT_SCGI_PROXY_BINARY_URL:-https://raw.githubusercontent.com/pyTorrent/rtorrent-scgi-proxy/refs/heads/master/dist/rtorrent-scgi-proxy-linux-amd64}"
 RT_PROXY_BINARY_PATH="${RTORRENT_SCGI_PROXY_BINARY_PATH:-}"
 RT_PROXY_TARGET_URI="${RTORRENT_SCGI_PROXY_TARGET_URI:-/RPC2}"
@@ -52,6 +56,19 @@ SKIP_PROFILE=0
 
 log() { printf '[pyTorrent only] %s\n' "$*"; }
 fail() { printf '[pyTorrent only] ERROR: %s\n' "$*" >&2; exit 1; }
+
+run_quiet() {
+    local tmp rc
+    tmp="$(mktemp)"
+    if "$@" >"${tmp}" 2>&1; then
+        rm -f "${tmp}"
+        return 0
+    fi
+    rc=$?
+    cat "${tmp}" >&2
+    rm -f "${tmp}"
+    return "${rc}"
+}
 
 usage() {
     cat <<'USAGE'
@@ -81,7 +98,8 @@ Options:
   --proxy-domains CSV           Domains for reverse proxy, e.g. torrent.example.com,https://p.example.com.
   --cors-origins CSV            Extra allowed origins.
   --local-origins CSV           Extra local origins added to CORS.
-  --install-scgi-proxy yes|no   Install rtorrent-scgi-proxy.
+  --install-scgi-proxy yes|no   Install rtorrent-scgi-proxy. Default: yes.
+  --without-rtproxy             Skip rtorrent-scgi-proxy and connect directly to rTorrent TCP SCGI.
   --proxy-listen HOST:PORT      SCGI proxy listen address. Default: 127.0.0.1:5050.
   --proxy-token TOKEN           SCGI proxy path token.
   --proxy-allow-net VALUE       SCGI proxy ALLOW_NET. Default: 127.0.0.1.
@@ -157,7 +175,7 @@ parse_args() {
             --host) APP_HOST="$2"; shift 2 ;;
             --port) APP_PORT="$2"; shift 2 ;;
             --profile-name) PROFILE_NAME="$2"; shift 2 ;;
-            --scgi-url) SCGI_URL="$2"; shift 2 ;;
+            --scgi-url) SCGI_URL="$2"; SCGI_URL_EXPLICIT=1; shift 2 ;;
             --rtorrent-socket) RTORRENT_SOCKET="$2"; shift 2 ;;
             --rtorrent-user) RTORRENT_USER="$2"; shift 2 ;;
             --auth) AUTH_MODE="$(bool_value "$2")"; shift 2 ;;
@@ -173,11 +191,12 @@ parse_args() {
             --cors-origins) CORS_ORIGINS="$2"; shift 2 ;;
             --local-origins) LOCAL_ORIGINS="$2"; shift 2 ;;
             --install-scgi-proxy) INSTALL_SCGI_PROXY="$(normalize_yes_no "$2")"; shift 2 ;;
+            --without-rtproxy) INSTALL_SCGI_PROXY="no"; shift ;;
             --proxy-listen) RT_PROXY_LISTEN="$2"; shift 2 ;;
             --proxy-token) RT_PROXY_TOKEN="$2"; shift 2 ;;
             --proxy-allow-net) RT_PROXY_ALLOW_NET="$2"; shift 2 ;;
             --proxy-target-network) RT_PROXY_TARGET_NETWORK="$2"; RT_PROXY_TARGET_NETWORK_EXPLICIT=1; shift 2 ;;
-            --proxy-target-address) RT_PROXY_TARGET_ADDRESS="$2"; shift 2 ;;
+            --proxy-target-address) RT_PROXY_TARGET_ADDRESS="$2"; RT_PROXY_TARGET_ADDRESS_EXPLICIT=1; shift 2 ;;
             --proxy-config-dir) RT_PROXY_CONFIG_DIR="$2"; RT_PROXY_CONFIG_FILE="${RT_PROXY_CONFIG_DIR}/config.yaml"; shift 2 ;;
             --proxy-config-file) RT_PROXY_CONFIG_FILE="$2"; shift 2 ;;
             --proxy-log-dir) RT_PROXY_LOG_DIR="$2"; shift 2 ;;
@@ -204,23 +223,24 @@ detect_os_family() {
 }
 
 install_prerequisites() {
-    # Note: Only pyTorrent runtime dependencies are installed; rTorrent is left untouched.
+    # Note: Package-manager progress is hidden; command output is shown only on failure.
     local family="$1"
+    log "Installing system packages..."
     case "${family}" in
         debian)
             export DEBIAN_FRONTEND=noninteractive
-            apt-get update
-            apt-get install -y --no-install-recommends ca-certificates curl git rsync sudo python3 python3-venv python3-dev python3-pip gcc pkg-config
+            run_quiet apt-get update
+            run_quiet apt-get install -y --no-install-recommends ca-certificates curl git rsync sudo python3 python3-venv python3-dev python3-pip gcc pkg-config
             ;;
         rhel)
             local manager
             manager="$(command -v dnf || command -v yum || true)"
             [[ -n "${manager}" ]] || fail "dnf or yum is required."
-            "${manager}" install -y ca-certificates curl git rsync sudo python3 python3-devel python3-pip gcc pkgconf-pkg-config
+            run_quiet "${manager}" install -y ca-certificates curl git rsync sudo python3 python3-devel python3-pip gcc pkgconf-pkg-config
             ;;
         arch)
             command -v pacman >/dev/null 2>&1 || fail "pacman is required on Arch Linux."
-            pacman -Sy --noconfirm --needed ca-certificates curl git rsync sudo python python-pip gcc pkgconf
+            run_quiet pacman -Sy --noconfirm --needed ca-certificates curl git rsync sudo python python-pip gcc pkgconf
             ;;
     esac
 }
@@ -234,19 +254,29 @@ ask_configuration() {
     prompt APP_PORT "Application port (use a high port like 8090; ports below 1024 may be blocked or require extra privileges)" "8090"
     prompt PROFILE_NAME "pyTorrent profile name" "Local rTorrent"
 
-    if [[ -n "${RTORRENT_SOCKET}" ]]; then
-        INSTALL_SCGI_PROXY="${INSTALL_SCGI_PROXY:-ask}"
-    fi
     if [[ "${INSTALL_SCGI_PROXY}" == "ask" ]]; then
-        prompt INSTALL_SCGI_PROXY "Install rtorrent-scgi-proxy for Unix socket backend? yes/no" "no"
+        prompt INSTALL_SCGI_PROXY "Install rtorrent-scgi-proxy? yes/no" "yes"
         INSTALL_SCGI_PROXY="$(normalize_yes_no "${INSTALL_SCGI_PROXY}")"
     fi
     if [[ "${INSTALL_SCGI_PROXY}" == "yes" ]]; then
         if [[ -n "${RTORRENT_SOCKET}" ]]; then
             RT_PROXY_TARGET_NETWORK="unix"
             RT_PROXY_TARGET_ADDRESS="${RTORRENT_SOCKET}"
-        elif [[ -z "${RT_PROXY_TARGET_NETWORK_EXPLICIT}" ]]; then
-            RT_PROXY_TARGET_NETWORK="unix"
+        elif [[ "${SCGI_URL_EXPLICIT}" == "1" && -z "${RT_PROXY_TARGET_NETWORK_EXPLICIT}" ]]; then
+            RT_PROXY_TARGET_NETWORK="tcp"
+        fi
+        if [[ "${RT_PROXY_TARGET_NETWORK}" == "tcp" && "${SCGI_URL_EXPLICIT}" == "1" && -z "${RT_PROXY_TARGET_ADDRESS_EXPLICIT}" ]]; then
+            case "${SCGI_URL}" in
+                scgi://*)
+                    scgi_endpoint="${SCGI_URL#scgi://}"
+                    RT_PROXY_TARGET_ADDRESS="${scgi_endpoint%%/*}"
+                    if [[ "${scgi_endpoint}" == */* ]]; then
+                        scgi_path="/${scgi_endpoint#*/}"
+                        [[ "${scgi_path}" != "/" ]] && RT_PROXY_TARGET_URI="${scgi_path}"
+                    fi
+                    ;;
+                *) fail "Invalid --scgi-url: ${SCGI_URL}" ;;
+            esac
         fi
         prompt RT_PROXY_TARGET_NETWORK "rTorrent SCGI backend: tcp or unix" "${RT_PROXY_TARGET_NETWORK}"
         if [[ "${RT_PROXY_TARGET_NETWORK}" == "unix" ]]; then
@@ -267,6 +297,9 @@ PY
         fi
         SCGI_URL="scgi://${RT_PROXY_LISTEN}/proxy/${RT_PROXY_TOKEN}"
     else
+        if [[ -n "${RTORRENT_SOCKET}" || "${RT_PROXY_TARGET_NETWORK}" == "unix" ]]; then
+            fail "--without-rtproxy cannot be used with a Unix rTorrent socket; pyTorrent requires rtorrent-scgi-proxy for Unix SCGI."
+        fi
         prompt SCGI_URL "rTorrent SCGI URL for pyTorrent profile" "${SCGI_URL}"
     fi
 
@@ -314,21 +347,57 @@ ensure_app_user() {
     fi
 }
 
-copy_application() {
-    # Note: Copy the current repository without development artifacts or a previous virtualenv.
-    local project_dir
+install_application_repository() {
+    # Note: The installed application is a real Git working tree so it can be updated in place.
+    local project_dir backup_dir=""
     project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-    mkdir -p "${APP_DIR}"
-    rsync -a --delete --exclude '.git' --exclude 'venv' --exclude '.venv'  --exclude '__pycache__' --exclude '*.pyc' "${project_dir}/" "${APP_DIR}/"
+    log "Preparing Git repository in ${APP_DIR}..."
+
+    if [[ "${project_dir}" == "${APP_DIR}" && -d "${APP_DIR}/.git" ]]; then
+        chown -R "${APP_USER}:${APP_USER}" "${APP_DIR}" "/var/lib/${APP_USER}" || true
+        return
+    fi
+
+    if [[ -d "${APP_DIR}/.git" ]]; then
+        run_quiet sudo -u "${APP_USER}" git -C "${APP_DIR}" fetch --quiet origin "${REPO_BRANCH}"
+        run_quiet sudo -u "${APP_USER}" git -C "${APP_DIR}" checkout --quiet "${REPO_BRANCH}"
+        run_quiet sudo -u "${APP_USER}" git -C "${APP_DIR}" merge --ff-only --quiet "origin/${REPO_BRANCH}"
+        return
+    fi
+
+    if [[ -d "${APP_DIR}" && -n "$(find "${APP_DIR}" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]]; then
+        log "Migrating existing non-Git installation..."
+        backup_dir="$(mktemp -d)"
+        for item in .env data instance logs; do
+            if [[ -e "${APP_DIR}/${item}" ]]; then
+                cp -a "${APP_DIR}/${item}" "${backup_dir}/"
+            fi
+        done
+        rm -rf "${APP_DIR}"
+    fi
+
+    mkdir -p "$(dirname "${APP_DIR}")"
+    run_quiet git clone --quiet --branch "${REPO_BRANCH}" --single-branch "${REPO_URL}" "${APP_DIR}"
+
+    if [[ -n "${backup_dir}" ]]; then
+        for item in .env data instance logs; do
+            if [[ -e "${backup_dir}/${item}" ]]; then
+                rm -rf "${APP_DIR:?}/${item}"
+                cp -a "${backup_dir}/${item}" "${APP_DIR}/"
+            fi
+        done
+        rm -rf "${backup_dir}"
+    fi
     chown -R "${APP_USER}:${APP_USER}" "${APP_DIR}" "/var/lib/${APP_USER}" || true
 }
 
 install_python_app() {
     # Note: A private virtualenv keeps pyTorrent dependencies isolated from system Python packages.
+    log "Preparing Python environment..."
     cd "${APP_DIR}"
     "${PYTHON_BIN}" -m venv .venv
-    .venv/bin/pip install --upgrade pip wheel
-    .venv/bin/pip install -r requirements.txt
+    run_quiet .venv/bin/pip install -q --upgrade pip wheel
+    run_quiet .venv/bin/pip install -q -r requirements.txt
     mkdir -p data instance logs
     chown -R "${APP_USER}:${APP_USER}" "${APP_DIR}"
 }
@@ -608,7 +677,7 @@ download_scgi_proxy_binary_from_url() {
     local url tmp first_line target_name target_url target_version
     url="$1"
     tmp="$(mktemp)"
-    curl -fL "${url}" -o "${tmp}"
+    curl -fsSL "${url}" -o "${tmp}"
 
     # The default raw URL points to a Git symlink. GitHub raw returns the symlink
     # target name, for example: rtorrent-scgi-proxy-1.3.5-linux-amd64.
@@ -621,7 +690,7 @@ download_scgi_proxy_binary_from_url() {
             target_version="${BASH_REMATCH[2]}"
             target_url="${url%/*}/${target_name}"
             log "Resolved rtorrent-scgi-proxy version from dist symlink: ${target_version}"
-            curl -fL "${target_url}" -o "${tmp}"
+            curl -fsSL "${target_url}" -o "${tmp}"
         fi
     fi
 
@@ -750,7 +819,8 @@ write_scgi_proxy_systemd() {
         supplementary_groups="SupplementaryGroups=${RTORRENT_USER}"
     fi
     local protect_home="yes"
-    if [[ "${RT_PROXY_TARGET_NETWORK}" == "unix" && "${RT_PROXY_TARGET_ADDRESS}" == /home/* ]]; then
+    if [[ "${RT_PROXY_TARGET_NETWORK}" == "unix" && "${RT_PROXY_TARGET_ADDRESS}" == /home/* ]] || \
+       [[ "${RT_PROXY_SYSTEM_PROXY}" == "true" && ",${RT_PROXY_SYSTEM_DISK_PATHS}," == *,/home,* ]]; then
         protect_home="read-only"
     fi
     cat > /etc/systemd/system/rtorrent-scgi-proxy.service <<SERVICE
@@ -814,12 +884,40 @@ install_scgi_proxy() {
 }
 
 
+install_management_command() {
+    log "Installing pytorrent command..."
+    install -d -m 0755 /etc/pytorrent
+    cat > /etc/pytorrent/install.conf <<CONF
+PYTORRENT_APP_DIR='${APP_DIR}'
+PYTORRENT_USER='${APP_USER}'
+PYTORRENT_SERVICE_NAME='${SERVICE_NAME}'
+PYTORRENT_REPO_URL='${REPO_URL}'
+PYTORRENT_REPO_BRANCH='${REPO_BRANCH}'
+CONF
+    chmod 0644 /etc/pytorrent/install.conf
+    install -m 0755 "${APP_DIR}/scripts/pytorrent" /usr/local/bin/pytorrent
+}
+
+detect_primary_ip() {
+    local ip=""
+    if command -v ip >/dev/null 2>&1; then
+        ip="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}' || true)"
+    fi
+    if [[ -z "${ip}" ]]; then
+        ip="$(hostname -I 2>/dev/null | tr ' ' '\n' | awk '/^[0-9]+\./ && $1 !~ /^127\./ {print; exit}' || true)"
+    fi
+    [[ -n "${ip}" ]] || ip="127.0.0.1"
+    printf '%s\n' "${ip}"
+}
+
 print_summary() {
-    # Note: Print only actionable installation facts, not release notes.
-    local base_url="http://127.0.0.1:${APP_PORT}"
+    # Note: Print the actual host address instead of a loopback-only link.
+    local host_ip base_url
+    host_ip="$(detect_primary_ip)"
+    base_url="http://${host_ip}:${APP_PORT}"
     log "Installed in ${APP_DIR}"
     log "Service: ${SERVICE_NAME}"
-    log "Local URL: ${base_url}"
+    log "pyTorrent URL: ${base_url}"
     log "rTorrent profile SCGI URL: ${SCGI_URL}"
     if [[ "${AUTH_MODE}" == "true" && "${AUTH_PROVIDER}" == "local" ]]; then
         log "Local auth user: ${AUTH_USER}"
@@ -843,13 +941,16 @@ main() {
     install_prerequisites "${family}"
     install_scgi_proxy
     ensure_app_user
-    copy_application
+    install_application_repository
     install_python_app
+    log "Writing application configuration..."
     write_env
     install_frontend_libs
+    log "Initializing database..."
     configure_database
+    log "Installing systemd service..."
     write_systemd_service
-    systemctl status "${SERVICE_NAME}" --no-pager --lines=20 || true
+    install_management_command
     print_summary
 }
 

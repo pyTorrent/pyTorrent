@@ -142,6 +142,8 @@ The default stack install creates:
 | pyTorrent HTTP port | `8090` |
 | pyTorrent service | `pytorrent` |
 
+The installed `/opt/pytorrent` directory is a Git working tree. After installation you can use `pytorrent update`, `pytorrent restart`, `pytorrent status`, and `pytorrent logs`.
+
 ### Optional one-line full stack install with rTorrent
 
 ```bash
@@ -158,9 +160,8 @@ curl -fsSL https://raw.githubusercontent.com/pyTorrent/pyTorrent/master/scripts/
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `PYTORRENT_REPO_URL` | repository URL | Repository base URL. |
+| `PYTORRENT_REPO_URL` | repository URL | Git repository URL used for installation and updates. |
 | `PYTORRENT_REPO_BRANCH` | `master` | Branch used by the bootstrap installer. |
-| `PYTORRENT_ARCHIVE_URL` | derived | Custom repository archive URL. Required for GitHub one-line install unless the script default is updated. |
 | `PYTORRENT_BOOTSTRAP_DIR` | `/tmp/pytorrent-stack-installer` | Temporary bootstrap directory. |
 | `PYTORRENT_KEEP_BOOTSTRAP_DIR` | `0` | Set to `1` to keep bootstrap files after install. |
 

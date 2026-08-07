@@ -63,9 +63,8 @@ These variables are used by `scripts/install_stack.sh`.
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `PYTORRENT_REPO_URL` | `https://github.com/pyTorrent/pyTorrent` | GitHub repository base URL. |
-| `PYTORRENT_REPO_BRANCH` | `master` | Branch used to download the repository archive. |
-| `PYTORRENT_ARCHIVE_URL` | derived from repo URL and branch | Custom repository archive URL. |
+| `PYTORRENT_REPO_URL` | `https://github.com/pyTorrent/pyTorrent.git` | Git repository URL. |
+| `PYTORRENT_REPO_BRANCH` | `master` | Git branch used for installation and updates. |
 | `PYTORRENT_BOOTSTRAP_DIR` | `/tmp/pytorrent-stack-installer` | Temporary directory used by the bootstrap script. |
 | `PYTORRENT_KEEP_BOOTSTRAP_DIR` | `0` | Set to `1` to keep the temporary directory after installation. |
 
@@ -179,10 +178,18 @@ sudo bash scripts/stack_installers/install_stack_arch.sh --build-rtorrent
 
 ## Installed service hints
 
-Check services:
+Manage pyTorrent with the installed helper command:
 
 ```bash
-systemctl status pytorrent
+pytorrent update
+pytorrent restart
+pytorrent status
+pytorrent logs
+```
+
+Check rTorrent separately:
+
+```bash
 systemctl status rtorrent@rtorrent.service
 ```
 
@@ -220,3 +227,10 @@ PYTORRENT_DEBUG_INSTALL=1
 ```
 
 On RHEL-compatible systems the installer also tries to enable CRB/PowerTools and installs `libcurl-devel`, `redhat-rpm-config`, `patch`, `diffutils`, `findutils`, `file`, and `libstdc++-devel`, because minimal Alma/Rocky images often do not include enough build tooling.
+
+
+### Default rTorrent proxy
+
+All installer variants now install and use `rtorrent-scgi-proxy` by default. pyTorrent connects to `scgi://127.0.0.1:5050/proxy/<generated-token>`, while the proxy forwards to the configured local TCP SCGI endpoint or Unix socket. Use `--without-rtproxy` to bypass the proxy for TCP SCGI. Unix sockets require the proxy because pyTorrent's SCGI client connects over TCP.
+
+After installation, the summary prints the detected host IPv4 address, for example `http://192.168.1.20:8090`, instead of `127.0.0.1`.

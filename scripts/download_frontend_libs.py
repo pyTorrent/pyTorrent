@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import argparse
 import os
 import re
 import time
@@ -37,9 +38,18 @@ GOOGLE_FONT_WEIGHTS = "400;500;600;700;800"
 DOWNLOAD_RETRIES = int(os.environ.get("PYTORRENT_DOWNLOAD_RETRIES", "4"))
 DOWNLOAD_RETRY_DELAY = int(os.environ.get("PYTORRENT_DOWNLOAD_RETRY_DELAY", "10"))
 DOWNLOAD_TIMEOUT = int(os.environ.get("PYTORRENT_DOWNLOAD_TIMEOUT", "180"))
+VERBOSE = os.environ.get("PYTORRENT_INSTALL_VERBOSE", "0").lower() in {"1", "true", "yes", "on"}
+
+
+def detail(message: str) -> None:
+    if VERBOSE:
+        print(message)
 
 
 def retry_countdown(seconds: int) -> None:
+    if not VERBOSE:
+        time.sleep(max(0, seconds))
+        return
     for remaining in range(seconds, 0, -1):
         print(f"Retrying in {remaining}s...", end="\r", flush=True)
         time.sleep(1)
@@ -93,6 +103,10 @@ PYTORRENT_APP_THEMES = {
     "nord": "pyTorrent Nord",
     "crimson": "pyTorrent Crimson",
     "sky": "pyTorrent Sky",
+    "bootstrap22": "Bootstrap 2 Classic",
+    "bootstrap22-inverse": "Bootstrap 2 Inverse",
+    "bootstrap3": "Bootstrap 3 Glyph",
+    "bootstrap3-inverse": "Bootstrap 3 Inverse",
 }
 
 
@@ -197,17 +211,17 @@ def download(url: str, dest: Path) -> None:
                 tmp.write_bytes(data)
                 tmp.replace(dest)
                 if candidate != url:
-                    print(f"OK {dest.relative_to(ROOT)} from fallback {candidate}")
+                    detail(f"OK {dest.relative_to(ROOT)} from fallback {candidate}")
                 else:
-                    print(f"OK {dest.relative_to(ROOT)}")
+                    detail(f"OK {dest.relative_to(ROOT)}")
                 return
             except (HTTPError, URLError, TimeoutError, OSError, RuntimeError) as exc:
                 last_error = exc
-                print(f"Download failed ({attempt}/{DOWNLOAD_RETRIES}) for {candidate}: {exc}")
+                detail(f"Download failed ({attempt}/{DOWNLOAD_RETRIES}) for {candidate}: {exc}")
                 if attempt < DOWNLOAD_RETRIES:
                     retry_countdown(DOWNLOAD_RETRY_DELAY)
         if candidate != candidate_urls(url)[-1]:
-            print(f"Trying alternative source: {candidate_urls(url)[candidate_urls(url).index(candidate) + 1]}")
+            detail(f"Trying alternative source: {candidate_urls(url)[candidate_urls(url).index(candidate) + 1]}")
     raise RuntimeError(f"Failed to download {url}: {last_error}")
 
 
@@ -248,7 +262,7 @@ def download_google_fonts_css(url: str, dest: Path) -> None:
             break
         except (HTTPError, URLError, TimeoutError, OSError, RuntimeError) as exc:
             last_error = exc
-            print(f"Download failed ({attempt}/{DOWNLOAD_RETRIES}) for {url}: {exc}")
+            detail(f"Download failed ({attempt}/{DOWNLOAD_RETRIES}) for {url}: {exc}")
             if attempt < DOWNLOAD_RETRIES:
                 retry_countdown(DOWNLOAD_RETRY_DELAY)
     if not css.strip():
@@ -272,9 +286,15 @@ def download_google_fonts_css(url: str, dest: Path) -> None:
     tmp = dest.with_suffix(dest.suffix + ".tmp")
     tmp.write_text(rewritten, encoding="utf-8")
     tmp.replace(dest)
-    print(f"OK {dest.relative_to(ROOT)}")
+    detail(f"OK {dest.relative_to(ROOT)}")
 
 def main() -> None:
+    global VERBOSE
+    parser = argparse.ArgumentParser(description="Download pyTorrent frontend libraries")
+    parser.add_argument("--verbose", action="store_true", help="Show every downloaded file and retry")
+    args = parser.parse_args()
+    VERBOSE = VERBOSE or args.verbose
+    print("[pyTorrent] Preparing frontend static files...")
     items = list(STATIC_ASSETS.values())
     items.extend(bootstrap_css_asset(theme) for theme in BOOTSTRAP_THEMES)
     for item in items:
@@ -283,13 +303,14 @@ def main() -> None:
         if url.startswith("/static/"):
             if not dest.is_file() or dest.stat().st_size <= 0:
                 raise RuntimeError(f"Bundled app theme is missing: {dest.relative_to(ROOT)}")
-            print(f"OK {dest.relative_to(ROOT)}")
+            detail(f"OK {dest.relative_to(ROOT)}")
         elif item.get("local") == STATIC_ASSETS["font_css"]["local"]:
             download_google_fonts_css(url, dest)
         elif dest.suffix == ".css":
             download_css_with_assets(url, dest)
         else:
             download(url, dest)
+    print("[pyTorrent] Frontend static files ready.")
 
 
 if __name__ == "__main__":

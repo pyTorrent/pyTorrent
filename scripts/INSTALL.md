@@ -63,9 +63,8 @@ These variables are used by `scripts/install_stack.sh`.
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `PYTORRENT_REPO_URL` | `https://github.com/pyTorrent/pyTorrent` | GitHub repository base URL. |
-| `PYTORRENT_REPO_BRANCH` | `master` | Branch used to download the repository archive. |
-| `PYTORRENT_ARCHIVE_URL` | derived from repo URL and branch | Custom repository archive URL. |
+| `PYTORRENT_REPO_URL` | `https://github.com/pyTorrent/pyTorrent.git` | Git repository URL. |
+| `PYTORRENT_REPO_BRANCH` | `master` | Git branch used for installation and updates. |
 | `PYTORRENT_BOOTSTRAP_DIR` | `/tmp/pytorrent-stack-installer` | Temporary directory used by the bootstrap script. |
 | `PYTORRENT_KEEP_BOOTSTRAP_DIR` | `0` | Set to `1` to keep the temporary directory after installation. |
 
@@ -179,10 +178,18 @@ sudo bash scripts/stack_installers/install_stack_arch.sh --build-rtorrent
 
 ## Installed service hints
 
-Check services:
+Manage pyTorrent with the installed helper command:
 
 ```bash
-systemctl status pytorrent
+pytorrent update
+pytorrent restart
+pytorrent status
+pytorrent logs
+```
+
+Check rTorrent separately:
+
+```bash
 systemctl status rtorrent@rtorrent.service
 ```
 
@@ -264,7 +271,7 @@ sudo bash scripts/install_pytorrent_only.sh \
   --local-origins http://10.10.10.22:8890
 ```
 
-Unix socket rTorrent backend via rtorrent-scgi-proxy:
+rtorrent-scgi-proxy is enabled by default for TCP and Unix rTorrent backends. Unix socket example:
 
 ```bash
 sudo bash scripts/install_pytorrent_only.sh \
@@ -298,3 +305,10 @@ Notes:
 - Offline frontend libraries are the default. Use `--libs online` only when CDN loading is preferred.
 - Local auth is configured directly by the installer. External auth providers require a trusted reverse proxy setup; see `auth.md`.
 - Reverse proxy mode enables `PYTORRENT_PROXY_FIX_ENABLE`, secure cookies and CORS/API origins for the HTTPS domains plus localhost/local IP origins.
+
+
+### Default rTorrent proxy
+
+All installer variants now install and use `rtorrent-scgi-proxy` by default. pyTorrent connects to `scgi://127.0.0.1:5050/proxy/<generated-token>`, while the proxy forwards to the configured local TCP SCGI endpoint or Unix socket. Use `--without-rtproxy` to bypass the proxy for TCP SCGI. Unix sockets require the proxy because pyTorrent's SCGI client connects over TCP.
+
+After installation, the summary prints the detected host IPv4 address, for example `http://192.168.1.20:8090`, instead of `127.0.0.1`.

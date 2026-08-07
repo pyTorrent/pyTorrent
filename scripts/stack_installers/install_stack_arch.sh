@@ -29,6 +29,7 @@ RTORRENT_SCGI_BACKEND="${RTORRENT_SCGI_BACKEND:-tcp}"
 RTORRENT_SCGI_SOCKET="${RTORRENT_SCGI_SOCKET:-/run/rtorrent/rtorrent.sock}"
 RTORRENT_SCGI_PROXY_LISTEN="${RTORRENT_SCGI_PROXY_LISTEN:-127.0.0.1:5050}"
 RTORRENT_SCGI_PROXY_TOKEN="${RTORRENT_SCGI_PROXY_TOKEN:-}"
+USE_RTPROXY="${PYTORRENT_USE_RTPROXY:-1}"
 PYTORRENT_RTORRENT_SCGI_URL="${PYTORRENT_RTORRENT_SCGI_URL:-scgi://127.0.0.1:${RTORRENT_SCGI_PORT}}"
 RTORRENT_BUILD_FROM_SOURCE="${RTORRENT_BUILD_FROM_SOURCE:-0}"
 RTORRENT_FORCE_CONFIG="${RTORRENT_FORCE_CONFIG:-1}"
@@ -54,9 +55,13 @@ while [[ $# -gt 0 ]]; do
             RTORRENT_SCGI_SOCKET="$2"
             shift 2
             ;;
+        --without-rtproxy)
+            USE_RTPROXY=0
+            shift
+            ;;
         *)
             echo "Unknown option: $1" >&2
-            echo "Supported options: --build-rtorrent, --with-xmlrpc-c, --scgi-unix-socket, --rtorrent-socket PATH" >&2
+            echo "Supported options: --build-rtorrent, --with-xmlrpc-c, --scgi-unix-socket, --rtorrent-socket PATH, --without-rtproxy" >&2
             exit 1
             ;;
     esac
@@ -66,7 +71,12 @@ if [[ "${RTORRENT_WITH_XMLRPC_C:-0}" == "1" ]]; then
     RTORRENT_EXTRA_ARGS+=(--with-xmlrpc-c)
 fi
 
-if [[ "${RTORRENT_SCGI_BACKEND}" == "unix" ]]; then
+if [[ "${RTORRENT_SCGI_BACKEND}" != "tcp" && "${RTORRENT_SCGI_BACKEND}" != "unix" ]]; then
+    echo "Invalid RTORRENT_SCGI_BACKEND: ${RTORRENT_SCGI_BACKEND}" >&2
+    exit 1
+fi
+
+if [[ "${USE_RTPROXY}" == "1" ]]; then
     if [[ -z "${RTORRENT_SCGI_PROXY_TOKEN}" ]]; then
         RTORRENT_SCGI_PROXY_TOKEN="$(python - <<'PYTOKEN'
 import secrets
@@ -75,9 +85,12 @@ PYTOKEN
 )"
     fi
     PYTORRENT_RTORRENT_SCGI_URL="scgi://${RTORRENT_SCGI_PROXY_LISTEN}/proxy/${RTORRENT_SCGI_PROXY_TOKEN}"
-elif [[ "${RTORRENT_SCGI_BACKEND}" != "tcp" ]]; then
-    echo "Invalid RTORRENT_SCGI_BACKEND: ${RTORRENT_SCGI_BACKEND}" >&2
-    exit 1
+else
+    if [[ "${RTORRENT_SCGI_BACKEND}" == "unix" ]]; then
+        echo "--without-rtproxy cannot be used with a Unix rTorrent socket; pyTorrent requires rtorrent-scgi-proxy for Unix SCGI." >&2
+        exit 1
+    fi
+    PYTORRENT_RTORRENT_SCGI_URL="scgi://127.0.0.1:${RTORRENT_SCGI_PORT}"
 fi
 
 command -v pacman >/dev/null 2>&1 || { echo "pacman is required on Arch Linux." >&2; exit 1; }
@@ -219,16 +232,27 @@ PYTORRENT_ONLY_ARGS=(
     --profile-name "${PYTORRENT_PROFILE_NAME}"
     --scgi-url "${PYTORRENT_RTORRENT_SCGI_URL}"
 )
-if [[ "${RTORRENT_SCGI_BACKEND}" == "unix" ]]; then
+if [[ "${USE_RTPROXY}" == "1" ]]; then
     PYTORRENT_ONLY_ARGS+=(
         --install-scgi-proxy yes
         --rtorrent-user "${RTORRENT_USER}"
-        --rtorrent-socket "${RTORRENT_SCGI_SOCKET}"
-        --proxy-target-network unix
-        --proxy-target-address "${RTORRENT_SCGI_SOCKET}"
         --proxy-listen "${RTORRENT_SCGI_PROXY_LISTEN}"
         --proxy-token "${RTORRENT_SCGI_PROXY_TOKEN}"
     )
+    if [[ "${RTORRENT_SCGI_BACKEND}" == "unix" ]]; then
+        PYTORRENT_ONLY_ARGS+=(
+            --rtorrent-socket "${RTORRENT_SCGI_SOCKET}"
+            --proxy-target-network unix
+            --proxy-target-address "${RTORRENT_SCGI_SOCKET}"
+        )
+    else
+        PYTORRENT_ONLY_ARGS+=(
+            --proxy-target-network tcp
+            --proxy-target-address "127.0.0.1:${RTORRENT_SCGI_PORT}"
+        )
+    fi
+else
+    PYTORRENT_ONLY_ARGS+=(--without-rtproxy)
 fi
 bash "${PROJECT_DIR}/scripts/install_pytorrent_only.sh" "${PYTORRENT_ONLY_ARGS[@]}"
 
@@ -246,4 +270,12 @@ else
     RTORRENT_MODE="Arch pacman package"
 fi
 
-echo "Done. pyTorrent: ${PYTORRENT_BASE_URL} | rTorrent SCGI: ${PYTORRENT_RTORRENT_SCGI_URL} | rTorrent: ${RTORRENT_MODE}"
+PYTORRENT_DISPLAY_IP=""
+if command -v ip >/dev/null 2>&1; then
+    PYTORRENT_DISPLAY_IP="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}' || true)"
+fi
+if [[ -z "${PYTORRENT_DISPLAY_IP}" ]]; then
+    PYTORRENT_DISPLAY_IP="$(hostname -I 2>/dev/null | tr ' ' '\n' | awk '/^[0-9]+\./ && $1 !~ /^127\./ {print; exit}' || true)"
+fi
+[[ -n "${PYTORRENT_DISPLAY_IP}" ]] || PYTORRENT_DISPLAY_IP="127.0.0.1"
+echo "Done. pyTorrent: http://${PYTORRENT_DISPLAY_IP}:${PYTORRENT_PORT} | rTorrent SCGI: ${PYTORRENT_RTORRENT_SCGI_URL} | rTorrent: ${RTORRENT_MODE}"
