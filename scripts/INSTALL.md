@@ -312,3 +312,10 @@ Notes:
 All installer variants now install and use `rtorrent-scgi-proxy` by default. pyTorrent connects to `scgi://127.0.0.1:5050/proxy/<generated-token>`, while the proxy forwards to the configured local TCP SCGI endpoint or Unix socket. Use `--without-rtproxy` to bypass the proxy for TCP SCGI. Unix sockets require the proxy because pyTorrent's SCGI client connects over TCP.
 
 After installation, the summary prints the detected host IPv4 address, for example `http://192.168.1.20:8090`, instead of `127.0.0.1`.
+
+
+### rtorrent-scgi-proxy permissions
+
+The installer creates `/etc/rtorrent-scgi-proxy` and `/var/log/rtorrent-scgi-proxy`
+with mode `0750`, validates the configuration as the `rtproxy` service user, and
+repairs ownership of `rpc.log`/`access.log` left by older installer versions.

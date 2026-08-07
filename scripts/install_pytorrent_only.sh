@@ -723,7 +723,17 @@ write_scgi_proxy_config() {
     local backend_url
     backend_url="$(proxy_backend_url)"
     install -d -m 0750 -o root -g "${RT_PROXY_USER}" "${RT_PROXY_CONFIG_DIR}"
-    install -d -m 0700 -o "${RT_PROXY_USER}" -g "${RT_PROXY_USER}" "${RT_PROXY_LOG_DIR}"
+    install -d -m 0750 -o "${RT_PROXY_USER}" -g "${RT_PROXY_USER}" "${RT_PROXY_LOG_DIR}"
+
+    # Repair files left by older installer versions that validated the proxy as root.
+    # A root-owned rpc.log/access.log prevents the service User=rtproxy from starting.
+    local proxy_log_file
+    for proxy_log_file in "${RT_PROXY_LOG_DIR}/rpc.log" "${RT_PROXY_LOG_DIR}/access.log"; do
+        if [[ -e "${proxy_log_file}" ]]; then
+            chown "${RT_PROXY_USER}:${RT_PROXY_USER}" "${proxy_log_file}"
+            chmod 0600 "${proxy_log_file}"
+        fi
+    done
 
     cat > "${RT_PROXY_CONFIG_FILE}" <<YAML
 listen_addr: $(yaml_quote "${RT_PROXY_LISTEN}")
@@ -841,7 +851,9 @@ RestartSec=2
 TimeoutStopSec=30
 KillSignal=SIGTERM
 LogsDirectory=rtorrent-scgi-proxy
+LogsDirectoryMode=0750
 ConfigurationDirectory=rtorrent-scgi-proxy
+ConfigurationDirectoryMode=0750
 ReadWritePaths=${RT_PROXY_LOG_DIR}
 
 NoNewPrivileges=yes
@@ -877,8 +889,27 @@ install_scgi_proxy() {
     write_scgi_proxy_logrotate
     write_scgi_proxy_systemd
     systemctl daemon-reload
-    /usr/local/bin/rtorrent-scgi-proxy --check-config --config "${RT_PROXY_CONFIG_FILE}"
-    systemctl enable --now rtorrent-scgi-proxy
+
+    # Validate with the same unprivileged account used by systemd. Running this
+    # command as root can create root-owned rpc.log/access.log and break startup.
+    runuser -u "${RT_PROXY_USER}" -- /usr/local/bin/rtorrent-scgi-proxy --check-config --config "${RT_PROXY_CONFIG_FILE}"
+
+    # Repair permissions from a previous failed installation before starting.
+    chown "${RT_PROXY_USER}:${RT_PROXY_USER}" "${RT_PROXY_LOG_DIR}"
+    chmod 0750 "${RT_PROXY_LOG_DIR}"
+    local proxy_log_file
+    for proxy_log_file in "${RT_PROXY_LOG_DIR}/rpc.log" "${RT_PROXY_LOG_DIR}/access.log"; do
+        if [[ -e "${proxy_log_file}" ]]; then
+            chown "${RT_PROXY_USER}:${RT_PROXY_USER}" "${proxy_log_file}"
+            chmod 0600 "${proxy_log_file}"
+        fi
+    done
+
+    systemctl enable rtorrent-scgi-proxy >/dev/null
+    if ! systemctl restart rtorrent-scgi-proxy; then
+        journalctl -u rtorrent-scgi-proxy.service -n 30 --no-pager >&2 || true
+        fail "rtorrent-scgi-proxy failed to start."
+    fi
     log "Installed rtorrent-scgi-proxy config: ${RT_PROXY_CONFIG_FILE}"
     log "Installed rtorrent-scgi-proxy logs: ${RT_PROXY_LOG_DIR}"
 }
