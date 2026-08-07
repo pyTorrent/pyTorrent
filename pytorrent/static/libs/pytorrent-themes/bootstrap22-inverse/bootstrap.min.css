@@ -1,0 +1,247 @@
+/* Note: Bootstrap 2 Inverse keeps the old beveled control language with darker navigation chrome. */
+:root {
+  --bs-border-radius: 4px;
+  --bs-border-radius-sm: 3px;
+  --bs-border-radius-lg: 5px;
+  --bs-font-sans-serif: "Helvetica Neue", Arial, sans-serif;
+}
+
+[data-bs-theme="light"] {
+  --bs-body-bg: #eceff1;
+  --bs-body-color: #2f2f2f;
+  --bs-primary: #2f96b4;
+  --bs-primary-rgb: 47, 150, 180;
+  --bs-secondary-bg: #d9dee2;
+  --bs-secondary-bg-rgb: 217, 222, 226;
+  --bs-secondary-color: #4d5963;
+  --bs-tertiary-bg: #ffffff;
+  --bs-border-color: #b8c0c7;
+  --bs-link-color: #2f96b4;
+}
+
+[data-bs-theme="dark"] {
+  --bs-body-bg: #161a1d;
+  --bs-body-color: #e7ecef;
+  --bs-primary: #49afcd;
+  --bs-primary-rgb: 73, 175, 205;
+  --bs-secondary-bg: #252b30;
+  --bs-secondary-bg-rgb: 37, 43, 48;
+  --bs-secondary-color: #c9d3da;
+  --bs-tertiary-bg: #20262a;
+  --bs-border-color: #48535c;
+  --bs-link-color: #5bc0de;
+}
+
+/* Note: Bootstrap 2 surfaces were simple grey panels with subtle inset highlights. */
+.card,
+.dropdown-menu,
+.modal-content,
+.surface-section,
+.smart-setting-row,
+.table,
+.toast {
+  background-image: linear-gradient(#ffffff, #f7f7f7);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 4px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+[data-bs-theme="dark"] .card,
+[data-bs-theme="dark"] .dropdown-menu,
+[data-bs-theme="dark"] .modal-content,
+[data-bs-theme="dark"] .surface-section,
+[data-bs-theme="dark"] .smart-setting-row,
+[data-bs-theme="dark"] .table,
+[data-bs-theme="dark"] .toast {
+  background-image: linear-gradient(#303840, #252c33);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.btn {
+  border-color: rgba(0, 0, 0, 0.22);
+  border-radius: 4px;
+  border-width: 1px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.38), 0 1px 2px rgba(0, 0, 0, 0.08);
+  font-weight: 600;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease, color .15s ease;
+}
+
+.btn:hover {
+  filter: none;
+  text-decoration: none;
+}
+
+.btn:focus-visible {
+  box-shadow: 0 0 0 .2rem rgba(var(--bs-primary-rgb), .32);
+  filter: none;
+  text-decoration: none;
+}
+
+.btn-primary {
+  background-image: linear-gradient(#08c, #04c);
+  border-color: #0044cc #0044cc #002a80;
+  color: #ffffff;
+}
+
+.btn-primary:hover,
+.btn-primary:focus-visible {
+  background-image: linear-gradient(#0077d9, #003bb3);
+  border-color: #003bb3 #003bb3 #001f66;
+}
+
+.btn-success,
+.btn-success:hover,
+.btn-success:focus-visible {
+  background-image: linear-gradient(#62c462, #51a351);
+  border-color: #51a351 #51a351 #387038;
+  color: #ffffff;
+}
+
+.btn-danger,
+.btn-danger:hover,
+.btn-danger:focus-visible {
+  background-image: linear-gradient(#ee5f5b, #bd362f);
+  border-color: #bd362f #bd362f #802420;
+  color: #ffffff;
+}
+
+.btn-secondary,
+.btn-outline-secondary,
+.btn-light {
+  background-image: linear-gradient(#ffffff, #e6e6e6);
+  border-color: #cccccc #cccccc #b3b3b3;
+  color: #333333;
+}
+
+.btn-outline-primary,
+.btn-outline-success,
+.btn-outline-danger,
+.btn-outline-warning,
+.btn-outline-info {
+  background-color: var(--bs-body-bg);
+}
+
+.btn-outline-primary:hover,
+.btn-outline-primary:focus-visible,
+.nav-pills .nav-link.active,
+.nav-pills .show > .nav-link {
+  background-image: linear-gradient(#08c, #04c);
+  color: #ffffff;
+}
+
+.btn-outline-success:hover,
+.btn-outline-success:focus-visible {
+  background-image: linear-gradient(#62c462, #51a351);
+  color: #ffffff;
+}
+
+.btn-outline-danger:hover,
+.btn-outline-danger:focus-visible {
+  background-image: linear-gradient(#ee5f5b, #bd362f);
+  color: #ffffff;
+}
+
+.btn-outline-warning:hover,
+.btn-outline-warning:focus-visible {
+  background-image: linear-gradient(#fbb450, #f89406);
+  color: #111111;
+}
+
+.btn-outline-info:hover,
+.btn-outline-info:focus-visible {
+  background-image: linear-gradient(#5bc0de, #2f96b4);
+  color: #ffffff;
+}
+
+.btn-secondary:hover,
+.btn-secondary:focus-visible,
+.btn-outline-secondary:hover,
+.btn-outline-secondary:focus-visible {
+  background-image: linear-gradient(#e6e6e6, #cfcfcf);
+  border-color: #adadad;
+  color: #222222;
+}
+
+[data-bs-theme="dark"] .btn-secondary,
+[data-bs-theme="dark"] .btn-outline-secondary,
+[data-bs-theme="dark"] .btn-light {
+  background-image: linear-gradient(#4b545d, #303840);
+  border-color: #5c6670;
+  color: #f0f0f0;
+  text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.45);
+}
+
+[data-bs-theme="dark"] .btn-secondary:hover,
+[data-bs-theme="dark"] .btn-secondary:focus-visible,
+[data-bs-theme="dark"] .btn-outline-secondary:hover,
+[data-bs-theme="dark"] .btn-outline-secondary:focus-visible {
+  background-image: linear-gradient(#68737e, #48515a);
+  color: #ffffff;
+}
+
+.form-control,
+.form-select,
+.input-group-text {
+  border: 1px solid #cccccc;
+  border-radius: 4px;
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.075);
+}
+
+.form-control:focus,
+.form-select:focus {
+  border-color: rgba(82, 168, 236, 0.8);
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.075), 0 0 8px rgba(82, 168, 236, 0.6);
+}
+
+.modal-header,
+.card-header,
+.dropdown-header,
+.table thead th {
+  background-image: linear-gradient(#f9f9f9, #eeeeee);
+  border-bottom: 1px solid var(--bs-border-color);
+  color: var(--bs-body-color);
+  font-weight: 700;
+}
+
+[data-bs-theme="dark"] .modal-header,
+[data-bs-theme="dark"] .card-header,
+[data-bs-theme="dark"] .dropdown-header,
+[data-bs-theme="dark"] .table thead th {
+  background-image: linear-gradient(#39434c, #2c343b);
+}
+
+.badge,
+.label {
+  border-radius: 3px;
+}
+
+.alert {
+  border-radius: 3px;
+  border-width: 1px;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.progress {
+  background-image: linear-gradient(#f5f5f5, #e6e6e6);
+  border-radius: 3px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+.progress-bar {
+  background-image: linear-gradient(#149bdf, #0480be);
+}
+
+.table > :not(caption) > * > * {
+  border-bottom-color: var(--bs-border-color);
+}
+
+
+/* Note: Inverse variant reproduces the dark Bootstrap 2 navbar strip. */
+.navbar,
+.sidebar,
+.topbar {
+  background-image: linear-gradient(#444444, #222222);
+  border-color: #252525;
+  color: #eeeeee;
+}

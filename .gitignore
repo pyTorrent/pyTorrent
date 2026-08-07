@@ -41,9 +41,9 @@ data/logs/*
 !data/logs/README.md
 
 todo.txt
+pytorrent/static/libs/*
 !pytorrent/static/libs/pytorrent-themes/
 !pytorrent/static/libs/pytorrent-themes/**
-*/static/libs/
 smart_queue_scoring_todo.md
 data/mock_rtorrent_state.json
 docker/rtorrent-data/*/*

@@ -1,0 +1,66 @@
+/* Cool blue-grey theme inspired by Nordic palettes. */
+:root, [data-bs-theme="light"] {
+  color-scheme: light;
+  --bs-primary: #4c6a92;
+  --bs-primary-rgb: 76,106,146;
+  --bs-link-color: #4c6a92;
+  --bs-link-color-rgb: 76,106,146;
+  --bs-link-hover-color: #365174;
+  --bs-link-hover-color-rgb: 76,106,146;
+  --bs-body-bg: #f4f7fb;
+  --bs-body-bg-rgb: 244,247,251;
+  --bs-body-color: #182334;
+  --bs-secondary-bg: #ffffff;
+  --bs-secondary-bg-rgb: 255,255,255;
+  --bs-tertiary-bg: #e7edf5;
+  --bs-border-color: #d0d9e8;
+  --bs-secondary-color: #607089;
+  --bs-primary-bg-subtle: #dfe8f4;
+  --bs-primary-text-emphasis: #365174;
+  --torrent-progress-complete: #3aa675;
+  --pytorrent-page-bg: linear-gradient(180deg, #fbfdff 0%, #e9eff7 100%);
+  --pytorrent-shell-shadow: 0 16px 38px rgba(47, 64, 87, 0.13);
+}
+
+[data-bs-theme="dark"] {
+  color-scheme: dark;
+  --bs-primary: #88c0d0;
+  --bs-primary-rgb: 136,192,208;
+  --bs-link-color: #88c0d0;
+  --bs-link-color-rgb: 136,192,208;
+  --bs-link-hover-color: #b6e3ee;
+  --bs-link-hover-color-rgb: 136,192,208;
+  --bs-body-bg: #0b111a;
+  --bs-body-bg-rgb: 11,17,26;
+  --bs-body-color: #d8dee9;
+  --bs-secondary-bg: #111927;
+  --bs-secondary-bg-rgb: 17,25,39;
+  --bs-tertiary-bg: #172233;
+  --bs-border-color: #2e3a4d;
+  --bs-secondary-color: #9aa8bc;
+  --bs-primary-bg-subtle: #132b3a;
+  --bs-primary-text-emphasis: #b6e3ee;
+  --torrent-progress-complete: #a3be8c;
+  --pytorrent-page-bg: radial-gradient(circle at top left, rgba(136, 192, 208, 0.14), transparent 35%), #0b111a;
+  --pytorrent-shell-shadow: 0 18px 55px rgba(3, 8, 15, 0.55);
+}
+
+.btn-primary {
+  --bs-btn-bg: var(--bs-primary);
+  --bs-btn-border-color: var(--bs-primary);
+  --bs-btn-hover-bg: var(--bs-primary-text-emphasis);
+  --bs-btn-hover-border-color: var(--bs-primary-text-emphasis);
+}
+.btn-outline-primary {
+  --bs-btn-color: var(--bs-primary);
+  --bs-btn-border-color: rgba(var(--bs-primary-rgb), 0.72);
+  --bs-btn-hover-bg: var(--bs-primary);
+  --bs-btn-hover-border-color: var(--bs-primary);
+}
+.nav-pills {
+  --bs-nav-pills-link-active-bg: var(--bs-primary);
+}
+.progress,
+.progress-stacked {
+  --bs-progress-bg: rgba(var(--bs-secondary-bg-rgb), 0.82);
+}
