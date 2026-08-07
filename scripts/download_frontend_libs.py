@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import sys
 import time
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
@@ -314,4 +315,10 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as exc:
+        if VERBOSE:
+            raise
+        print(f"[pyTorrent] ERROR: {exc}", file=sys.stderr)
+        raise SystemExit(1)

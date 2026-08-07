@@ -3,6 +3,7 @@ set -euo pipefail
 
 # Install pyTorrent only, for hosts where rTorrent is already configured.
 
+INSTALLER_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_USER="${PYTORRENT_USER:-pytorrent}"
 APP_DIR="${PYTORRENT_APP_DIR:-/opt/pytorrent}"
 REPO_URL="${PYTORRENT_REPO_URL:-https://github.com/pyTorrent/pyTorrent.git}"
@@ -512,14 +513,43 @@ write_env() {
     chown "${APP_USER}:${APP_USER}" .env || true
 }
 
+seed_bundled_app_themes() {
+    # The installer can be newer than the Git branch it installs. Keep the app-specific
+    # themes shipped with this installer available in the Git working tree.
+    local source_dir="${INSTALLER_ROOT}/pytorrent/static/libs/pytorrent-themes"
+    local dest_dir="${APP_DIR}/pytorrent/static/libs/pytorrent-themes"
+
+    [[ "${LIBS_MODE}" == "offline" ]] || return 0
+    [[ -d "${source_dir}" ]] || return 0
+
+    if [[ "$(readlink -f "${source_dir}")" != "$(readlink -f "${dest_dir}" 2>/dev/null || true)" ]]; then
+        mkdir -p "${dest_dir}"
+        cp -a "${source_dir}/." "${dest_dir}/"
+        chown -R "${APP_USER}:${APP_USER}" "${dest_dir}"
+    fi
+}
+
 install_frontend_libs() {
-    # Note: Offline mode downloads local JS/CSS assets during installation; online mode uses CDN links.
-    if [[ "${LIBS_MODE}" == "offline" && -f "${APP_DIR}/scripts/download_frontend_libs.py" ]]; then
-        sudo -u "${APP_USER}" "${APP_DIR}/.venv/bin/python" "${APP_DIR}/scripts/download_frontend_libs.py" || true
+    # Offline mode is required to be complete before the service is installed.
+    if [[ "${LIBS_MODE}" == "offline" ]]; then
+        [[ -f "${APP_DIR}/scripts/download_frontend_libs.py" ]] \
+            || fail "Missing frontend downloader: ${APP_DIR}/scripts/download_frontend_libs.py"
+        seed_bundled_app_themes
+        run_quiet sudo -u "${APP_USER}" env PYTORRENT_INSTALL_VERBOSE=0 \
+            "${APP_DIR}/.venv/bin/python" "${APP_DIR}/scripts/download_frontend_libs.py"
     fi
     if [[ -f "${APP_DIR}/scripts/download_geoip.sh" ]]; then
         sudo -u "${APP_USER}" bash "${APP_DIR}/scripts/download_geoip.sh" "${APP_DIR}/data/GeoLite2-City.mmdb" || true
     fi
+}
+
+validate_application() {
+    # Import from the real application working directory before enabling/restarting systemd.
+    # This catches missing offline assets and Python import errors immediately.
+    log "Validating application..."
+    run_quiet sudo -u "${APP_USER}" bash -c \
+        'cd "$1" && exec "$1/.venv/bin/python" -c "import wsgi"' _ "${APP_DIR}" \
+        || fail "Application validation failed. The service was not restarted."
 }
 
 configure_database() {
@@ -621,6 +651,11 @@ SERVICE
     systemctl daemon-reload
     systemctl enable "${SERVICE_NAME}"
     systemctl restart "${SERVICE_NAME}"
+    sleep 1
+    if ! systemctl is-active --quiet "${SERVICE_NAME}"; then
+        journalctl -u "${SERVICE_NAME}" -n 30 --no-pager >&2 || true
+        fail "${SERVICE_NAME} did not stay active after startup."
+    fi
 }
 
 
@@ -979,6 +1014,7 @@ main() {
     install_frontend_libs
     log "Initializing database..."
     configure_database
+    validate_application
     log "Installing systemd service..."
     write_systemd_service
     install_management_command
