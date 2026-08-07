@@ -129,26 +129,46 @@ def _run_slow_profile_tasks(socketio, profile: dict, profile_id: int, settings: 
         state.slow_task_running = False
 
 
-def _is_active_rows(rows: list[dict]) -> bool:
+def _live_state_from_rows(profile_id: int, rows: list[dict]) -> tuple[bool, dict]:
+    """Return activity state and aggregate transfer speeds in one cache pass."""
+    down_rate = 0
+    up_rate = 0
+    active = False
     for row in rows or []:
         try:
-            if int(row.get("state") or 0) and (int(row.get("down_rate") or 0) > 0 or int(row.get("up_rate") or 0) > 0):
-                return True
+            row_down = int(row.get("down_rate") or 0)
+            row_up = int(row.get("up_rate") or 0)
+            down_rate += row_down
+            up_rate += row_up
+            if not active and int(row.get("state") or 0) and (row_down > 0 or row_up > 0):
+                active = True
         except Exception:
             continue
-    return False
-
-
-def _speed_status_from_rows(profile_id: int, rows: list[dict]) -> dict:
-    down_rate = sum(int(row.get("down_rate") or 0) for row in rows or [])
-    up_rate = sum(int(row.get("up_rate") or 0) for row in rows or [])
-    return {
+    return active, {
         "profile_id": int(profile_id),
         "down_rate": down_rate,
         "up_rate": up_rate,
         "down_rate_h": rtorrent.human_rate(down_rate),
         "up_rate_h": rtorrent.human_rate(up_rate),
         "speed_peaks": speed_peaks.record(profile_id, down_rate, up_rate),
+    }
+
+
+def _speed_status_from_rows(profile_id: int, rows: list[dict]) -> dict:
+    return _live_state_from_rows(profile_id, rows)[1]
+
+
+def _live_patch_payload(profile_id: int, live: dict) -> dict | None:
+    """Build a torrent-only live patch and suppress no-op websocket frames."""
+    updated = live.get("updated") or []
+    requires_full_refresh = bool(live.get("requires_full_refresh"))
+    if not updated and not requires_full_refresh:
+        return None
+    return {
+        "ok": True,
+        "profile_id": int(profile_id),
+        "updated": updated,
+        "requires_full_refresh": requires_full_refresh,
     }
 
 
@@ -197,12 +217,14 @@ def register_socketio_handlers(socketio):
                 rtorrent_call_count = 0
                 skipped_emissions = 0
                 heartbeat = {"ok": True, "profile_id": pid, "tick": state.tick_count + 1, "error": ""}
+                speed_status = None
+                speed_status_delivered = False
+                live_speed_ready = False
 
                 try:
                     # Note: This keeps per-profile runtime limits active after app start, without waiting for UI contact.
                     _apply_configured_speed_limits(profile)
                     rows = torrent_cache.snapshot(pid)
-                    speed_status = _speed_status_from_rows(pid, rows)
 
                     if run_live:
                         live_started = time.monotonic()
@@ -214,23 +236,19 @@ def register_socketio_handlers(socketio):
                         error = str(live.get("error") or "")
                         poller_control.mark_live_poll(state, live_started, ok, error, len(live.get("updated") or []), bool(live.get("requires_full_refresh")))
                         rows = torrent_cache.snapshot(pid)
-                        active = _is_active_rows(rows)
-                        speed_status = _speed_status_from_rows(pid, rows) if live.get("ok") else speed_status
                         if live.get("ok"):
-                            if live.get("updated") or speed_status:
-                                changed = changed or bool(live.get("updated"))
-                                payload = {
-                                    "ok": True,
-                                    "profile_id": pid,
-                                    "updated": live.get("updated") or [],
-                                    "speed_status": speed_status,
-                                    "requires_full_refresh": bool(live.get("requires_full_refresh")),
-                                }
+                            active, speed_status = _live_state_from_rows(pid, rows)
+                            live_speed_ready = True
+                            updated = live.get("updated") or []
+                            requires_full_refresh = bool(live.get("requires_full_refresh"))
+                            payload = _live_patch_payload(pid, live)
+                            if payload:
+                                changed = changed or bool(updated)
                                 emitted_payload_size += len(json.dumps(payload, default=str))
                                 _emit_profile(socketio, "torrent_live_patch", payload, pid)
                             else:
                                 skipped_emissions += 1
-                            if live.get("requires_full_refresh"):
+                            if requires_full_refresh:
                                 state.last_list_at = 0.0
                                 run_list = True
                         else:
@@ -245,21 +263,29 @@ def register_socketio_handlers(socketio):
                         error = str(diff.get("error") or "")
                         poller_control.mark_list_poll(state, list_started, ok, error, len(diff.get("added") or []), len(diff.get("updated") or []), len(diff.get("removed") or []))
                         rows = torrent_cache.snapshot(pid)
-                        active = _is_active_rows(rows)
-                        speed_status = _speed_status_from_rows(pid, rows) if diff.get("ok") else speed_status
+                        if diff.get("ok"):
+                            active, speed_status = _live_state_from_rows(pid, rows)
                         if diff.get("ok") and (diff["added"] or diff["updated"] or diff["removed"]):
                             changed = True
                             payload = {**diff, "summary": cached_summary(pid, rows, force=True), "speed_status": speed_status}
                             emitted_payload_size += len(json.dumps(payload, default=str))
                             _emit_profile(socketio, "torrent_patch", payload, pid)
+                            speed_status_delivered = True
                         elif not diff.get("ok"):
                             _emit_profile(socketio, "rtorrent_error", diff, pid)
                         else:
                             skipped_emissions += 1
 
+                    if live_speed_ready and not run_system and not speed_status_delivered and speed_status:
+                        emitted_payload_size += len(json.dumps(speed_status, default=str))
+                        _emit_profile(socketio, "speed_status", speed_status, pid)
+                        speed_status_delivered = True
+
                     if run_system:
                         state.last_system_at = now
                         rows = torrent_cache.snapshot(pid)
+                        if speed_status is None:
+                            speed_status = _speed_status_from_rows(pid, rows)
                         status = rtorrent.system_status(profile, rows)
                         rtorrent_call_count += 1
                         if bool(profile.get("is_remote")):
@@ -278,10 +304,11 @@ def register_socketio_handlers(socketio):
                             status["usage_available"] = True
                         status["profile_id"] = pid
                         traffic_history.record(pid, status.get("down_rate", 0), status.get("up_rate", 0), status.get("total_down", 0), status.get("total_up", 0))
-                        status["speed_peaks"] = (speed_status or _speed_status_from_rows(pid, rows))["speed_peaks"]
+                        status["speed_peaks"] = speed_status["speed_peaks"]
                         status["poller"] = poller_control.snapshot(pid)
                         emitted_payload_size += len(json.dumps(status, default=str))
                         _emit_profile(socketio, "system_stats", status, pid)
+                        speed_status_delivered = True
 
                     if poller_control.should_disk_poll(now, settings, state):
                         state.last_disk_at = now
@@ -307,6 +334,11 @@ def register_socketio_handlers(socketio):
                 except Exception as exc:
                     ok = False
                     error = str(exc)
+                    # Preserve fast speed updates when another task in the same tick fails before system_stats is emitted.
+                    if live_speed_ready and speed_status and not speed_status_delivered:
+                        emitted_payload_size += len(json.dumps(speed_status, default=str))
+                        _emit_profile(socketio, "speed_status", speed_status, pid)
+                        speed_status_delivered = True
                     _emit_profile(socketio, "rtorrent_error", {"profile_id": pid, "error": error}, pid)
 
                 runtime = poller_control.mark_tick(state, tick_started, active=active, ok=ok, error=error, emitted_payload_size=emitted_payload_size, rtorrent_call_count=rtorrent_call_count, skipped_emissions=skipped_emissions, settings=settings)
