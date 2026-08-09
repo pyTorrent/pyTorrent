@@ -7800,3 +7800,9 @@ body.compact-torrent-list .mobile-progress .torrent-progress {
     justify-content: flex-start;
   }
 }
+/* Note: Dedicated Files tree mode uses the detail pane as its scroll container instead of a short nested scroller. */
+.file-tree-panel.file-tree-standalone {
+  margin: 0;
+  max-height: none;
+  overflow: visible;
+}
