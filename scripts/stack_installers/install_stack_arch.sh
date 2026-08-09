@@ -18,6 +18,7 @@ RTORRENT_BASE_DIR="${RTORRENT_BASE_DIR:-/opt/rtorrent_build}"
 RTORRENT_SCGI_PORT="${RTORRENT_SCGI_PORT:-5000}"
 RTORRENT_TORRENT_PORT="${RTORRENT_TORRENT_PORT:-51300}"
 RTORRENT_REF="${RTORRENT_REF:-v0.16.11}"
+RTORRENT_VERSION="${RTORRENT_VERSION:-}"
 LIBTORRENT_REF="${LIBTORRENT_REF:-v0.16.11}"
 PYTORRENT_APP_DIR="${PYTORRENT_APP_DIR:-/opt/pytorrent}"
 PYTORRENT_PORT="${PYTORRENT_PORT:-8090}"
@@ -37,6 +38,11 @@ RTORRENT_FORCE_CONFIG="${RTORRENT_FORCE_CONFIG:-1}"
 RTORRENT_EXTRA_ARGS=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --version)
+            RTORRENT_VERSION="$2"
+            RTORRENT_BUILD_FROM_SOURCE=1
+            shift 2
+            ;;
         --build-rtorrent|--build-from-source|--compile-rtorrent)
             RTORRENT_BUILD_FROM_SOURCE=1
             shift
@@ -61,11 +67,16 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             echo "Unknown option: $1" >&2
-            echo "Supported options: --build-rtorrent, --with-xmlrpc-c, --scgi-unix-socket, --rtorrent-socket PATH, --without-rtproxy" >&2
+            echo "Supported options: --version VERSION, --build-rtorrent, --with-xmlrpc-c, --scgi-unix-socket, --rtorrent-socket PATH, --without-rtproxy" >&2
             exit 1
             ;;
     esac
 done
+# Note: Selecting a source version also enables source-build mode on Arch.
+if [[ -n "${RTORRENT_VERSION}" ]]; then
+    RTORRENT_BUILD_FROM_SOURCE=1
+    RTORRENT_EXTRA_ARGS+=(--version "${RTORRENT_VERSION}")
+fi
 if [[ "${RTORRENT_WITH_XMLRPC_C:-0}" == "1" ]]; then
     RTORRENT_BUILD_FROM_SOURCE=1
     RTORRENT_EXTRA_ARGS+=(--with-xmlrpc-c)

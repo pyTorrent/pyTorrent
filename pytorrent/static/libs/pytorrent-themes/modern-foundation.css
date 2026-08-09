@@ -1,0 +1,54 @@
+/* Shared foundation for modern pyTorrent themes. Theme files define color and surface tokens only. */
+.btn-primary {
+  --bs-btn-bg: var(--bs-primary);
+  --bs-btn-border-color: var(--bs-primary);
+  --bs-btn-hover-bg: color-mix(in srgb, var(--bs-primary) 84%, var(--bs-body-color));
+  --bs-btn-hover-border-color: color-mix(in srgb, var(--bs-primary) 84%, var(--bs-body-color));
+  --bs-btn-active-bg: color-mix(in srgb, var(--bs-primary) 76%, var(--bs-body-color));
+  --bs-btn-active-border-color: color-mix(in srgb, var(--bs-primary) 76%, var(--bs-body-color));
+}
+
+.btn-outline-primary {
+  --bs-btn-color: var(--bs-primary);
+  --bs-btn-border-color: color-mix(in srgb, var(--bs-primary) 62%, var(--bs-border-color));
+  --bs-btn-hover-bg: var(--bs-primary);
+  --bs-btn-hover-border-color: var(--bs-primary);
+}
+
+.nav-pills {
+  --bs-nav-pills-link-active-bg: var(--bs-primary);
+}
+
+.form-control,
+.form-select,
+.input-group-text {
+  border-color: color-mix(in srgb, var(--bs-border-color) 82%, var(--bs-primary) 18%);
+}
+
+.form-control:focus,
+.form-select:focus {
+  border-color: color-mix(in srgb, var(--bs-primary) 72%, var(--bs-border-color));
+  box-shadow: 0 0 0 0.16rem rgba(var(--bs-primary-rgb), 0.14);
+}
+
+.dropdown-menu {
+  --bs-dropdown-bg: var(--bs-secondary-bg);
+  --bs-dropdown-border-color: var(--bs-border-color);
+  --bs-dropdown-link-hover-bg: var(--bs-primary-bg-subtle);
+  --bs-dropdown-link-active-bg: var(--bs-primary);
+}
+
+.progress,
+.progress-stacked {
+  --bs-progress-bg: color-mix(in srgb, var(--bs-tertiary-bg) 84%, var(--bs-body-bg));
+}
+
+.table {
+  --bs-table-bg: transparent;
+  --bs-table-hover-bg: rgba(var(--bs-primary-rgb), 0.045);
+  --bs-table-striped-bg: rgba(var(--bs-secondary-bg-rgb), 0.34);
+}
+
+::selection {
+  background: rgba(var(--bs-primary-rgb), 0.26);
+}

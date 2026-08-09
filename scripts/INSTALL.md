@@ -86,6 +86,7 @@ These variables are used by both stack installers.
 | `RTORRENT_BASE_DIR` | `/opt/rtorrent_build` | Build and install directory for libtorrent and rTorrent. On Arch this is used only when source build is requested. |
 | `RTORRENT_SCGI_PORT` | `5000` | Local SCGI port for rTorrent XMLRPC/SCGI. |
 | `RTORRENT_TORRENT_PORT` | `51300` | Incoming BitTorrent listen port. |
+| `RTORRENT_VERSION` | empty | Optional source version preset. `0.9.8` selects libtorrent `0.13.8` + xmlrpc-c; `0.15.7+` selects matching tags + tinyxml2. On Arch this enables source build. |
 | `RTORRENT_REF` | `v0.16.11` | rTorrent Git tag, branch, or commit. Ignored by default on Arch unless source build is requested. |
 | `LIBTORRENT_REF` | `v0.16.11` | libtorrent Git tag, branch, or commit. Ignored by default on Arch unless source build is requested. |
 | `RTORRENT_WITH_XMLRPC_C` | `0` | Set to `1` to compile rTorrent with classic xmlrpc-c instead of the default tinyxml2 XML-RPC backend. On Arch this also switches from repo package to source build. |
@@ -105,6 +106,32 @@ Classic xmlrpc-c backend instead of default tinyxml2. On Arch this forces source
 curl -fsSL https://raw.githubusercontent.com/pyTorrent/pyTorrent/master/scripts/install_stack.sh \
   | sudo RTORRENT_WITH_XMLRPC_C=1 bash
 ```
+
+
+## rTorrent source version presets
+
+Source installers accept `--version` and the stack wrappers also accept `RTORRENT_VERSION`.
+
+| Requested version | rTorrent | libtorrent | XML-RPC backend |
+| --- | --- | --- | --- |
+| `0.9.8` | `v0.9.8` | `v0.13.8` | `xmlrpc-c` |
+| `0.15.7` or newer | matching `vX.Y.Z` | matching `vX.Y.Z` | `tinyxml2` |
+
+Examples:
+
+```bash
+sudo bash scripts/stack_installers/install_stack_debian_ubuntu.sh --version 0.9.8
+sudo bash scripts/stack_installers/install_stack_rhel.sh --version 0.15.7
+sudo bash scripts/stack_installers/install_stack_arch.sh --version 0.15.7
+```
+
+The same selection can be made through the environment:
+
+```bash
+sudo RTORRENT_VERSION=0.9.8 bash scripts/install_stack.sh
+```
+
+`--version` is a compatibility preset and takes precedence over explicit rTorrent/libtorrent refs. For legacy releases other than `0.9.8`, pass both `--rtorrent-ref` and `--libtorrent-ref`; legacy semantic-version refs below `0.15.7` automatically select `xmlrpc-c`. `--with-xmlrpc-c` remains available as an explicit override.
 
 ## pyTorrent parameters
 

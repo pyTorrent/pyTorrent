@@ -1,0 +1,24 @@
+@import url("../modern-foundation.css");
+/* Ember: warm copper accent for users who want a less blue-centric interface. */
+:root, [data-bs-theme="light"] {
+  color-scheme: light;
+  --bs-primary: #b75b2a; --bs-primary-rgb: 183,91,42; --bs-link-color: #a64f24; --bs-link-hover-color: #793a1c;
+  --bs-body-bg: #faf6f1; --bs-body-bg-rgb: 250,246,241; --bs-body-color: #332a24;
+  --bs-secondary-bg: #fff; --bs-secondary-bg-rgb: 255,255,255; --bs-tertiary-bg: #f2e9df;
+  --bs-border-color: #e0d2c5; --bs-secondary-color: #78695d; --bs-primary-bg-subtle: #fae9dd; --bs-primary-text-emphasis: #873f1d;
+  --torrent-progress-complete: #498c64; --pytorrent-page-bg: radial-gradient(circle at 8% 0%, rgba(183,91,42,.09), transparent 26%), #faf6f1;
+  --pytorrent-shell-shadow: 0 18px 45px rgba(85,57,37,.14); --pytorrent-topbar-bg: #fffaf5; --pytorrent-sidebar-bg: #f7efe7;
+  --pytorrent-statusbar-bg: #f0e6dc; --pytorrent-surface-bg: #fff; --pytorrent-panel-border: #e0d2c5; --pytorrent-table-header-bg: #f5ece4;
+  --pytorrent-surface-radius: .7rem; --pytorrent-backdrop-filter: none;
+}
+[data-bs-theme="dark"] {
+  color-scheme: dark;
+  --bs-primary: #df8654; --bs-primary-rgb: 223,134,84; --bs-link-color: #e99769; --bs-link-hover-color: #ffd0b5;
+  --bs-body-bg: #171210; --bs-body-bg-rgb: 23,18,16; --bs-body-color: #eee4de;
+  --bs-secondary-bg: #241d1a; --bs-secondary-bg-rgb: 36,29,26; --bs-tertiary-bg: #2d2420;
+  --bs-border-color: #4c3b34; --bs-secondary-color: #b9aaa2; --bs-primary-bg-subtle: #47291d; --bs-primary-text-emphasis: #f4b28d;
+  --torrent-progress-complete: #68b88a; --pytorrent-page-bg: radial-gradient(circle at 8% 0%, rgba(223,134,84,.12), transparent 28%), #171210;
+  --pytorrent-shell-shadow: 0 22px 58px rgba(0,0,0,.5); --pytorrent-topbar-bg: #271f1b; --pytorrent-sidebar-bg: #201917;
+  --pytorrent-statusbar-bg: #251e1a; --pytorrent-surface-bg: #241d1a; --pytorrent-panel-border: #4c3b34; --pytorrent-table-header-bg: #2d2420;
+  --pytorrent-surface-radius: .7rem; --pytorrent-backdrop-filter: none;
+}

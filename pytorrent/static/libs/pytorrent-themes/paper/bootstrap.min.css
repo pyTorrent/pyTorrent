@@ -1,0 +1,24 @@
+@import url("../modern-foundation.css");
+/* Paper: editorial off-white surfaces with ink-blue accents and a calm dark counterpart. */
+:root, [data-bs-theme="light"] {
+  color-scheme: light;
+  --bs-primary: #315c8c; --bs-primary-rgb: 49,92,140; --bs-link-color: #315c8c; --bs-link-hover-color: #223f61;
+  --bs-body-bg: #f3efe7; --bs-body-bg-rgb: 243,239,231; --bs-body-color: #2d2b28;
+  --bs-secondary-bg: #fffdf8; --bs-secondary-bg-rgb: 255,253,248; --bs-tertiary-bg: #ece6dc;
+  --bs-border-color: #d6cec1; --bs-secondary-color: #756e65; --bs-primary-bg-subtle: #e7edf4; --bs-primary-text-emphasis: #27496e;
+  --torrent-progress-complete: #4d8a63; --pytorrent-page-bg: #eee8de; --pytorrent-shell-shadow: 0 16px 42px rgba(73,62,48,.16);
+  --pytorrent-topbar-bg: #fffdf8; --pytorrent-sidebar-bg: #f7f2e9; --pytorrent-statusbar-bg: #ebe4da;
+  --pytorrent-surface-bg: #fffdf8; --pytorrent-panel-border: #d6cec1; --pytorrent-table-header-bg: #f0eae1;
+  --pytorrent-surface-radius: .55rem; --pytorrent-backdrop-filter: none;
+}
+[data-bs-theme="dark"] {
+  color-scheme: dark;
+  --bs-primary: #8fb7e3; --bs-primary-rgb: 143,183,227; --bs-link-color: #a1c5ec; --bs-link-hover-color: #d4e7fa;
+  --bs-body-bg: #1c1b19; --bs-body-bg-rgb: 28,27,25; --bs-body-color: #ece8df;
+  --bs-secondary-bg: #292724; --bs-secondary-bg-rgb: 41,39,36; --bs-tertiary-bg: #23211f;
+  --bs-border-color: #49443e; --bs-secondary-color: #b9b0a4; --bs-primary-bg-subtle: #27384b; --bs-primary-text-emphasis: #c8def5;
+  --torrent-progress-complete: #75b88d; --pytorrent-page-bg: #171614; --pytorrent-shell-shadow: 0 20px 55px rgba(0,0,0,.45);
+  --pytorrent-topbar-bg: #2b2926; --pytorrent-sidebar-bg: #24221f; --pytorrent-statusbar-bg: #22201e;
+  --pytorrent-surface-bg: #292724; --pytorrent-panel-border: #49443e; --pytorrent-table-header-bg: #302d29;
+  --pytorrent-surface-radius: .55rem; --pytorrent-backdrop-filter: none;
+}

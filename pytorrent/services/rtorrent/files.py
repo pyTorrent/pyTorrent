@@ -87,7 +87,7 @@ def _remote_readability_error(c: ScgiRtorrentClient, source_path: str) -> str | 
         '[ -r "$p" ] || { echo "source file is not readable by rTorrent"; exit 0; }; '
         'echo OK'
     )
-    output = str(_rt_execute(c, "execute.capture", "sh", "-c", script, "pytorrent-download-check", source_path) or "").strip()
+    output = str(_rt_execute_capture_readonly(c, "sh", "-c", script, "pytorrent-download-check", source_path) or "").strip()
     return None if output == "OK" else (output or "source file cannot be read by rTorrent")
 
 
@@ -111,7 +111,7 @@ def iter_remote_file_chunks(profile: dict, source_path: str, size: int | None = 
         'dd if="$p" bs="$bs" skip="$skip" count=1 2>/dev/null | base64 | tr -d "\n"'
     )
     while size is None or emitted < int(size):
-        output = str(_rt_execute(c, "execute.capture", "sh", "-c", script, "pytorrent-download-read", clean, str(block_size), str(offset)) or "")
+        output = str(_rt_execute_capture_readonly(c, "sh", "-c", script, "pytorrent-download-read", clean, str(block_size), str(offset)) or "")
         if output.startswith("ERR\t"):
             raise RuntimeError(output.split("\t", 1)[1] or "remote read failed")
         if not output:
@@ -546,7 +546,7 @@ def _remote_file_exists(c: ScgiRtorrentClient, source_path: str) -> bool:
         return False
     script = 'p=$1; [ -f "$p" ] && [ -r "$p" ] && printf OK || true'
     try:
-        return str(_rt_execute(c, "execute.capture", "sh", "-c", script, "pytorrent-file-exists", clean) or "").strip() == "OK"
+        return str(_rt_execute_capture_readonly(c, "sh", "-c", script, "pytorrent-file-exists", clean) or "").strip() == "OK"
     except Exception:
         return False
 

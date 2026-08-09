@@ -116,9 +116,6 @@ def _key(profile_id: int) -> str:
     return f"poller.settings.{int(profile_id)}"
 
 
-def _state_key(profile_id: int) -> str:
-    return f"poller.runtime.{int(profile_id)}"
-
 
 def _coerce_float(value: Any, default: float, lo: float, hi: float) -> float:
     try:
@@ -214,6 +211,15 @@ def save_settings(profile_id: int, data: dict) -> dict:
     return settings
 
 
+def request_immediate_poll(profile_id: int) -> None:
+    """Make the next poller pass refresh this profile without doing SCGI work in the caller."""
+    state = state_for(int(profile_id))
+    state.last_live_at = 0.0
+    state.last_list_at = 0.0
+    state.last_system_at = 0.0
+    state.last_heartbeat_at = 0.0
+
+
 @dataclass
 class ProfilePollState:
     profile_id: int
@@ -237,6 +243,7 @@ class ProfilePollState:
     tick_count: int = 0
     sleep_hint: float = 1.0
     error_count: int = 0
+    error_notification_active: bool = False
     slow_count: int = 0
     skipped_emissions: int = 0
     emitted_payload_size: int = 0
@@ -407,6 +414,7 @@ def reset_runtime_stats(profile_id: int) -> dict:
     state.last_tick_gap_ms = 0.0
     state.last_tick_started_at = 0.0
     state.error_count = 0
+    state.error_notification_active = False
     state.slow_count = 0
     state.skipped_emissions = 0
     state.emitted_payload_size = 0
@@ -436,6 +444,41 @@ def reset_runtime_stats(profile_id: int) -> dict:
     return snapshot(profile_id)
 
 
+def should_emit_rtorrent_error(state: ProfilePollState, settings: dict, error: str) -> bool:
+    # Note: Semantic RPC failures are reported immediately; transient SCGI transport failures are reported only after consecutive failed ticks.
+    if not error:
+        state.error_notification_active = False
+        return False
+    try:
+        from . import rtorrent
+        transient = rtorrent.is_rtorrent_unavailable_error(error)
+    except Exception:
+        transient = False
+    if not transient:
+        return True
+    threshold = max(1, int(settings.get("recovery_after_errors") or DEFAULTS["recovery_after_errors"]))
+    if state.error_count < threshold:
+        return False
+    if state.error_notification_active:
+        return False
+    state.error_notification_active = True
+    return True
+
+
+def user_visible_rtorrent_error(state: ProfilePollState, settings: dict, error: str) -> str:
+    # Note: Initial snapshots keep one-off SCGI transport failures silent while preserving persistent or semantic errors.
+    if not error:
+        return ""
+    try:
+        from . import rtorrent
+        if not rtorrent.is_rtorrent_unavailable_error(error):
+            return str(error)
+    except Exception:
+        return str(error)
+    threshold = max(1, int(settings.get("recovery_after_errors") or DEFAULTS["recovery_after_errors"]))
+    return str(error) if state.error_count >= threshold else ""
+
+
 def mark_tick(state: ProfilePollState, started_at: float, active: bool, ok: bool, error: str = "", emitted_payload_size: int = 0, rtorrent_call_count: int = 0, skipped_emissions: int = 0, settings: dict | None = None) -> dict:
     now = time.monotonic()
     effective_settings = normalize_settings(settings) if settings is not None else DEFAULTS
@@ -455,11 +498,14 @@ def mark_tick(state: ProfilePollState, started_at: float, active: bool, ok: bool
 
     if not adaptive_enabled:
         state.error_count = 0 if ok else state.error_count + 1
+        if ok:
+            state.error_notification_active = False
         state.slow_count = 0
         state.adaptive_mode = "fixed"
     else:
         if ok:
             state.error_count = 0
+            state.error_notification_active = False
         else:
             state.error_count += 1
         threshold = float(effective_settings.get("slow_response_threshold_ms") or DEFAULTS["slow_response_threshold_ms"])

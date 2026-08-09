@@ -257,6 +257,14 @@ LIVE_TORRENT_FIELDS = [
     "d.is_open=", "d.custom1=", f"d.custom={PY_MANUAL_PAUSE_FIELD}",
 ]
 
+# Aggregate-only fields used by the cached torrent statistics collector.
+# d.size_bytes equals the sum of file sizes and d.size_files equals the
+# number of rows/files exposed by f.multicall, without querying each torrent.
+TORRENT_STATS_FIELDS = [
+    "d.complete=", "d.size_bytes=", "d.size_files=",
+    "d.peers_connected=", "d.peers_complete=", "d.down.rate=", "d.up.rate=",
+]
+
 
 def human_duration(seconds: int) -> str:
     seconds = max(0, int(seconds or 0))
@@ -420,11 +428,32 @@ def list_torrent_live_stats(profile: dict) -> list[dict]:
     return [normalize_live_row(list(row)) for row in rows]
 
 
+def list_torrent_aggregate_stats(profile: dict) -> list[dict]:
+    """Return aggregate fields needed by torrent_stats in one d.multicall2."""
+    rows = client_for(profile).d.multicall2("", "main", *TORRENT_STATS_FIELDS)
+    return [
+        {
+            "complete": int(row[0] or 0),
+            "size": int(row[1] or 0),
+            "file_count": int(row[2] or 0),
+            "peers": int(row[3] or 0),
+            "seeds": int(row[4] or 0),
+            "down_rate": int(row[5] or 0),
+            "up_rate": int(row[6] or 0),
+        }
+        for row in rows
+    ]
+
+
 def list_torrents(profile: dict) -> list[dict]:
     c = client_for(profile)
     try:
         rows = c.d.multicall2("", "main", *(TORRENT_FIELDS + TORRENT_OPTIONAL_FIELDS))
-    except Exception:
+    except Exception as exc:
+        # Note: Optional-field compatibility fallback is useful only when rTorrent answered with a semantic RPC error.
+        # Transport/startup failures must return immediately instead of doubling SCGI retries and startup delay.
+        if is_rtorrent_unavailable_error(exc):
+            raise
         rows = c.d.multicall2("", "main", *TORRENT_FIELDS)
     return [normalize_row(list(row)) for row in rows]
 

@@ -38,6 +38,7 @@ const moduleImportSpecs = [
   ['./automationRules.js', 'automationRulesSource'],
   ['./cleanupTools.js', 'cleanupToolsSource'],
   ['./appDiagnostics.js', 'appDiagnosticsSource'],
+  ['./connectionDiagnostics.js', 'connectionDiagnosticsSource'],
   ['./footerPreferences.js', 'footerPreferencesSource'],
   ['./liveSpeedStats.js', 'liveSpeedStatsSource'],
   ['./statusBar.js', 'statusBarSource'],

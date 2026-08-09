@@ -2,7 +2,7 @@ from __future__ import annotations
 from ._shared import *
 import bisect
 import posixpath
-from ..services import operation_logs
+from ..services import operation_logs, connection_diagnostics
 from ..services.frontend_assets import static_hash
 
 @bp.get("/system/disk")
@@ -62,6 +62,27 @@ def health_check():
         return ok({"status": "ok"})
     except Exception as exc:
         return jsonify({"ok": False, "status": "error", "error": str(exc)}), 500
+
+
+@bp.get("/connection/diagnostics")
+def connection_diagnostics_get():
+    profile = request_profile()
+    if not profile:
+        return jsonify({"ok": False, "error": "No profile"}), 400
+    # Note: Passive diagnostics read only state already produced by the existing poller.
+    return ok({"diagnostics": connection_diagnostics.passive_snapshot(profile)})
+
+
+@bp.post("/connection/diagnostics/probe")
+def connection_diagnostics_probe():
+    profile = request_profile()
+    if not profile:
+        return jsonify({"ok": False, "error": "No profile"}), 400
+    # Note: Active SCGI diagnostics run only after an explicit user click in the connection popover.
+    return ok({
+        "probe": connection_diagnostics.run_active_scgi_probe(profile),
+        "diagnostics": connection_diagnostics.passive_snapshot(profile),
+    })
 
 
 @bp.get("/health/nagios")

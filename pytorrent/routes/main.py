@@ -9,8 +9,8 @@ import zipfile
 
 from flask import Blueprint, render_template, Response, request, redirect, url_for, abort, send_file, stream_with_context
 from ..services.preferences import get_preferences, list_profiles, active_profile, get_profile, BOOTSTRAP_THEMES, FONT_FAMILIES
-from ..services import auth, pdf_preview_links, rtorrent
-from ..config import PYTORRENT_TMP_DIR, SMART_QUEUE_LABEL, SMART_QUEUE_STALLED_LABEL
+from ..services import auth, pdf_preview_links, rtorrent, prometheus_metrics
+from ..config import PYTORRENT_TMP_DIR, SMART_QUEUE_LABEL, SMART_QUEUE_STALLED_LABEL, METRICS_PATH
 from ..services.frontend_assets import asset_path
 from flask import current_app, send_from_directory
 
@@ -153,6 +153,12 @@ def _profile_for_temporary_target(target: dict):
     if not profile:
         abort(404)
     return profile
+
+
+@bp.get(METRICS_PATH)
+def metrics():
+    # Note: Prometheus scrapes cached/in-memory runtime data only; this endpoint never triggers rTorrent work.
+    return prometheus_metrics.response()
 
 
 @bp.get("/favicon.ico")

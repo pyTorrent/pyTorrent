@@ -3,14 +3,40 @@ import errno
 import os
 import posixpath
 import socket
+import threading
 import time
 import uuid
 from urllib.parse import urlparse
 from xmlrpc.client import Binary, dumps, loads
+from xml.parsers.expat import ExpatError
 from pathlib import Path as LocalPath
 from ...utils import human_rate, human_size
 from ...db import connect, default_user_id, utcnow
 from ...config import PYTORRENT_TMP_DIR, REMOTE_READ_CHUNK_BYTES
+
+
+_SCGI_ENDPOINT_GATES: dict[tuple[str, int, int], threading.Semaphore] = {}
+_SCGI_ENDPOINT_GATES_LOCK = threading.Lock()
+
+
+def _scgi_max_inflight() -> int:
+    # Note: A small shared SCGI lane prevents background pollers/jobs from opening a burst of parallel XML-RPC sockets to one rTorrent endpoint.
+    try:
+        return max(1, min(8, int(os.environ.get("PYTORRENT_SCGI_MAX_INFLIGHT", "1"))))
+    except (TypeError, ValueError):
+        return 1
+
+
+def _scgi_endpoint_gate(host: str, port: int) -> threading.Semaphore:
+    # Note: Separate rTorrent endpoints keep independent concurrency while clients targeting the same host/port share one gate.
+    limit = _scgi_max_inflight()
+    key = (str(host or "").lower(), int(port), limit)
+    with _SCGI_ENDPOINT_GATES_LOCK:
+        gate = _SCGI_ENDPOINT_GATES.get(key)
+        if gate is None:
+            gate = threading.Semaphore(limit)
+            _SCGI_ENDPOINT_GATES[key] = gate
+        return gate
 
 
 class ScgiMethod:
@@ -43,6 +69,11 @@ class ScgiRtorrentClient:
         return ScgiMethod(self, name)
 
     def call(self, method_name: str, *args):
+        # Note: Serialize each complete request/retry cycle per endpoint so concurrent background features cannot stampede rTorrent SCGI.
+        with _scgi_endpoint_gate(self.host, self.port):
+            return self._call_serialized(method_name, *args)
+
+    def _call_serialized(self, method_name: str, *args):
         body = dumps(args, methodname=method_name, allow_none=True).encode("utf-8")
         headers = {
             "CONTENT_LENGTH": str(len(body)),
@@ -75,7 +106,15 @@ class ScgiRtorrentClient:
                     response = response.split(b"\r\n\r\n", 1)[1]
                 elif b"\n\n" in response:
                     response = response.split(b"\n\n", 1)[1]
-                result, _ = loads(response)
+                response = response.strip()
+                if not response:
+                    # Note: rTorrent can accept the SCGI connection while its XML-RPC endpoint is still warming up.
+                    raise ConnectionError("Empty response body from rTorrent SCGI")
+                try:
+                    result, _ = loads(response)
+                except ExpatError as exc:
+                    # Note: Never leak XML parser diagnostics such as "syntax error: line 1, column 0" to the UI.
+                    raise ConnectionError("Invalid or incomplete XML-RPC response from rTorrent SCGI") from exc
                 return result[0] if len(result) == 1 else result
             except Exception as exc:
                 last_exc = exc
@@ -90,7 +129,10 @@ class ScgiRtorrentClient:
 # Note: Shared runtime caches and post-check state live in the client module so split service modules keep the same process-wide behavior as the old monolith.
 _DISK_USAGE_CACHE: dict[str, tuple[float, dict]] = {}
 _DISK_USAGE_TTL_SECONDS = 30.0
-_REMOTE_USAGE_CACHE: dict[int, tuple[float, dict]] = {}
+_REMOTE_USAGE_CACHE: dict[str, tuple[float, dict]] = {}
+_REMOTE_USAGE_PROFILE_HOSTS: dict[int, str] = {}
+_REMOTE_USAGE_CACHE_LOCK = threading.Lock()
+_REMOTE_USAGE_HOST_LOCKS: dict[str, threading.Lock] = {}
 _REMOTE_USAGE_TTL_SECONDS = 60.0
 _REMOTE_PUBLIC_IP_CACHE: dict[int, tuple[float, str]] = {}
 _REMOTE_PUBLIC_IP_TTL_SECONDS = 6 * 60 * 60.0
@@ -131,11 +173,56 @@ _UNSUPPORTED_EXEC_METHODS: set[str] = set()
 _EXEC_TARGET_STYLE: dict[str, int] = {}
 
 def _rt_execute_preview(method_name: str, call_args: tuple) -> str:
-    # Note: The compact RPC summary removes long scripts from error messages while keeping the method and first arguments for diagnostics.
+    # Note: Keep shell bodies out of logs, but include the fixed argv0 tag so failures identify the operation.
     preview = ", ".join(repr(x) for x in call_args[:3])
-    if len(call_args) > 3:
+    args = list(call_args)
+    shell_index = 1 if args and args[0] == "" else 0
+    if len(args) > shell_index + 3 and args[shell_index:shell_index + 2] == ["sh", "-c"]:
+        tag = str(args[shell_index + 3] or "").strip()
+        if tag:
+            preview += f", <script>, argv0={tag!r}"
+        elif len(call_args) > 3:
+            preview += ", ..."
+    elif len(call_args) > 3:
         preview += ", ..."
     return f"{method_name}({preview})"
+
+
+def _is_rt_xml_response_parse_error(exc: Exception | str) -> bool:
+    # Note: Keep compatibility with old raw Expat messages and the normalized SCGI transport error.
+    msg = str(exc).lower()
+    return any(text in msg for text in (
+        "syntax error: line 1, column 0",
+        "no element found: line 1, column 0",
+        "invalid or incomplete xml-rpc response from rtorrent scgi",
+    ))
+
+
+def is_rtorrent_unavailable_error(exc: Exception | str) -> bool:
+    """Return True for transport/startup failures that should be presented as temporary unavailability."""
+    if isinstance(exc, (ConnectionRefusedError, ConnectionResetError, TimeoutError, socket.timeout, ConnectionError)):
+        return True
+    err_no = getattr(exc, "errno", None)
+    if err_no in {errno.ECONNREFUSED, errno.ECONNRESET, errno.ETIMEDOUT, errno.EHOSTUNREACH, errno.ENETUNREACH}:
+        return True
+    if _is_rt_xml_response_parse_error(exc):
+        return True
+    msg = str(exc).lower()
+    return any(text in msg for text in (
+        "connection refused", "connection reset", "timed out", "timeout",
+        "empty response", "empty response body", "host is unreachable",
+        "network is unreachable", "pipe creation failed", "resource temporarily unavailable",
+        "try again", "temporarily unavailable",
+        "no valid response was received from rtorrent over scgi",
+    ))
+
+
+def rtorrent_error_message(exc: Exception | str) -> str:
+    """Return a stable user-facing rTorrent error without low-level parser/socket noise."""
+    text = str(exc or "").strip()
+    if is_rtorrent_unavailable_error(exc):
+        return "No valid response was received from rTorrent over SCGI. pyTorrent will retry automatically."
+    return text or "rTorrent request failed."
 
 
 def _rt_execute_target_variants(method: str, args: tuple) -> list[tuple]:
@@ -202,6 +289,26 @@ def _rt_execute(c: ScgiRtorrentClient, method: str, *args):
             continue
         break
     raise RuntimeError("rTorrent execute failed: " + "; ".join(errors))
+
+
+def _rt_execute_capture_readonly(c: ScgiRtorrentClient, *args):
+    """Retry only malformed XML replies for execute.capture calls known to be read-only/idempotent.
+
+    This is intentionally separate from _rt_execute: some execute.capture shell snippets mutate
+    the filesystem, so a global XML-parse retry could repeat a command whose result was merely
+    lost on the wire.
+    """
+    attempts = _scgi_retry_attempts()
+    last_exc: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return _rt_execute(c, "execute.capture", *args)
+        except Exception as exc:
+            last_exc = exc
+            if attempt >= attempts or not _is_rt_xml_response_parse_error(exc):
+                raise
+            time.sleep(_scgi_retry_delay(attempt))
+    raise last_exc or RuntimeError("rTorrent execute.capture failed")
 
 
 def _is_rt_timeout_error(exc: Exception) -> bool:
@@ -302,7 +409,7 @@ def _run_remote_move(c: ScgiRtorrentClient, src: str, dst: str, poll_interval: f
     while True:
         time.sleep(max(0.25, poll_interval))
         try:
-            output = str(_rt_execute(c, "execute.capture", "sh", "-c", poll_script, "pytorrent-move-poll", status_path) or "").strip()
+            output = str(_rt_execute_capture_readonly(c, "sh", "-c", poll_script, "pytorrent-move-poll", status_path) or "").strip()
         except Exception as exc:
             # Note: During bulk moves, rTorrent may briefly not create the execute.capture pipe; polling waits and retries.
             if _is_rt_timeout_error(exc) or _is_transient_scgi_error(exc):
@@ -373,7 +480,7 @@ def _run_remote_rm(c: ScgiRtorrentClient, path: str, poll_interval: float = 2.0)
     while True:
         time.sleep(max(0.25, poll_interval))
         try:
-            output = str(_rt_execute(c, "execute.capture", "sh", "-c", poll_script, "pytorrent-rm-poll", status_path) or "").strip()
+            output = str(_rt_execute_capture_readonly(c, "sh", "-c", poll_script, "pytorrent-rm-poll", status_path) or "").strip()
         except Exception as exc:
             # Note: Remove uses the same safe polling as move, so a temporary missing pipe does not fail the whole queue.
             if _is_rt_timeout_error(exc) or _is_transient_scgi_error(exc):
@@ -412,7 +519,7 @@ def remote_can_write_directory(profile: dict, path: str) -> dict:
         'if [ -d "$parent" ] && [ -w "$parent" ]; then echo "OK\tparent writable"; else echo "NO\tparent not writable"; fi'
     )
     try:
-        output = str(_rt_execute(client_for(profile), "execute.capture", "sh", "-c", script, "pytorrent-transfer-write-check", clean) or "").strip()
+        output = str(_rt_execute_capture_readonly(client_for(profile), "sh", "-c", script, "pytorrent-transfer-write-check", clean) or "").strip()
     except Exception as exc:
         return {"ok": False, "path": clean, "error": str(exc)}
     ok = output.startswith("OK")

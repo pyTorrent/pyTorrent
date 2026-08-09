@@ -43,6 +43,8 @@ sudo bash scripts/install_pytorrent_only.sh \
 
 Optional full stack install is described below. Use it only when the server should install and configure rTorrent together with pyTorrent.
 
+Full installer documentation: [`scripts/INSTALL.md`](scripts/INSTALL.md).
+
 ## Highlights
 
 - Live torrent table with WebSocket updates and patch-based refreshes.
@@ -174,6 +176,7 @@ curl -fsSL https://raw.githubusercontent.com/pyTorrent/pyTorrent/master/scripts/
 | `RTORRENT_BASE_DIR` | `/opt/rtorrent_build` | Build/install directory for source installs. |
 | `RTORRENT_SCGI_PORT` | `5000` | Local SCGI port. |
 | `RTORRENT_TORRENT_PORT` | `51300` | Incoming BitTorrent port. |
+| `RTORRENT_VERSION` | empty | Optional version preset. `0.9.8` selects rTorrent `0.9.8` + libtorrent `0.13.8` + xmlrpc-c; `0.15.7+` selects matching rTorrent/libtorrent tags + tinyxml2. |
 | `RTORRENT_REF` | `v0.16.11` | rTorrent Git tag, branch or commit for source builds. |
 | `LIBTORRENT_REF` | `v0.16.11` | libtorrent Git tag, branch or commit for source builds. |
 | `RTORRENT_WITH_XMLRPC_C` | `0` | Set to `1` to build with classic xmlrpc-c. |

@@ -16,6 +16,7 @@ from ..config import (
     API_ALLOWED_ORIGINS,
     AUTH_BYPASS_HOSTS,
     AUTH_BYPASS_USER,
+    METRICS_PATH,
 )
 from ..db import connect, default_user_id, utcnow
 
@@ -35,12 +36,12 @@ RTORRENT_WRITE_PREFIXES = (
     "/api/cleanup",
 )
 RTORRENT_CONFIG_PREFIXES = ("/api/rtorrent-config",)
-ADMIN_PREFIXES = ("/api/auth/users", "/api/profiles")
 PROFILE_READ_PREFIXES = (
     "/api/torrents",
     "/api/torrent-stats",
     "/api/system/status",
     "/api/app/status",
+    "/api/connection/diagnostics",
     "/api/port-check",
     "/api/path",
     "/api/labels",
@@ -151,18 +152,6 @@ def is_admin(user: dict[str, Any] | None = None) -> bool:
     user = user or current_user()
     return bool(user and user.get("role") == "admin" and int(user.get("is_active") or 0))
 
-
-def _permissions(user_id: int | None = None) -> list[dict[str, Any]]:
-    if not enabled():
-        return [{"profile_id": 0, "access_level": "full"}]
-    uid = user_id or current_user_id()
-    if not uid:
-        return []
-    with connect() as conn:
-        return conn.execute(
-            "SELECT profile_id, access_level FROM user_profile_permissions WHERE user_id=?",
-            (uid,),
-        ).fetchall()
 
 
 def can_access_profile(profile_id: int | None, user_id: int | None = None) -> bool:
@@ -673,6 +662,10 @@ def install_guards(app) -> None:
 
         endpoint = request.endpoint or ""
         if endpoint == "static" or endpoint.endswith(".static"):
+            return None
+
+        # Note: Metrics use an independent IP ACL / Basic Auth policy and must not be redirected to the UI login page.
+        if request.path == METRICS_PATH:
             return None
             
         # Allow unauthenticated health checks for monitoring.

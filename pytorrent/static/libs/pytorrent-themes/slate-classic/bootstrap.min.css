@@ -1,0 +1,24 @@
+@import url("../classic-foundation.css");
+/* Slate Classic: old-school neutral controls with a restrained steel accent. */
+:root, [data-bs-theme="light"] {
+  color-scheme: light;
+  --bs-primary: #4f6f8f; --bs-primary-rgb: 79,111,143; --bs-link-color: #456987; --bs-link-hover-color: #304b63;
+  --bs-body-bg: #eceff1; --bs-body-bg-rgb: 236,239,241; --bs-body-color: #2f353a;
+  --bs-secondary-bg: #fafafa; --bs-secondary-bg-rgb: 250,250,250; --bs-tertiary-bg: #e3e7ea;
+  --bs-border-color: #b9c0c6; --bs-secondary-color: #68737d; --bs-primary-bg-subtle: #e3ebf2; --bs-primary-text-emphasis: #39536c;
+  --torrent-progress-complete: #4f9a67; --pytorrent-page-bg: linear-gradient(#dfe3e6, #f4f5f6 130px, #eceff1);
+  --pytorrent-shell-shadow: 0 3px 13px rgba(38,48,58,.18); --pytorrent-topbar-bg: linear-gradient(#fbfbfb, #e8ebed);
+  --pytorrent-sidebar-bg: #eef1f3; --pytorrent-statusbar-bg: #e1e5e8; --pytorrent-surface-bg: #fafafa;
+  --pytorrent-panel-border: #b9c0c6; --pytorrent-table-header-bg: #e7ebee; --pytorrent-surface-radius: .3rem; --pytorrent-backdrop-filter: none;
+}
+[data-bs-theme="dark"] {
+  color-scheme: dark;
+  --bs-primary: #7fa8cd; --bs-primary-rgb: 127,168,205; --bs-link-color: #8eb8dc; --bs-link-hover-color: #c2dcf2;
+  --bs-body-bg: #20262b; --bs-body-bg-rgb: 32,38,43; --bs-body-color: #e0e5e8;
+  --bs-secondary-bg: #2d343a; --bs-secondary-bg-rgb: 45,52,58; --bs-tertiary-bg: #262d32;
+  --bs-border-color: #4c565f; --bs-secondary-color: #aeb8bf; --bs-primary-bg-subtle: #2d455a; --bs-primary-text-emphasis: #c1dcf3;
+  --torrent-progress-complete: #68b47e; --pytorrent-page-bg: linear-gradient(#181d21, #252c31 130px, #20262b);
+  --pytorrent-shell-shadow: 0 4px 18px rgba(0,0,0,.4); --pytorrent-topbar-bg: linear-gradient(#343c42, #2b3238);
+  --pytorrent-sidebar-bg: #272e34; --pytorrent-statusbar-bg: #252c31; --pytorrent-surface-bg: #2d343a;
+  --pytorrent-panel-border: #4c565f; --pytorrent-table-header-bg: #323a40; --pytorrent-surface-radius: .3rem; --pytorrent-backdrop-filter: none;
+}

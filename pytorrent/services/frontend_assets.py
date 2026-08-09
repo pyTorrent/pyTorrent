@@ -53,6 +53,18 @@ PYTORRENT_APP_THEMES = {
     "nord": "pyTorrent Nord",
     "crimson": "pyTorrent Crimson",
     "sky": "pyTorrent Sky",
+    "aurora": "pyTorrent Aurora",
+    "obsidian": "pyTorrent Obsidian",
+    "sakura": "pyTorrent Sakura",
+    "cobalt": "pyTorrent Cobalt",
+    "sandstone": "pyTorrent Sandstone",
+    "mint-glass": "pyTorrent Mint Glass",
+    "heritage": "pyTorrent Heritage",
+    "slate-classic": "pyTorrent Slate Classic",
+    "paper": "pyTorrent Paper",
+    "violet": "pyTorrent Violet",
+    "ember": "pyTorrent Ember",
+    "harbor": "pyTorrent Harbor",
     "bootstrap22": "Bootstrap 2 Classic",
     "bootstrap22-inverse": "Bootstrap 2 Inverse",
     "bootstrap3": "Bootstrap 3 Glyph",
@@ -157,6 +169,8 @@ def bootstrap_css_path(theme: str | None = None) -> str:
 def required_offline_paths() -> list[Path]:
     paths = [LIBS_DIR.parent / item["local"] for item in STATIC_ASSETS.values()]
     paths.extend(LIBS_DIR.parent / bootstrap_css_asset(theme)["local"] for theme in BOOTSTRAP_THEMES)
+    # Note: Modern custom themes share one local foundation file to avoid duplicated component rules.
+    paths.append(LIBS_DIR / "pytorrent-themes/modern-foundation.css")
     return paths
 
 

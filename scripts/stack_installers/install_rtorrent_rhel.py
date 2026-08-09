@@ -11,14 +11,18 @@ import threading
 import time
 from pathlib import Path
 
+from rtorrent_versions import (
+    DEFAULT_LIBTORRENT_REF,
+    DEFAULT_RTORRENT_REF,
+    DEFAULT_XMLRPC_REF,
+    VersionSelectionError,
+    resolve_build_selection,
+)
+
 DEFAULT_USER = "rtorrent"
 DEFAULT_GROUP = "rtorrent"
 DEFAULT_HOME = "/home/rtorrent"
 DEFAULT_BASE_DIR = "/opt/rtorrent_build"
-DEFAULT_LIBTORRENT_REF = "v0.16.11"
-DEFAULT_RTORRENT_REF = "v0.16.11"
-DEFAULT_XMLRPC_REF = "latest-stable"
-DEFAULT_RPC_BACKEND = "tinyxml2"
 DEFAULT_CARES_REF = "1.34.6"
 DEFAULT_CURL_REF = "8.19.0"
 DEFAULT_SERVICE_PATH = "/etc/systemd/system/rtorrent@.service"
@@ -648,7 +652,12 @@ def rtorrent_bind_address_directive(rtorrent_ref, rtorrent_version=None):
     return "network.bind_address.ipv4.set"
 
 def build_rtorrent_config_content(username, scgi_port, torrent_port, bind_address_directive, scgi_unix_socket=None):
-    scgi_line = f"network.scgi.open_local = {scgi_unix_socket}" if scgi_unix_socket else f"{scgi_line}"
+    # Note: Build the TCP directive explicitly; the previous fallback referenced scgi_line before assignment.
+    scgi_line = (
+        f"network.scgi.open_local = {scgi_unix_socket}"
+        if scgi_unix_socket
+        else f"network.scgi.open_port = 127.0.0.1:{scgi_port}"
+    )
     return f"""
 ## https://github.com/pyTorrent/pyTorrent
 
@@ -866,12 +875,13 @@ def verify_install(base_dir, rtorrent_install, libtorrent_install, rpc_backend, 
 
 
 def build_parser():
-    parser = argparse.ArgumentParser(description="RHEL-compatible installer for libtorrent + rTorrent under /opt. RPC defaults to tinyxml2; xmlrpc-c is optional.")
+    parser = argparse.ArgumentParser(description="RHEL-compatible installer for libtorrent + rTorrent under /opt. Version presets select compatible libtorrent and XML-RPC backends.")
     parser.add_argument("--base-dir", default=DEFAULT_BASE_DIR, help=f"Base build/install directory (default: {DEFAULT_BASE_DIR})")
-    parser.add_argument("--libtorrent-ref", default=DEFAULT_LIBTORRENT_REF, help=f"Git branch, tag or commit for libtorrent (default: {DEFAULT_LIBTORRENT_REF})")
-    parser.add_argument("--rtorrent-ref", default=DEFAULT_RTORRENT_REF, help=f"Git branch, tag or commit for rtorrent (default: {DEFAULT_RTORRENT_REF})")
-    parser.add_argument("--xmlrpc-ref", default=DEFAULT_XMLRPC_REF, help="xmlrpc-c source version or URL. Used only with --with-xmlrpc-c (default: latest-stable)")
-    parser.add_argument("--with-xmlrpc-c", action="store_true", help="Build rTorrent with classic xmlrpc-c instead of the default tinyxml2 XML-RPC backend.")
+    parser.add_argument("--version", help="rTorrent version preset. 0.9.8 selects libtorrent 0.13.8 + xmlrpc-c; 0.15.7+ uses matching tags + tinyxml2.")
+    parser.add_argument("--libtorrent-ref", default=None, help=f"Git branch, tag or commit for libtorrent (default: inferred, otherwise {DEFAULT_LIBTORRENT_REF})")
+    parser.add_argument("--rtorrent-ref", default=None, help=f"Git branch, tag or commit for rtorrent (default: {DEFAULT_RTORRENT_REF})")
+    parser.add_argument("--xmlrpc-ref", default=None, help=f"xmlrpc-c source version or URL (default: {DEFAULT_XMLRPC_REF})")
+    parser.add_argument("--with-xmlrpc-c", action="store_true", help="Force classic xmlrpc-c. Legacy rTorrent refs below 0.15.7 select it automatically.")
     parser.add_argument("--cares-ref", default=DEFAULT_CARES_REF, help=f"c-ares release version (default: {DEFAULT_CARES_REF})")
     parser.add_argument("--curl-ref", default=DEFAULT_CURL_REF, help=f"curl release version (default: {DEFAULT_CURL_REF})")
     parser.add_argument("--user", default=DEFAULT_USER, help=f"System user for the service (default: {DEFAULT_USER})")
@@ -895,6 +905,21 @@ def build_parser():
 def main():
     parser = build_parser()
     args = parser.parse_args()
+    try:
+        selection = resolve_build_selection(
+            version=args.version,
+            rtorrent_ref=args.rtorrent_ref,
+            libtorrent_ref=args.libtorrent_ref,
+            xmlrpc_ref=args.xmlrpc_ref,
+            force_xmlrpc_c=args.with_xmlrpc_c,
+        )
+    except VersionSelectionError as exc:
+        raise InstallError(str(exc)) from exc
+    # Note: Resolve the dependency tuple once so build, verification and summary always use the same version/backend selection.
+    args.rtorrent_ref = selection.rtorrent_ref
+    args.libtorrent_ref = selection.libtorrent_ref
+    args.xmlrpc_ref = selection.xmlrpc_ref
+    args.rpc_backend = selection.rpc_backend
     args.use_cares = resolve_optional_build_mode(args)
 
     require_root()
@@ -909,8 +934,6 @@ def main():
         packages.extend(["cmake", "libpsl-devel", "brotli-devel", "libzstd-devel"])
 
     print("This script will:")
-    args.rpc_backend = "xmlrpc-c" if args.with_xmlrpc_c else DEFAULT_RPC_BACKEND
-
     print(f"  - use rTorrent RPC backend: {args.rpc_backend}")
     if args.rpc_backend == "xmlrpc-c":
         print(f"  - build xmlrpc-c from '{args.xmlrpc_ref}'")

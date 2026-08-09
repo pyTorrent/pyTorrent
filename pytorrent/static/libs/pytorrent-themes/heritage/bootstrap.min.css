@@ -1,0 +1,34 @@
+@import url("../classic-foundation.css");
+/* Heritage: polished Bootstrap-era blue with compact, lightly beveled surfaces. */
+:root, [data-bs-theme="light"] {
+  color-scheme: light;
+  --bs-primary: #337ab7; --bs-primary-rgb: 51,122,183;
+  --bs-link-color: #337ab7; --bs-link-hover-color: #23527c;
+  --bs-body-bg: #f3f3f3; --bs-body-bg-rgb: 243,243,243; --bs-body-color: #333;
+  --bs-secondary-bg: #fff; --bs-secondary-bg-rgb: 255,255,255; --bs-tertiary-bg: #f5f5f5;
+  --bs-border-color: #ccc; --bs-secondary-color: #666;
+  --bs-primary-bg-subtle: #e8f2fb; --bs-primary-text-emphasis: #24557d;
+  --torrent-progress-complete: #5cb85c;
+  --pytorrent-page-bg: linear-gradient(#ececec, #f8f8f8 140px, #f3f3f3);
+  --pytorrent-shell-shadow: 0 3px 14px rgba(0,0,0,.16);
+  --pytorrent-topbar-bg: linear-gradient(#fff, #f4f4f4);
+  --pytorrent-sidebar-bg: #f7f7f7; --pytorrent-statusbar-bg: #eee;
+  --pytorrent-surface-bg: #fff; --pytorrent-panel-border: #ccc; --pytorrent-table-header-bg: #f5f5f5;
+  --pytorrent-surface-radius: .35rem; --pytorrent-backdrop-filter: none;
+}
+[data-bs-theme="dark"] {
+  color-scheme: dark;
+  --bs-primary: #5aa2d8; --bs-primary-rgb: 90,162,216;
+  --bs-link-color: #74b6e5; --bs-link-hover-color: #aad5f4;
+  --bs-body-bg: #1d2227; --bs-body-bg-rgb: 29,34,39; --bs-body-color: #e8e8e8;
+  --bs-secondary-bg: #2a3036; --bs-secondary-bg-rgb: 42,48,54; --bs-tertiary-bg: #23292f;
+  --bs-border-color: #48515a; --bs-secondary-color: #b8c0c8;
+  --bs-primary-bg-subtle: #243d50; --bs-primary-text-emphasis: #a7d5f5;
+  --torrent-progress-complete: #67c567;
+  --pytorrent-page-bg: linear-gradient(#171b1f, #22282e 150px, #1d2227);
+  --pytorrent-shell-shadow: 0 4px 18px rgba(0,0,0,.42);
+  --pytorrent-topbar-bg: linear-gradient(#323940, #292f35);
+  --pytorrent-sidebar-bg: #252b31; --pytorrent-statusbar-bg: #23292f;
+  --pytorrent-surface-bg: #2a3036; --pytorrent-panel-border: #48515a; --pytorrent-table-header-bg: #30373e;
+  --pytorrent-surface-radius: .35rem; --pytorrent-backdrop-filter: none;
+}

@@ -1,0 +1,24 @@
+@import url("../modern-foundation.css");
+/* Violet: clean product-style purple with quiet neutral surfaces. */
+:root, [data-bs-theme="light"] {
+  color-scheme: light;
+  --bs-primary: #7654d8; --bs-primary-rgb: 118,84,216; --bs-link-color: #6846c6; --bs-link-hover-color: #4d3299;
+  --bs-body-bg: #f7f6fb; --bs-body-bg-rgb: 247,246,251; --bs-body-color: #282532;
+  --bs-secondary-bg: #fff; --bs-secondary-bg-rgb: 255,255,255; --bs-tertiary-bg: #efedf6;
+  --bs-border-color: #ddd8ea; --bs-secondary-color: #736d80; --bs-primary-bg-subtle: #eee9ff; --bs-primary-text-emphasis: #5437ad;
+  --torrent-progress-complete: #35a47c; --pytorrent-page-bg: radial-gradient(circle at 90% 0%, rgba(118,84,216,.1), transparent 28%), #f7f6fb;
+  --pytorrent-shell-shadow: 0 18px 48px rgba(54,45,83,.15); --pytorrent-topbar-bg: rgba(255,255,255,.94); --pytorrent-sidebar-bg: #f3f1f8;
+  --pytorrent-statusbar-bg: #efedf6; --pytorrent-surface-bg: #fff; --pytorrent-panel-border: #ddd8ea; --pytorrent-table-header-bg: #f1eff7;
+  --pytorrent-surface-radius: .75rem; --pytorrent-backdrop-filter: blur(8px);
+}
+[data-bs-theme="dark"] {
+  color-scheme: dark;
+  --bs-primary: #a68cf0; --bs-primary-rgb: 166,140,240; --bs-link-color: #b29af4; --bs-link-hover-color: #dfd5ff;
+  --bs-body-bg: #111016; --bs-body-bg-rgb: 17,16,22; --bs-body-color: #e8e5ef;
+  --bs-secondary-bg: #1c1a24; --bs-secondary-bg-rgb: 28,26,36; --bs-tertiary-bg: #25222f;
+  --bs-border-color: #3d384a; --bs-secondary-color: #aaa4b7; --bs-primary-bg-subtle: #30264d; --bs-primary-text-emphasis: #d6caff;
+  --torrent-progress-complete: #57c59c; --pytorrent-page-bg: radial-gradient(circle at 90% 0%, rgba(166,140,240,.14), transparent 30%), #111016;
+  --pytorrent-shell-shadow: 0 22px 58px rgba(0,0,0,.52); --pytorrent-topbar-bg: rgba(29,27,37,.94); --pytorrent-sidebar-bg: #18161e;
+  --pytorrent-statusbar-bg: #201e29; --pytorrent-surface-bg: #1c1a24; --pytorrent-panel-border: #3d384a; --pytorrent-table-header-bg: #24212d;
+  --pytorrent-surface-radius: .75rem; --pytorrent-backdrop-filter: blur(8px);
+}

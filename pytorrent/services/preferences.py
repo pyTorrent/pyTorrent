@@ -355,7 +355,7 @@ def save_disk_monitor_preferences(profile_id: int | None, data: dict, user_id: i
     return clean
 
 
-PROFILE_PREFERENCE_COLUMNS = {
+PROFILE_PREFERENCE_COLUMNS = frozenset({
     "table_columns_json",
     "torrent_sort_json",
     "active_filter",
@@ -363,7 +363,11 @@ PROFILE_PREFERENCE_COLUMNS = {
     "port_check_enabled",
     "tracker_favicons_enabled",
     "reverse_dns_enabled",
-}
+    "sidebar_labels_expanded",
+    "sidebar_shortcuts_expanded",
+    "system_usage_chart_mode",
+    "system_usage_chart_expanded",
+})
 
 
 def _seed_profile_preferences(conn, user_id: int, profile_id: int) -> dict:
@@ -372,21 +376,23 @@ def _seed_profile_preferences(conn, user_id: int, profile_id: int) -> dict:
     row = conn.execute("SELECT * FROM profile_preferences WHERE user_id=? AND profile_id=?", (user_id, profile_id)).fetchone()
     if row:
         return dict(row)
-    # Note: First profile preference row is seeded from legacy user-level values so upgrades keep the current layout/filter behavior.
+    # Note: Preserve legacy values during upgrades; brand-new profile preferences start from the recommended layout and enabled helpers.
     conn.execute(
-        "INSERT INTO profile_preferences(user_id,profile_id,table_columns_json,torrent_sort_json,active_filter,peers_refresh_seconds,port_check_enabled,tracker_favicons_enabled,reverse_dns_enabled,sidebar_labels_expanded,sidebar_shortcuts_expanded,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO profile_preferences(user_id,profile_id,table_columns_json,torrent_sort_json,active_filter,peers_refresh_seconds,port_check_enabled,tracker_favicons_enabled,reverse_dns_enabled,sidebar_labels_expanded,sidebar_shortcuts_expanded,system_usage_chart_mode,system_usage_chart_expanded,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (
             user_id,
             profile_id,
-            legacy.get("table_columns_json"),
+            legacy.get("table_columns_json") or recommended_table_columns_json(),
             legacy.get("torrent_sort_json"),
             legacy.get("active_filter") or "all",
             int(legacy.get("peers_refresh_seconds") or 0),
             int(legacy.get("port_check_enabled") or 0),
-            int(legacy.get("tracker_favicons_enabled") or 0),
-            int(legacy.get("reverse_dns_enabled") or 0),
+            int(legacy["tracker_favicons_enabled"]) if legacy.get("tracker_favicons_enabled") is not None else 1,
+            int(legacy["reverse_dns_enabled"]) if legacy.get("reverse_dns_enabled") is not None else 1,
             int(legacy.get("sidebar_labels_expanded") or 0),
             int(legacy.get("sidebar_shortcuts_expanded") or 0),
+            str(legacy.get("system_usage_chart_mode") or "combined"),
+            int(legacy.get("system_usage_chart_expanded") or 0),
             now,
             now,
         ),
@@ -402,7 +408,7 @@ def get_profile_preferences(user_id: int, profile_id: int | None) -> dict:
 
 
 def save_profile_preferences(user_id: int, profile_id: int | None, data: dict) -> None:
-    if not profile_id:
+    if not profile_id or not any(key in data for key in PROFILE_PREFERENCE_COLUMNS):
         return
     profile_id = int(profile_id)
     now = utcnow()
@@ -427,6 +433,13 @@ def save_profile_preferences(user_id: int, profile_id: int | None, data: dict) -
         if data.get("sidebar_shortcuts_expanded") is not None:
             # Note: Shortcut help visibility is stored with profile preferences to survive refreshes.
             updates["sidebar_shortcuts_expanded"] = 1 if data.get("sidebar_shortcuts_expanded") else 0
+        if data.get("system_usage_chart_mode") is not None:
+            # Note: CPU/RAM chart layout is profile-scoped so each server view can keep its preferred footer density.
+            mode = str(data.get("system_usage_chart_mode") or "combined").strip().lower()
+            updates["system_usage_chart_mode"] = mode if mode in {"combined", "split"} else "combined"
+        if data.get("system_usage_chart_expanded") is not None:
+            # Note: Remember whether the larger CPU/RAM panel should reopen for this user/profile pair.
+            updates["system_usage_chart_expanded"] = 1 if data.get("system_usage_chart_expanded") else 0
         if data.get("torrent_sort_json") is not None:
             value = data.get("torrent_sort_json") if isinstance(data.get("torrent_sort_json"), str) else json.dumps(data.get("torrent_sort_json"))
             parsed = json.loads(value or "{}")
@@ -453,8 +466,8 @@ def save_profile_preferences(user_id: int, profile_id: int | None, data: dict) -
             return
         merged = {**current, **updates}
         conn.execute(
-            "INSERT INTO profile_preferences(user_id,profile_id,table_columns_json,torrent_sort_json,active_filter,peers_refresh_seconds,port_check_enabled,tracker_favicons_enabled,reverse_dns_enabled,sidebar_labels_expanded,sidebar_shortcuts_expanded,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) "
-            "ON CONFLICT(user_id,profile_id) DO UPDATE SET table_columns_json=excluded.table_columns_json, torrent_sort_json=excluded.torrent_sort_json, active_filter=excluded.active_filter, peers_refresh_seconds=excluded.peers_refresh_seconds, port_check_enabled=excluded.port_check_enabled, tracker_favicons_enabled=excluded.tracker_favicons_enabled, reverse_dns_enabled=excluded.reverse_dns_enabled, sidebar_labels_expanded=excluded.sidebar_labels_expanded, sidebar_shortcuts_expanded=excluded.sidebar_shortcuts_expanded, updated_at=excluded.updated_at",
+            "INSERT INTO profile_preferences(user_id,profile_id,table_columns_json,torrent_sort_json,active_filter,peers_refresh_seconds,port_check_enabled,tracker_favicons_enabled,reverse_dns_enabled,sidebar_labels_expanded,sidebar_shortcuts_expanded,system_usage_chart_mode,system_usage_chart_expanded,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+            "ON CONFLICT(user_id,profile_id) DO UPDATE SET table_columns_json=excluded.table_columns_json, torrent_sort_json=excluded.torrent_sort_json, active_filter=excluded.active_filter, peers_refresh_seconds=excluded.peers_refresh_seconds, port_check_enabled=excluded.port_check_enabled, tracker_favicons_enabled=excluded.tracker_favicons_enabled, reverse_dns_enabled=excluded.reverse_dns_enabled, sidebar_labels_expanded=excluded.sidebar_labels_expanded, sidebar_shortcuts_expanded=excluded.sidebar_shortcuts_expanded, system_usage_chart_mode=excluded.system_usage_chart_mode, system_usage_chart_expanded=excluded.system_usage_chart_expanded, updated_at=excluded.updated_at",
             (
                 user_id,
                 profile_id,
@@ -467,6 +480,8 @@ def save_profile_preferences(user_id: int, profile_id: int | None, data: dict) -
                 int(merged.get("reverse_dns_enabled") or 0),
                 int(merged.get("sidebar_labels_expanded") or 0),
                 int(merged.get("sidebar_shortcuts_expanded") or 0),
+                str(merged.get("system_usage_chart_mode") or "combined"),
+                int(merged.get("system_usage_chart_expanded") or 0),
                 merged.get("created_at") or now,
                 now,
             ),
@@ -563,16 +578,17 @@ def save_preferences(data: dict, user_id: int | None = None, profile_id: int | N
         if easter_egg_click_image_url is not None:
             conn.execute("UPDATE user_preferences SET easter_egg_click_image_url=?, updated_at=? WHERE user_id=?", (effective_easter_click_url, now, user_id))
         if interface_scale is not None:
-            scale = int(interface_scale or 100)
-            if scale < 80: scale = 80
+            # Note: Keep backend validation aligned with the UI so the new 70% minimum persists after saving.
+            scale = int(interface_scale or 80)
+            if scale < 70: scale = 70
             if scale > 140: scale = 140
             conn.execute("UPDATE user_preferences SET interface_scale=?, updated_at=? WHERE user_id=?", (scale, now, user_id))
         if torrent_list_font_size is not None:
             # Note: Torrent list font size is clamped so dense rows cannot break the virtualized list layout.
             try:
-                list_font_size = int(torrent_list_font_size or 13)
+                list_font_size = int(torrent_list_font_size or 12)
             except (TypeError, ValueError):
-                list_font_size = 13
+                list_font_size = 12
             if list_font_size < 11: list_font_size = 11
             if list_font_size > 16: list_font_size = 16
             conn.execute("UPDATE user_preferences SET torrent_list_font_size=?, updated_at=? WHERE user_id=?", (list_font_size, now, user_id))

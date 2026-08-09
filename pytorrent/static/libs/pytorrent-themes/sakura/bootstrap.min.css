@@ -1,0 +1,60 @@
+@import url("../modern-foundation.css");
+/* Sakura: soft editorial rose with plum contrast, restrained in both modes. */
+:root, [data-bs-theme="light"] {
+  color-scheme: light;
+  --bs-primary: #b54773;
+  --bs-primary-rgb: 181,71,115;
+  --bs-link-color: #a43c67;
+  --bs-link-color-rgb: 164,60,103;
+  --bs-link-hover-color: #7f2d50;
+  --bs-body-bg: #fff8fa;
+  --bs-body-bg-rgb: 255,248,250;
+  --bs-body-color: #2f1d26;
+  --bs-secondary-bg: #fffdfd;
+  --bs-secondary-bg-rgb: 255,253,253;
+  --bs-tertiary-bg: #faedf2;
+  --bs-border-color: #ead2dc;
+  --bs-secondary-color: #80636f;
+  --bs-primary-bg-subtle: #f7e0e9;
+  --bs-primary-text-emphasis: #7e2f50;
+  --torrent-progress-complete: #319b72;
+  --pytorrent-page-bg: radial-gradient(circle at 12% 0%, rgba(218,103,147,.13), transparent 28%), #fff8fa;
+  --pytorrent-shell-shadow: 0 18px 48px rgba(92,44,63,.14);
+  --pytorrent-topbar-bg: rgba(255,253,253,.94);
+  --pytorrent-sidebar-bg: #fff8fb;
+  --pytorrent-statusbar-bg: #f9edf2;
+  --pytorrent-surface-bg: rgba(255,253,253,.82);
+  --pytorrent-panel-border: #ead2dc;
+  --pytorrent-table-header-bg: #faedf2;
+  --pytorrent-surface-radius: 1rem;
+  --pytorrent-backdrop-filter: blur(10px);
+}
+[data-bs-theme="dark"] {
+  color-scheme: dark;
+  --bs-primary: #f08bb2;
+  --bs-primary-rgb: 240,139,178;
+  --bs-link-color: #f09bbb;
+  --bs-link-color-rgb: 240,155,187;
+  --bs-link-hover-color: #ffd0e1;
+  --bs-body-bg: #130b10;
+  --bs-body-bg-rgb: 19,11,16;
+  --bs-body-color: #f0dfe7;
+  --bs-secondary-bg: #21131a;
+  --bs-secondary-bg-rgb: 33,19,26;
+  --bs-tertiary-bg: #2b1821;
+  --bs-border-color: #4a2937;
+  --bs-secondary-color: #bea1ad;
+  --bs-primary-bg-subtle: #431c2d;
+  --bs-primary-text-emphasis: #ffd0e1;
+  --torrent-progress-complete: #46d09a;
+  --pytorrent-page-bg: radial-gradient(circle at 10% 0%, rgba(240,139,178,.14), transparent 30%), #130b10;
+  --pytorrent-shell-shadow: 0 22px 62px rgba(0,0,0,.58);
+  --pytorrent-topbar-bg: rgba(31,17,24,.92);
+  --pytorrent-sidebar-bg: #190f15;
+  --pytorrent-statusbar-bg: #24151d;
+  --pytorrent-surface-bg: rgba(34,19,27,.82);
+  --pytorrent-panel-border: #482937;
+  --pytorrent-table-header-bg: #281720;
+  --pytorrent-surface-radius: 1rem;
+  --pytorrent-backdrop-filter: blur(10px);
+}

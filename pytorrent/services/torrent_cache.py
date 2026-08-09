@@ -3,9 +3,8 @@ from threading import RLock
 from time import time
 from . import rtorrent, operation_logs
 
-_LIVE_KEYS = {"state", "active", "paused", "complete", "completed_bytes", "progress", "ratio", "up_rate", "up_rate_h", "down_rate", "down_rate_h", "eta_seconds", "eta_h", "up_total", "up_total_h", "down_total", "down_total_h", "to_download", "to_download_h", "peers", "seeds", "message", "status", "post_check", "hashing"}
-_VOLATILE = {"down_rate", "down_rate_h", "up_rate", "up_rate_h", "progress", "completed_bytes", "peers", "seeds", "ratio", "state", "status", "message", "down_total", "down_total_h", "to_download", "to_download_h", "up_total", "up_total_h"}
-
+# Note: Queued is a live filter state, so it must be patched together with the other volatile torrent fields.
+_LIVE_KEYS = {"state", "active", "paused", "queued", "complete", "completed_bytes", "progress", "ratio", "up_rate", "up_rate_h", "down_rate", "down_rate_h", "eta_seconds", "eta_h", "up_total", "up_total_h", "down_total", "down_total_h", "to_download", "to_download_h", "peers", "seeds", "message", "status", "post_check", "hashing"}
 
 class TorrentCache:
     def __init__(self):
@@ -84,9 +83,10 @@ class TorrentCache:
                 operation_logs.record_cache_diff(profile_id, [], [], updated, old_for_logs)
             return {"ok": True, "profile_id": profile_id, "updated": updated, "missing": missing, "unknown": unknown, "requires_full_refresh": bool(missing or unknown)}
         except Exception as exc:
+            error = rtorrent.rtorrent_error_message(exc)
             with self._lock:
-                self._errors[profile_id] = str(exc)
-            return {"ok": False, "profile_id": profile_id, "error": str(exc), "updated": [], "missing": [], "unknown": [], "requires_full_refresh": False}
+                self._errors[profile_id] = error
+            return {"ok": False, "profile_id": profile_id, "error": error, "updated": [], "missing": [], "unknown": [], "requires_full_refresh": False}
 
     def refresh(self, profile: dict) -> dict:
         profile_id = int(profile["id"])
@@ -117,9 +117,10 @@ class TorrentCache:
                 operation_logs.record_cache_diff(profile_id, added, removed, updated, old)
             return {"ok": True, "profile_id": profile_id, "added": added, "updated": updated, "removed": removed, "post_check_changes": post_check_changes}
         except Exception as exc:
+            error = rtorrent.rtorrent_error_message(exc)
             with self._lock:
-                self._errors[profile_id] = str(exc)
-            return {"ok": False, "profile_id": profile_id, "error": str(exc), "added": [], "updated": [], "removed": []}
+                self._errors[profile_id] = error
+            return {"ok": False, "profile_id": profile_id, "error": error, "added": [], "updated": [], "removed": []}
 
 
 torrent_cache = TorrentCache()

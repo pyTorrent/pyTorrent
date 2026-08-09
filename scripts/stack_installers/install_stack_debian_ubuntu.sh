@@ -28,6 +28,7 @@ RTORRENT_BASE_DIR="${RTORRENT_BASE_DIR:-/opt/rtorrent_build}"
 RTORRENT_SCGI_PORT="${RTORRENT_SCGI_PORT:-5000}"
 RTORRENT_TORRENT_PORT="${RTORRENT_TORRENT_PORT:-51300}"
 RTORRENT_REF="${RTORRENT_REF:-v0.16.11}"
+RTORRENT_VERSION="${RTORRENT_VERSION:-}"
 LIBTORRENT_REF="${LIBTORRENT_REF:-v0.16.11}"
 PYTORRENT_APP_DIR="${PYTORRENT_APP_DIR:-/opt/pytorrent}"
 PYTORRENT_PORT="${PYTORRENT_PORT:-8090}"
@@ -45,6 +46,10 @@ PYTORRENT_RTORRENT_SCGI_URL="${PYTORRENT_RTORRENT_SCGI_URL:-scgi://127.0.0.1:${R
 RTORRENT_EXTRA_ARGS=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --version)
+            RTORRENT_VERSION="$2"
+            shift 2
+            ;;
         --with-xmlrpc-c)
             RTORRENT_EXTRA_ARGS+=(--with-xmlrpc-c)
             shift
@@ -68,6 +73,10 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+# Note: A version preset is forwarded to the source installer, which selects the compatible libtorrent/RPC backend tuple.
+if [[ -n "${RTORRENT_VERSION}" ]]; then
+    RTORRENT_EXTRA_ARGS+=(--version "${RTORRENT_VERSION}")
+fi
 if [[ "${RTORRENT_WITH_XMLRPC_C:-0}" == "1" ]]; then
     RTORRENT_EXTRA_ARGS+=(--with-xmlrpc-c)
 fi

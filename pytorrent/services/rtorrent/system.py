@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Any
 from threading import RLock
 import time
+from urllib.parse import urlparse
 from .client import *
 from .config import default_download_path
 from ...utils import human_size
@@ -546,34 +547,60 @@ def remote_public_ip(profile: dict, force: bool = False) -> str:
     return value
 
 
+def _remote_usage_host_key(profile: dict) -> str:
+    # Note: CPU/RAM describe the host, so profiles using different SCGI ports on the same hostname share one sample.
+    parsed = urlparse(str(profile.get("scgi_url") or ""))
+    host = str(parsed.hostname or "").strip().lower().rstrip(".")
+    return host or f"profile-{int(profile.get('id') or 0)}"
+
+
+def _remote_usage_host_lock(host_key: str):
+    with _REMOTE_USAGE_CACHE_LOCK:
+        lock = _REMOTE_USAGE_HOST_LOCKS.get(host_key)
+        if lock is None:
+            lock = RLock()
+            _REMOTE_USAGE_HOST_LOCKS[host_key] = lock
+        return lock
+
+
 def remote_system_usage(profile: dict, force: bool = False) -> dict:
     profile_id = int(profile.get("id") or 0)
-    now = time.monotonic()
-    cached = _REMOTE_USAGE_CACHE.get(profile_id)
-    if cached and not force and now - cached[0] < _REMOTE_USAGE_TTL_SECONDS:
-        usage = dict(cached[1])
-        usage["cached"] = True
-        return usage
-    script = (
-        'read cpu user nice system idle iowait irq softirq steal guest guest_nice < /proc/stat; '
-        'total1=$((user+nice+system+idle+iowait+irq+softirq+steal)); idle1=$((idle+iowait)); '
-        'sleep 1; '
-        'read cpu user nice system idle iowait irq softirq steal guest guest_nice < /proc/stat; '
-        'total2=$((user+nice+system+idle+iowait+irq+softirq+steal)); idle2=$((idle+iowait)); '
-        'dt=$((total2-total1)); di=$((idle2-idle1)); '
-        'cpu_pct=$(awk -v dt="$dt" -v di="$di" "BEGIN { if (dt > 0) printf \"%.1f\", (dt-di)*100/dt; else printf \"0.0\" }"); '
-        "mem_total=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo); "
-        "mem_avail=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo); "
-        'ram_pct=$(awk -v t="$mem_total" -v a="$mem_avail" "BEGIN { if (t > 0) printf \"%.1f\", (t-a)*100/t; else printf \"0.0\" }"); '
-        'printf "%s %s" "$cpu_pct" "$ram_pct"'
-    )
-    output = str(_rt_execute(client_for(profile), "execute.capture", "sh", "-c", script) or "").strip()
-    parts = output.split()
-    if len(parts) < 2:
-        raise RuntimeError(f"Cannot read remote CPU/RAM usage: {output}")
-    usage = {"cpu": float(parts[0]), "ram": float(parts[1]), "source": "rtorrent-remote", "usage_source": "rtorrent-remote", "cached": False}
-    _REMOTE_USAGE_CACHE[profile_id] = (now, usage)
-    return dict(usage)
+    host_key = _remote_usage_host_key(profile)
+    if profile_id:
+        with _REMOTE_USAGE_CACHE_LOCK:
+            _REMOTE_USAGE_PROFILE_HOSTS[profile_id] = host_key
+
+    host_lock = _remote_usage_host_lock(host_key)
+    with host_lock:
+        now = time.monotonic()
+        with _REMOTE_USAGE_CACHE_LOCK:
+            cached = _REMOTE_USAGE_CACHE.get(host_key)
+        if cached and not force and now - cached[0] < _REMOTE_USAGE_TTL_SECONDS:
+            usage = dict(cached[1])
+            usage["cached"] = True
+            return usage
+
+        script = (
+            'read cpu user nice system idle iowait irq softirq steal guest guest_nice < /proc/stat; '
+            'total1=$((user+nice+system+idle+iowait+irq+softirq+steal)); idle1=$((idle+iowait)); '
+            'sleep 1; '
+            'read cpu user nice system idle iowait irq softirq steal guest guest_nice < /proc/stat; '
+            'total2=$((user+nice+system+idle+iowait+irq+softirq+steal)); idle2=$((idle+iowait)); '
+            'dt=$((total2-total1)); di=$((idle2-idle1)); '
+            'cpu_pct=$(awk -v dt="$dt" -v di="$di" "BEGIN { if (dt > 0) printf \"%.1f\", (dt-di)*100/dt; else printf \"0.0\" }"); '
+            "mem_total=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo); "
+            "mem_avail=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo); "
+            'ram_pct=$(awk -v t="$mem_total" -v a="$mem_avail" "BEGIN { if (t > 0) printf \"%.1f\", (t-a)*100/t; else printf \"0.0\" }"); '
+            'printf "%s %s" "$cpu_pct" "$ram_pct"'
+        )
+        output = str(_rt_execute(client_for(profile), "execute.capture", "sh", "-c", script) or "").strip()
+        parts = output.split()
+        if len(parts) < 2:
+            raise RuntimeError(f"Cannot read remote CPU/RAM usage: {output}")
+        usage = {"cpu": float(parts[0]), "ram": float(parts[1]), "source": "rtorrent-remote", "usage_source": "rtorrent-remote", "cached": False}
+        with _REMOTE_USAGE_CACHE_LOCK:
+            _REMOTE_USAGE_CACHE[host_key] = (now, usage)
+        return dict(usage)
 
 
 def _usage_dict(total: int, used: int, free: int) -> dict:
@@ -791,8 +818,10 @@ def clear_profile_runtime_caches(profile_id: int) -> dict[str, int]:
         if any(str(key).startswith(prefix) for prefix in prefix_candidates):
             _DISK_USAGE_CACHE.pop(key, None)
             removed["disk_usage"] += 1
-    if _REMOTE_USAGE_CACHE.pop(profile_id, None) is not None:
-        removed["remote_usage"] += 1
+    with _REMOTE_USAGE_CACHE_LOCK:
+        remote_host = _REMOTE_USAGE_PROFILE_HOSTS.pop(profile_id, None)
+        if remote_host and _REMOTE_USAGE_CACHE.pop(remote_host, None) is not None:
+            removed["remote_usage"] += 1
     if _REMOTE_PUBLIC_IP_CACHE.pop(profile_id, None) is not None:
         removed["remote_public_ip"] += 1
     with _STATUS_META_LOCK:

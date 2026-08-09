@@ -371,9 +371,6 @@ def _has_smart_queue_label(value: str | None) -> bool:
     return SMART_QUEUE_LABEL in _label_names(value)
 
 
-def _without_smart_queue_label(value: str | None) -> str:
-    return _label_value([label for label in _label_names(value) if label != SMART_QUEUE_LABEL])
-
 
 def _smart_queue_label_cleanup_value(live_label: str | None, previous_label: str | None = None) -> str:
     """Return label value with only the Smart Queue technical marker removed.
@@ -393,9 +390,6 @@ def _has_stalled_label(value: str | None) -> bool:
     # Note: Stalled is an exact technical label; lower-case variants are normal user labels.
     return SMART_QUEUE_STALLED_LABEL in _label_names(value)
 
-
-def _without_queue_technical_labels(value: str | None) -> str:
-    return _label_value([label for label in _label_names(value) if label != SMART_QUEUE_LABEL])
 
 
 def _ensure_stalled_label(client: Any, torrent_hash: str, current_label: str = '') -> bool:
@@ -944,6 +938,13 @@ def refill_remaining(settings: dict[str, Any]) -> int:
     return max(0, int((last + minutes * 60) - time.time()))
 
 
+def _smart_queue_torrents(profile: dict, torrents_snapshot: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+    # Note: Automatic Smart Queue may reuse the poller's current snapshot, while manual/standalone calls keep the original fresh rTorrent read.
+    if torrents_snapshot is not None:
+        return [dict(torrent) for torrent in torrents_snapshot]
+    return rtorrent.list_torrents(profile)
+
+
 def _refill_mode(settings: dict[str, Any]) -> str:
     # Note: Expose one stable frontend mode while storing compact database fields.
     if not int(settings.get('refill_enabled') or 0):
@@ -957,10 +958,10 @@ def _mark_refill_run(profile_id: int, user_id: int) -> None:
         conn.execute('UPDATE smart_queue_settings SET last_refill_at=?, updated_at=? WHERE profile_id=?', (utcnow(), utcnow(), profile_id))
 
 
-def _refill_underfilled_queue(profile: dict, settings: dict[str, Any], profile_id: int, user_id: int) -> dict[str, Any]:
+def _refill_underfilled_queue(profile: dict, settings: dict[str, Any], profile_id: int, user_id: int, torrents_snapshot: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """Fill free Smart Queue slots during cooldown without running full stalled/stop logic."""
     # Note: This lightweight pass fixes queue starvation after downloads finish or new stopped torrents are added.
-    torrents = rtorrent.list_torrents(profile)
+    torrents = _smart_queue_torrents(profile, torrents_snapshot)
     user_excluded = _excluded_hashes(profile_id, user_id)
     max_active = max(1, int(settings.get('max_active_downloads') or 5))
     min_seeds = int(settings.get('min_seeds') or 0)
@@ -1217,10 +1218,10 @@ def _mark_surge_refill_run(profile_id: int, user_id: int) -> None:
         conn.execute('UPDATE smart_queue_settings SET last_surge_refill_at=?, updated_at=? WHERE profile_id=?', (utcnow(), utcnow(), profile_id))
 
 
-def _surge_refill_over_limit(profile: dict, settings: dict[str, Any], profile_id: int, user_id: int) -> dict[str, Any]:
+def _surge_refill_over_limit(profile: dict, settings: dict[str, Any], profile_id: int, user_id: int, torrents_snapshot: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """Start a large user-defined batch above the Smart Queue cap, then let normal checks drain it."""
     # Note: Surge refill never raises max_active_downloads; it only overfills once per configured interval.
-    torrents = rtorrent.list_torrents(profile)
+    torrents = _smart_queue_torrents(profile, torrents_snapshot)
     user_excluded = _excluded_hashes(profile_id, user_id)
     max_active = max(1, int(settings.get('max_active_downloads') or 5))
     batch_size = max(1, int(settings.get('surge_refill_batch_size') or 2000))
@@ -1437,7 +1438,7 @@ def _disable_when_idle(profile_id: int, user_id: int, torrents: list[dict[str, A
     settings = get_settings(profile_id, user_id)
     return {'ok': True, 'enabled': False, 'auto_stopped_idle': True, 'paused': [], 'resumed': [], 'stopped': [], 'started': [], 'checked': len(torrents), 'settings': settings, 'message': 'Smart Queue stopped because there is no active or waiting work.'}
 
-def check(profile: dict | None = None, user_id: int | None = None, force: bool = False, cleanup_disabled: bool = True) -> dict[str, Any]:
+def check(profile: dict | None = None, user_id: int | None = None, force: bool = False, cleanup_disabled: bool = True, torrents_snapshot: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     profile = profile or active_profile()
     if not profile:
         return {'ok': False, 'error': 'No active rTorrent profile'}
@@ -1447,7 +1448,7 @@ def check(profile: dict | None = None, user_id: int | None = None, force: bool =
     remaining = cooldown_remaining(settings)
     if not force and int(settings.get('enabled') or 0) and int(settings.get('surge_refill_enabled') or 0) and not surge_refill_remaining(settings):
         try:
-            return _surge_refill_over_limit(profile, settings, profile_id, user_id)
+            return _surge_refill_over_limit(profile, settings, profile_id, user_id, torrents_snapshot)
         except Exception as exc:
             return {'ok': True, 'enabled': True, 'surge_refill': False, 'settings': settings, 'error': str(exc)}
     if remaining and not force:
@@ -1459,7 +1460,7 @@ def check(profile: dict | None = None, user_id: int | None = None, force: bool =
                 return {'ok': True, 'enabled': True, 'cooldown_skipped': True, 'cooldown_refill': False, 'refill_wait_seconds': refill_wait, 'cooldown_remaining_seconds': remaining, 'surge_refill_remaining_seconds': surge_refill_remaining(settings), 'settings': settings}
             try:
                 # Note: Cooldown still blocks the full Smart Queue pass, but configured refill may fill free slots safely.
-                refill = _refill_underfilled_queue(profile, settings, profile_id, user_id)
+                refill = _refill_underfilled_queue(profile, settings, profile_id, user_id, torrents_snapshot)
                 refill['cooldown_remaining_seconds'] = remaining
                 return refill
             except Exception as exc:
@@ -1470,7 +1471,7 @@ def check(profile: dict | None = None, user_id: int | None = None, force: bool =
         if cleanup_disabled:
             try:
                 # Note: Optional maintenance cleanup is intentionally separated from the disabled queue status path.
-                torrents = rtorrent.list_torrents(profile)
+                torrents = _smart_queue_torrents(profile, torrents_snapshot)
                 restored = _cleanup_auto_labels(rtorrent.client_for(profile), profile_id, torrents, set(), True)
             except Exception:
                 restored = []
@@ -1478,7 +1479,7 @@ def check(profile: dict | None = None, user_id: int | None = None, force: bool =
         disabled_log_recorded = _record_disabled_waiting_once(profile_id, user_id, {'labels_restored': restored, 'cleanup_disabled': bool(cleanup_disabled)})
         return {'ok': True, 'enabled': False, 'paused': [], 'resumed': [], 'stopped': [], 'started': [], 'labels_restored': restored, 'disabled_log_recorded': disabled_log_recorded, 'cleanup_skipped': not bool(cleanup_disabled), 'message': 'Smart Queue disabled, waiting for start'}
 
-    torrents = rtorrent.list_torrents(profile)
+    torrents = _smart_queue_torrents(profile, torrents_snapshot)
     # Note: Stalled labels block automatic starting only; a manually started Stalled item still counts as a running slot.
     stalled_label_hashes = {str(t.get('hash') or '') for t in torrents if _has_stalled_label(str(t.get('label') or '')) and t.get('hash')}
     user_excluded = _excluded_hashes(profile_id, user_id)

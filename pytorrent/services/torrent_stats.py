@@ -92,28 +92,20 @@ def _save(profile_id: int, payload: dict[str, Any]) -> dict[str, Any]:
 def collect(profile: dict) -> dict[str, Any]:
     """Collect heavier torrent/file statistics on demand or every cache window."""
     profile_id = int(profile.get("id") or 0)
-    torrents = rtorrent.list_torrents(profile)
+    # Use download-level aggregates for statistics. This replaces one f.multicall
+    # per torrent while preserving the existing torrent_cache.refresh side effect.
+    torrents = rtorrent.list_torrent_aggregate_stats(profile)
     total_torrent_size = sum(int(t.get("size") or 0) for t in torrents)
     seeds_total = sum(int(t.get("seeds") or 0) for t in torrents)
     peers_total = sum(int(t.get("peers") or 0) for t in torrents)
     down_rate_total = sum(int(t.get("down_rate") or 0) for t in torrents)
     up_rate_total = sum(int(t.get("up_rate") or 0) for t in torrents)
-    total_file_size = 0
-    file_count = 0
+    total_file_size = total_torrent_size
+    file_count = sum(int(t.get("file_count") or 0) for t in torrents)
     errors: list[dict[str, str]] = []
 
-    # Note: File metadata is queried per torrent only during cached statistics refresh, not during every UI poll.
-    for torrent in torrents:
-        h = str(torrent.get("hash") or "")
-        if not h:
-            continue
-        try:
-            files = rtorrent.torrent_files(profile, h)
-            file_count += len(files)
-            total_file_size += sum(int(f.get("size") or 0) for f in files)
-        except Exception as exc:
-            errors.append({"hash": h, "name": str(torrent.get("name") or ""), "error": str(exc)})
-
+    # Keep the original cache refresh behavior unchanged; other consumers may
+    # rely on the full snapshot being refreshed after the statistics pass.
     torrent_cache.refresh(profile)
     payload = {
         "profile_id": profile_id,

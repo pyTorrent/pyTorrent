@@ -427,9 +427,11 @@ def _emit_torrent_refresh(profile: dict, action_name: str) -> None:
             rows = torrent_cache.snapshot(profile_id)
             _emit("torrent_patch", {**diff, "profile_id": profile_id, "summary": cached_summary(profile_id, rows, force=True)})
         else:
-            _emit("rtorrent_error", {**diff, "profile_id": profile_id})
-    except Exception as exc:
-        _emit("rtorrent_error", {"profile_id": int(profile.get("id") or 0), "error": str(exc)})
+            # Note: Post-job cache refresh is best-effort; the background poller owns persistent rTorrent connection-health notifications.
+            return
+    except Exception:
+        # Note: The completed job result remains authoritative even when this optional follow-up refresh cannot reach rTorrent.
+        return
 
 
 def _schedule_delayed_torrent_refresh(profile: dict, action_name: str) -> None:

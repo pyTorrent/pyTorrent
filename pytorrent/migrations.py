@@ -1,9 +1,35 @@
 from __future__ import annotations
-import sqlite3
-from collections.abc import Callable
-from datetime import datetime, timezone
 
-Migration = Callable[[sqlite3.Connection], bool]
+import hashlib
+import json
+import re
+import sqlite3
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+
+MIGRATIONS_DIR = Path(__file__).resolve().parents[1] / "migrations"
+MIGRATION_STATE_FILE = "state.json"
+MIGRATION_FILE_RE = re.compile(r"^(?P<version>\d{4,})_(?P<name>[a-z0-9_]+)\.sql$")
+APPLIED_IF_RE = re.compile(r"^\s*--\s*pytorrent:applied-if\s+(.+?)\s*$", re.MULTILINE)
+
+
+class DatabaseMigrationError(RuntimeError):
+    """Raised when the database cannot be migrated safely with the available migration set."""
+
+
+@dataclass(frozen=True)
+class MigrationFile:
+    version: int
+    name: str
+    path: Path
+    checksum_sha256: str
+
+
+@dataclass(frozen=True)
+class MigrationState:
+    latest_version: int
+    retired_through: int
 
 
 def _utcnow() -> str:
@@ -17,210 +43,230 @@ def _row_value(row: sqlite3.Row | dict[str, object] | tuple[object, ...], key: s
         return row[index]  # type: ignore[index]
 
 
-def _column_names(conn: sqlite3.Connection, table: str) -> set[str]:
-    return {str(_row_value(row, "name", 1)) for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+def _load_migration_state() -> MigrationState:
+    # Note: Lifecycle metadata lives beside the SQL files so migrations can be retired without embedding their history in Python code.
+    state_path = MIGRATIONS_DIR / MIGRATION_STATE_FILE
+    try:
+        raw = json.loads(state_path.read_text(encoding="utf-8"))
+        latest_version = int(raw["latest_version"])
+        retired_through = int(raw.get("retired_through", 0))
+    except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
+        raise DatabaseMigrationError(f"Invalid migration state file: {state_path}") from exc
+    if latest_version < 0 or retired_through < 0 or retired_through > latest_version:
+        raise DatabaseMigrationError("Migration state has an invalid version range")
+    return MigrationState(latest_version=latest_version, retired_through=retired_through)
 
 
-def _primary_key_columns(conn: sqlite3.Connection, table: str) -> list[str]:
-    columns = conn.execute(f"PRAGMA table_info({table})").fetchall()
-    pk_columns = sorted(
-        (
-            (int(_row_value(row, "pk", 5) or 0), str(_row_value(row, "name", 1)))
-            for row in columns
-            if int(_row_value(row, "pk", 5) or 0)
-        ),
-        key=lambda item: item[0],
+def _discover_migrations() -> dict[int, MigrationFile]:
+    migrations: dict[int, MigrationFile] = {}
+    if not MIGRATIONS_DIR.is_dir():
+        raise DatabaseMigrationError(f"Migration directory is missing: {MIGRATIONS_DIR}")
+    for path in sorted(MIGRATIONS_DIR.glob("*.sql")):
+        match = MIGRATION_FILE_RE.fullmatch(path.name)
+        if not match:
+            continue
+        version = int(match.group("version"))
+        if version <= 0:
+            raise DatabaseMigrationError(f"Migration version must be positive: {path.name}")
+        if version in migrations:
+            raise DatabaseMigrationError(f"Duplicate migration version {version:04d}")
+        content = path.read_bytes()
+        migrations[version] = MigrationFile(
+            version=version,
+            name=match.group("name"),
+            path=path,
+            checksum_sha256=hashlib.sha256(content).hexdigest(),
+        )
+    return migrations
+
+
+def _ensure_migration_table(conn: sqlite3.Connection) -> None:
+    # Note: Applied versions are durable database state; deleting an old SQL file never erases proof that the database already passed it.
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+          version INTEGER PRIMARY KEY CHECK(version > 0),
+          name TEXT NOT NULL CHECK(length(trim(name)) > 0),
+          checksum_sha256 TEXT,
+          source TEXT NOT NULL DEFAULT 'file' CHECK(source IN ('file', 'baseline')),
+          applied_at TEXT NOT NULL
+        )
+        """
     )
-    return [name for _, name in pk_columns]
 
 
-def migrate_disk_monitor_preferences_to_profile_scope(conn: sqlite3.Connection) -> bool:
-    if _primary_key_columns(conn, "disk_monitor_preferences") == ["profile_id"]:
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_disk_monitor_preferences_owner ON disk_monitor_preferences(user_id)")
+def _applied_migrations(conn: sqlite3.Connection) -> dict[int, dict[str, object]]:
+    rows = conn.execute(
+        "SELECT version, name, checksum_sha256, source, applied_at FROM schema_migrations ORDER BY version"
+    ).fetchall()
+    result: dict[int, dict[str, object]] = {}
+    for row in rows:
+        version = int(_row_value(row, "version", 0))
+        result[version] = {
+            "name": str(_row_value(row, "name", 1) or ""),
+            "checksum_sha256": _row_value(row, "checksum_sha256", 2),
+            "source": str(_row_value(row, "source", 3) or ""),
+            "applied_at": str(_row_value(row, "applied_at", 4) or ""),
+        }
+    return result
+
+
+def _record_baseline(conn: sqlite3.Connection, version: int, name: str) -> None:
+    conn.execute(
+        "INSERT OR IGNORE INTO schema_migrations(version, name, checksum_sha256, source, applied_at) VALUES(?,?,?,?,?)",
+        (version, name, None, "baseline", _utcnow()),
+    )
+
+
+def _migration_is_already_present(conn: sqlite3.Connection, migration: MigrationFile) -> bool:
+    script = migration.path.read_text(encoding="utf-8")
+    match = APPLIED_IF_RE.search(script)
+    if not match:
         return False
+    query = match.group(1).strip()
+    try:
+        row = conn.execute(query).fetchone()
+    except sqlite3.Error as exc:
+        raise DatabaseMigrationError(f"Invalid applied-if check in {migration.path.name}") from exc
+    if row is None:
+        return False
+    return bool(_row_value(row, "applied", 0))
 
-    now = _utcnow()
-    conn.execute("DROP INDEX IF EXISTS idx_disk_monitor_preferences_owner")
-    conn.execute("DROP TABLE IF EXISTS disk_monitor_preferences_new")
-    conn.execute("DROP TABLE IF EXISTS disk_monitor_preferences_old_user_profile")
-    conn.execute("""
-        CREATE TABLE disk_monitor_preferences_new (
-          profile_id INTEGER PRIMARY KEY,
-          user_id INTEGER NOT NULL,
-          paths_json TEXT,
-          mode TEXT DEFAULT 'default',
-          selected_path TEXT,
-          stop_enabled INTEGER DEFAULT 0,
-          stop_threshold INTEGER DEFAULT 98,
-          created_at TEXT NOT NULL,
-          updated_at TEXT NOT NULL,
-          FOREIGN KEY(user_id) REFERENCES users(id),
-          FOREIGN KEY(profile_id) REFERENCES rtorrent_profiles(id)
+
+def _bootstrap_migration_history(
+    conn: sqlite3.Connection,
+    state: MigrationState,
+    migrations: dict[int, MigrationFile],
+    *,
+    current_schema_is_fresh: bool,
+) -> None:
+    applied = _applied_migrations(conn)
+    if current_schema_is_fresh and not applied:
+        # Note: Fresh databases are created from the current SCHEMA snapshot, so historical ALTER statements are recorded instead of replayed.
+        for version in range(1, state.latest_version + 1):
+            migration = migrations.get(version)
+            _record_baseline(conn, version, migration.name if migration else f"retired_{version:04d}")
+        return
+
+    # Note: Pre-history databases use SQL-owned applied-if probes; Python stays migration-agnostic and only records effects already present.
+    for version, migration in migrations.items():
+        if version in applied:
+            continue
+        if _migration_is_already_present(conn, migration):
+            _record_baseline(conn, version, migration.name)
+
+
+def _strip_sql_comments(sql: str) -> str:
+    without_blocks = re.sub(r"/\*.*?\*/", "", sql, flags=re.DOTALL)
+    return re.sub(r"--[^\n]*", "", without_blocks)
+
+
+def _iter_sql_statements(script: str) -> list[str]:
+    statements: list[str] = []
+    buffer = ""
+    for line in script.splitlines(keepends=True):
+        buffer += line
+        if sqlite3.complete_statement(buffer):
+            statement = buffer.strip()
+            buffer = ""
+            if _strip_sql_comments(statement).strip():
+                statements.append(statement)
+    if _strip_sql_comments(buffer).strip():
+        raise DatabaseMigrationError("Migration SQL ends with an incomplete statement")
+    return statements
+
+
+def _execute_statement(conn: sqlite3.Connection, statement: str) -> None:
+    try:
+        conn.execute(statement)
+    except sqlite3.OperationalError as exc:
+        # Note: A previously interrupted legacy migration may have added only some columns; duplicate ADD COLUMN is safe to skip on retry.
+        if "duplicate column name:" in str(exc).lower() and "ADD COLUMN" in statement.upper():
+            return
+        raise
+
+
+def _apply_migration(conn: sqlite3.Connection, migration: MigrationFile) -> None:
+    script = migration.path.read_text(encoding="utf-8")
+    savepoint = f"pytorrent_migration_{migration.version:04d}"
+    conn.execute(f"SAVEPOINT {savepoint}")
+    try:
+        for statement in _iter_sql_statements(script):
+            _execute_statement(conn, statement)
+        conn.execute(
+            "INSERT INTO schema_migrations(version, name, checksum_sha256, source, applied_at) VALUES(?,?,?,?,?)",
+            (migration.version, migration.name, migration.checksum_sha256, "file", _utcnow()),
         )
-    """)
-    conn.execute("""
-        INSERT INTO disk_monitor_preferences_new(
-          profile_id, user_id, paths_json, mode, selected_path, stop_enabled, stop_threshold, created_at, updated_at
+        conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+    except Exception:
+        conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+        conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+        raise
+
+
+def _validate_available_path(
+    state: MigrationState,
+    migrations: dict[int, MigrationFile],
+    applied: dict[int, dict[str, object]],
+) -> None:
+    newer = [version for version in applied if version > state.latest_version]
+    if newer:
+        raise DatabaseMigrationError(
+            f"Database schema version {max(newer)} is newer than this pyTorrent build ({state.latest_version})"
         )
-        SELECT profile_id, user_id, paths_json, mode, selected_path, stop_enabled, stop_threshold,
-               COALESCE(created_at, ?), COALESCE(updated_at, ?)
-        FROM (
-          SELECT d.*,
-                 ROW_NUMBER() OVER (
-                   PARTITION BY profile_id
-                   ORDER BY COALESCE(updated_at, created_at, '') DESC, user_id ASC
-                 ) AS rn
-          FROM disk_monitor_preferences d
-          WHERE profile_id IS NOT NULL
-        )
-        WHERE rn = 1
-    """, (now, now))
-    conn.execute("ALTER TABLE disk_monitor_preferences RENAME TO disk_monitor_preferences_old_user_profile")
-    conn.execute("ALTER TABLE disk_monitor_preferences_new RENAME TO disk_monitor_preferences")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_disk_monitor_preferences_owner ON disk_monitor_preferences(user_id)")
-    return True
+
+    for version in range(1, state.latest_version + 1):
+        if version in applied:
+            continue
+        if version <= state.retired_through:
+            raise DatabaseMigrationError(
+                f"Database is too old for this build: migration {version:04d} was retired. "
+                "Upgrade through an intermediate pyTorrent version first."
+            )
+        if version not in migrations:
+            raise DatabaseMigrationError(f"Required migration file {version:04d} is missing")
+
+    for version, migration in migrations.items():
+        if version > state.latest_version:
+            raise DatabaseMigrationError(
+                f"Migration file {migration.path.name} is newer than migrations/{MIGRATION_STATE_FILE}"
+            )
+        row = applied.get(version)
+        if not row or row.get("source") != "file":
+            continue
+        stored_name = str(row.get("name") or "")
+        stored_checksum = str(row.get("checksum_sha256") or "")
+        if stored_name != migration.name or stored_checksum != migration.checksum_sha256:
+            raise DatabaseMigrationError(
+                f"Applied migration {version:04d} no longer matches its recorded name/checksum"
+            )
 
 
-def migrate_profile_preferences_sidebar_columns(conn: sqlite3.Connection) -> bool:
-    columns = _column_names(conn, "profile_preferences")
-    changed = False
-    if "sidebar_labels_expanded" not in columns:
-        conn.execute("ALTER TABLE profile_preferences ADD COLUMN sidebar_labels_expanded INTEGER DEFAULT 0")
-        changed = True
-    if "sidebar_shortcuts_expanded" not in columns:
-        conn.execute("ALTER TABLE profile_preferences ADD COLUMN sidebar_shortcuts_expanded INTEGER DEFAULT 0")
-        changed = True
-    return changed
+def run_database_migrations(conn: sqlite3.Connection, *, current_schema_is_fresh: bool = False) -> int:
+    """Apply pending numbered SQL migrations and return the number executed in this run."""
+    state = _load_migration_state()
+    migrations = _discover_migrations()
+    _ensure_migration_table(conn)
+    _bootstrap_migration_history(
+        conn,
+        state,
+        migrations,
+        current_schema_is_fresh=current_schema_is_fresh,
+    )
+    applied = _applied_migrations(conn)
+    _validate_available_path(state, migrations, applied)
 
-
-def migrate_operation_log_split_retention(conn: sqlite3.Connection) -> bool:
-    columns = _column_names(conn, "operation_log_settings")
-    changed = False
-    additions = {
-        "retention_interval_hours": "INTEGER DEFAULT 24",
-        "job_retention_mode": "TEXT DEFAULT 'days'",
-        "job_retention_days": "INTEGER DEFAULT 7",
-        "job_retention_lines": "INTEGER DEFAULT 2000",
-        "job_retention_interval_hours": "INTEGER DEFAULT 24",
-        "job_last_retention_run_at": "TEXT",
-        "job_last_retention_deleted": "INTEGER DEFAULT 0",
-        "operation_retention_mode": "TEXT DEFAULT 'days'",
-        "operation_retention_days": "INTEGER DEFAULT 30",
-        "operation_retention_lines": "INTEGER DEFAULT 5000",
-        "operation_retention_interval_hours": "INTEGER DEFAULT 24",
-        "operation_last_retention_run_at": "TEXT",
-        "operation_last_retention_deleted": "INTEGER DEFAULT 0",
-    }
-    for name, ddl in additions.items():
-        if name not in columns:
-            conn.execute(f"ALTER TABLE operation_log_settings ADD COLUMN {name} {ddl}")
-            changed = True
-    if changed:
-        conn.execute("""
-            UPDATE operation_log_settings
-            SET operation_retention_mode=COALESCE(operation_retention_mode, retention_mode, 'days'),
-                operation_retention_days=COALESCE(operation_retention_days, retention_days, 30),
-                operation_retention_lines=COALESCE(operation_retention_lines, retention_lines, 5000),
-                operation_retention_interval_hours=COALESCE(operation_retention_interval_hours, retention_interval_hours, 24),
-                job_retention_mode=COALESCE(job_retention_mode, 'days'),
-                job_retention_days=COALESCE(job_retention_days, 7),
-                job_retention_lines=COALESCE(job_retention_lines, 2000),
-                job_retention_interval_hours=COALESCE(job_retention_interval_hours, retention_interval_hours, 24),
-                updated_at=COALESCE(updated_at, ?)
-        """, (_utcnow(),))
-    return changed
-
-
-def migrate_profile_speed_limits_table(conn: sqlite3.Connection) -> bool:
-    existing = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='profile_speed_limits'").fetchone()
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS profile_speed_limits (
-          profile_id INTEGER PRIMARY KEY,
-          down_limit INTEGER DEFAULT 0,
-          up_limit INTEGER DEFAULT 0,
-          created_at TEXT NOT NULL,
-          updated_at TEXT NOT NULL,
-          FOREIGN KEY(profile_id) REFERENCES rtorrent_profiles(id) ON DELETE CASCADE
-        )
-    """)
-    return existing is None
-
-
-def migrate_speed_limit_profiles_table(conn: sqlite3.Connection) -> bool:
-    existing = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='speed_limit_profiles'").fetchone()
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS speed_limit_profiles (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER NOT NULL,
-          name TEXT NOT NULL,
-          down_limit INTEGER DEFAULT 0,
-          up_limit INTEGER DEFAULT 0,
-          created_at TEXT NOT NULL,
-          updated_at TEXT NOT NULL,
-          FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
-        )
-    """)
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_speed_limit_profiles_user ON speed_limit_profiles(user_id, lower(name))")
-    return existing is None
-
-
-def migrate_profile_runtime_stats_table(conn: sqlite3.Connection) -> bool:
-    existing = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='profile_runtime_stats'").fetchone()
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS profile_runtime_stats (
-          profile_id INTEGER PRIMARY KEY,
-          user_id INTEGER NOT NULL,
-          torrent_count INTEGER DEFAULT 0,
-          total_size_bytes INTEGER DEFAULT 0,
-          completed_bytes INTEGER DEFAULT 0,
-          downloaded_bytes INTEGER DEFAULT 0,
-          uploaded_bytes INTEGER DEFAULT 0,
-          active_count INTEGER DEFAULT 0,
-          seeding_count INTEGER DEFAULT 0,
-          downloading_count INTEGER DEFAULT 0,
-          stopped_count INTEGER DEFAULT 0,
-          updated_at TEXT NOT NULL,
-          FOREIGN KEY(user_id) REFERENCES users(id),
-          FOREIGN KEY(profile_id) REFERENCES rtorrent_profiles(id) ON DELETE CASCADE
-        )
-    """)
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_profile_runtime_stats_user ON profile_runtime_stats(user_id, profile_id)")
-    return existing is None
-
-
-def migrate_download_location_preferences(conn: sqlite3.Connection) -> bool:
-    columns = _column_names(conn, "user_preferences")
-    changed = False
-    additions = {
-        "default_download_path": "TEXT DEFAULT ''",
-        "download_location_mode": "TEXT DEFAULT 'profile_default'",
-        "download_last_path": "TEXT DEFAULT ''",
-        "download_remember_last_enabled": "INTEGER DEFAULT 0",
-        "drop_location_mode": "TEXT DEFAULT 'default'",
-        "free_space_check_enabled": "INTEGER DEFAULT 0",
-    }
-    for name, ddl in additions.items():
-        if name not in columns:
-            conn.execute(f"ALTER TABLE user_preferences ADD COLUMN {name} {ddl}")
-            changed = True
-    return changed
-
-
-MIGRATIONS: tuple[Migration, ...] = (
-    migrate_disk_monitor_preferences_to_profile_scope,
-    migrate_profile_preferences_sidebar_columns,
-    migrate_operation_log_split_retention,
-    migrate_profile_speed_limits_table,
-    migrate_speed_limit_profiles_table,
-    migrate_profile_runtime_stats_table,
-    migrate_download_location_preferences,
-)
-
-
-def run_database_migrations(conn: sqlite3.Connection) -> int:
-    """Run idempotent database migrations and return how many changed the schema/data."""
-    applied = 0
-    for migration in MIGRATIONS:
-        if migration(conn):
-            applied += 1
-    return applied
+    executed = 0
+    for version in range(1, state.latest_version + 1):
+        if version in applied:
+            continue
+        migration = migrations[version]
+        try:
+            _apply_migration(conn, migration)
+        except Exception as exc:
+            if isinstance(exc, DatabaseMigrationError):
+                raise
+            raise DatabaseMigrationError(f"Migration {migration.path.name} failed") from exc
+        executed += 1
+        applied[version] = _applied_migrations(conn)[version]
+    return executed

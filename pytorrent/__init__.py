@@ -145,6 +145,8 @@ def create_app() -> Flask:
     start_watchdog()
     from .services.websocket import register_socketio_handlers
     register_socketio_handlers(socketio)
+    from .services.connection_diagnostics import register_socketio_handlers as register_connection_diagnostics_handlers
+    register_connection_diagnostics_handlers(socketio)
     from .services.startup_config import schedule_startup_config_apply
     schedule_startup_config_apply(socketio)
     from .services.background_automations import start_scheduler as start_background_automation_scheduler

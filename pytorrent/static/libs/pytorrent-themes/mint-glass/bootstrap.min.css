@@ -1,0 +1,60 @@
+@import url("../modern-foundation.css");
+/* Mint Glass: airy mint/cyan surfaces with translucent navigation and rounded panels. */
+:root, [data-bs-theme="light"] {
+  color-scheme: light;
+  --bs-primary: #0f9f82;
+  --bs-primary-rgb: 15,159,130;
+  --bs-link-color: #0b8d73;
+  --bs-link-color-rgb: 11,141,115;
+  --bs-link-hover-color: #086b59;
+  --bs-body-bg: #f1fbf8;
+  --bs-body-bg-rgb: 241,251,248;
+  --bs-body-color: #13312a;
+  --bs-secondary-bg: #fbfffd;
+  --bs-secondary-bg-rgb: 251,255,253;
+  --bs-tertiary-bg: #def4ed;
+  --bs-border-color: #bfe2d8;
+  --bs-secondary-color: #58766e;
+  --bs-primary-bg-subtle: #d3f3e9;
+  --bs-primary-text-emphasis: #086b59;
+  --torrent-progress-complete: #0fa978;
+  --pytorrent-page-bg: radial-gradient(circle at 12% 0%, rgba(30,190,159,.13), transparent 30%), radial-gradient(circle at 92% 8%, rgba(65,173,220,.09), transparent 27%), #f1fbf8;
+  --pytorrent-shell-shadow: 0 20px 52px rgba(20,88,74,.15);
+  --pytorrent-topbar-bg: rgba(249,255,252,.84);
+  --pytorrent-sidebar-bg: rgba(243,252,249,.86);
+  --pytorrent-statusbar-bg: rgba(222,244,237,.90);
+  --pytorrent-surface-bg: rgba(251,255,253,.72);
+  --pytorrent-panel-border: #bfe2d8;
+  --pytorrent-table-header-bg: rgba(224,245,239,.94);
+  --pytorrent-surface-radius: 1.05rem;
+  --pytorrent-backdrop-filter: blur(14px) saturate(1.12);
+}
+[data-bs-theme="dark"] {
+  color-scheme: dark;
+  --bs-primary: #3dd6b7;
+  --bs-primary-rgb: 61,214,183;
+  --bs-link-color: #51dfc2;
+  --bs-link-color-rgb: 81,223,194;
+  --bs-link-hover-color: #b3f7e9;
+  --bs-body-bg: #061310;
+  --bs-body-bg-rgb: 6,19,16;
+  --bs-body-color: #d8f0ea;
+  --bs-secondary-bg: #0d201b;
+  --bs-secondary-bg-rgb: 13,32,27;
+  --bs-tertiary-bg: #132c25;
+  --bs-border-color: #254b42;
+  --bs-secondary-color: #91b8ad;
+  --bs-primary-bg-subtle: #0e3a31;
+  --bs-primary-text-emphasis: #b3f7e9;
+  --torrent-progress-complete: #45dda2;
+  --pytorrent-page-bg: radial-gradient(circle at 9% 0%, rgba(61,214,183,.16), transparent 32%), radial-gradient(circle at 94% 5%, rgba(56,189,248,.09), transparent 27%), #061310;
+  --pytorrent-shell-shadow: 0 24px 68px rgba(0,0,0,.59);
+  --pytorrent-topbar-bg: rgba(12,31,26,.86);
+  --pytorrent-sidebar-bg: rgba(9,25,21,.90);
+  --pytorrent-statusbar-bg: rgba(16,41,34,.93);
+  --pytorrent-surface-bg: rgba(15,36,31,.76);
+  --pytorrent-panel-border: #254b42;
+  --pytorrent-table-header-bg: rgba(18,44,37,.95);
+  --pytorrent-surface-radius: 1.05rem;
+  --pytorrent-backdrop-filter: blur(14px) saturate(1.12);
+}

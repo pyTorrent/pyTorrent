@@ -9,7 +9,8 @@ from .preferences import active_profile, get_profile
 from ..db import default_user_id
 from .torrent_cache import torrent_cache
 from .torrent_summary import cached_summary
-from . import rtorrent, smart_queue, traffic_history, automation_rules, torrent_stats, auth, speed_peaks, poller_control, download_planner, profile_speed_limits
+from .frontend_assets import static_hash
+from . import rtorrent, smart_queue, traffic_history, automation_rules, torrent_stats, auth, speed_peaks, poller_control, download_planner, profile_speed_limits, connection_diagnostics, prometheus_metrics
 
 
 def _profile_room(profile_id: int) -> str:
@@ -32,15 +33,20 @@ def _emit_profile(socketio, event: str, payload: dict, profile_id: int) -> None:
     emit_profile_event(socketio, event, payload, profile_id)
 
 
+def _rtorrent_error_text(error) -> str:
+    return rtorrent.rtorrent_error_message(error)
+
+
+def _rtorrent_transport_unavailable(error) -> bool:
+    # Note: Background work uses the same transport classification as the SCGI client so one failed lane can stop same-tick follow-up pressure.
+    return bool(error) and rtorrent.is_rtorrent_unavailable_error(error)
+
+
 _speed_limits_applied: dict[int, tuple[int, int]] = {}
 _socket_profiles: dict[str, int] = {}
 _profile_socket_counts: dict[int, int] = {}
 _socket_profile_lock = threading.Lock()
 
-
-def _profile_client_count(profile_id: int) -> int:
-    with _socket_profile_lock:
-        return int(_profile_socket_counts.get(int(profile_id), 0) or 0)
 
 
 def _register_profile_socket(profile_id: int) -> None:
@@ -91,7 +97,12 @@ def _run_queue_profile_tasks(socketio, profile: dict, profile_id: int, settings:
     profile_user_id = int(profile.get("user_id") or default_user_id())
     try:
         try:
-            result = smart_queue.check(profile, user_id=profile_user_id, force=False, cleanup_disabled=bool(settings.get("run_smart_queue_cleanup_while_disabled")))
+            # Note: When the main poller already proved SCGI unavailable, defer automatic queue work instead of adding another retry chain.
+            if _rtorrent_transport_unavailable(torrent_cache.error(profile_id)):
+                return
+            queue_snapshot = torrent_cache.snapshot(profile_id) if torrent_cache.age_seconds(profile_id) is not None else None
+            # Note: Automatic Smart Queue reuses the poller's snapshot to avoid an extra full d.multicall2 every queue tick.
+            result = smart_queue.check(profile, user_id=profile_user_id, force=False, cleanup_disabled=bool(settings.get("run_smart_queue_cleanup_while_disabled")), torrents_snapshot=queue_snapshot)
             if result.get("enabled"):
                 _emit_profile(socketio, "smart_queue_update", result, profile_id)
                 if result.get("stopped") or result.get("started") or result.get("start_requested") or result.get("paused") or result.get("resumed"):
@@ -109,6 +120,9 @@ def _run_slow_profile_tasks(socketio, profile: dict, profile_id: int, settings: 
     state = poller_control.state_for(profile_id)
     profile_user_id = int(profile.get("user_id") or default_user_id())
     try:
+        # Note: Slow background features cannot succeed without SCGI, so defer them after a confirmed transport failure and retry on a later cycle.
+        if _rtorrent_transport_unavailable(torrent_cache.error(profile_id)):
+            return
         try:
             torrent_stats.queue_refresh(socketio, profile, force=False, room=_profile_room(profile_id))
         except Exception as exc:
@@ -174,9 +188,267 @@ def _live_patch_payload(profile_id: int, live: dict) -> dict | None:
 
 _started = False
 _start_lock = threading.Lock()
+_INITIAL_SNAPSHOT_UPGRADE_WAIT_SECONDS = 1.0
+
+
+def _socket_profile_matches(sid: str, profile_id: int) -> bool:
+    with _socket_profile_lock:
+        return int(_socket_profiles.get(str(sid), 0) or 0) == int(profile_id)
+
+
+def _socket_profile_id(sid: str) -> int:
+    with _socket_profile_lock:
+        return int(_socket_profiles.get(str(sid), 0) or 0)
+
+
+def _wait_for_websocket_upgrade(socketio, sid: str, timeout: float = _INITIAL_SNAPSHOT_UPGRADE_WAIT_SECONDS) -> str:
+    """Briefly prefer a WebSocket upgrade before sending a large initial snapshot.
+
+    Polling remains a fully supported fallback: after the short timeout the snapshot is
+    sent on whatever transport is active. This mainly avoids filling the polling
+    transport with a multi-megabyte snapshot while Engine.IO is probing WebSocket.
+    """
+    deadline = time.monotonic() + max(0.0, float(timeout or 0.0))
+    transport = "polling"
+    while True:
+        try:
+            transport = str(socketio.server.transport(sid, namespace="/") or "polling")
+        except Exception:
+            return transport
+        if transport == "websocket" or time.monotonic() >= deadline:
+            return transport
+        socketio.sleep(0.05)
+
+
+def _emit_initial_profile_state(socketio, sid: str, profile: dict) -> None:
+    profile_id = int(profile.get("id") or 0)
+    if not sid or not profile_id:
+        return
+    _wait_for_websocket_upgrade(socketio, sid)
+    # The user may have switched profile or disconnected while the upgrade was pending.
+    if not _socket_profile_matches(sid, profile_id):
+        return
+    rows = torrent_cache.snapshot(profile_id)
+    summary = cached_summary(profile_id, rows)
+    speed_status = _speed_status_from_rows(profile_id, rows)
+    # Note: Metrics reuse values already built for the initial UI snapshot; no additional rTorrent call is made.
+    prometheus_metrics.observe_profile(profile)
+    prometheus_metrics.observe_torrent_summary(profile, summary)
+    prometheus_metrics.observe_speed_status(profile, speed_status)
+    settings = poller_control.get_settings(profile_id)
+    state = poller_control.state_for(profile_id)
+    visible_error = poller_control.user_visible_rtorrent_error(state, settings, torrent_cache.error(profile_id))
+    socketio.emit(
+        "torrent_snapshot",
+        {
+            "profile_id": profile_id,
+            "torrents": rows,
+            "summary": summary,
+            "speed_status": speed_status,
+            "error": visible_error,
+            "cache_ready": torrent_cache.age_seconds(profile_id) is not None,
+        },
+        to=sid,
+    )
 
 
 def register_socketio_handlers(socketio):
+
+    # Each rTorrent profile gets its own background tick. A stopped/slow SCGI endpoint must
+    # never block polling or profile switching for another working profile.
+    _profile_poll_lock = threading.Lock()
+    _profile_poll_running: set[int] = set()
+
+    def _poll_profile(profile: dict, settings: dict, now: float, run_live: bool, run_list: bool, run_system: bool, run_slow: bool, run_queue: bool) -> None:
+        pid = int(profile["id"])
+        state = poller_control.state_for(pid)
+        # Note: Remember only profile labels here; the exporter never schedules or wakes the poller.
+        prometheus_metrics.observe_profile(profile)
+        try:
+            tick_started = time.monotonic()
+            changed = False
+            error = torrent_cache.error(pid)
+            ok = not bool(error)
+            cache_initialized_before_tick = torrent_cache.age_seconds(pid) is not None
+            speed_limit_error = ""
+            active = state.last_active
+            emitted_payload_size = 0
+            rtorrent_call_count = 0
+            skipped_emissions = 0
+            heartbeat = {"ok": True, "profile_id": pid, "tick": state.tick_count + 1, "error": ""}
+            speed_status = None
+            speed_status_delivered = False
+            live_speed_ready = False
+            transport_unavailable = False
+
+            try:
+                # Note: Persisted speed-limit application is isolated from data polling. A bad/unavailable
+                # throttle RPC must not prevent the torrent snapshot from loading or recovering.
+                try:
+                    _apply_configured_speed_limits(profile)
+                except Exception as exc:
+                    speed_limit_error = _rtorrent_error_text(exc)
+                    transport_unavailable = _rtorrent_transport_unavailable(speed_limit_error)
+                    if transport_unavailable:
+                        # Note: A failed limit RPC already served as this cycle's SCGI probe; timestamp it so recovery backoff is respected.
+                        state.last_live_at = now
+                        state.last_fast_at = now
+                rows = torrent_cache.snapshot(pid)
+
+                if run_live and not transport_unavailable:
+                    live_started = time.monotonic()
+                    live = torrent_cache.refresh_live(profile)
+                    rtorrent_call_count += 1
+                    state.last_live_at = now
+                    state.last_fast_at = now
+                    ok = bool(live.get("ok"))
+                    error = str(live.get("error") or "")
+                    poller_control.mark_live_poll(state, live_started, ok, error, len(live.get("updated") or []), bool(live.get("requires_full_refresh")))
+                    # Note: SCGI timing is recorded from this existing live request; diagnostics do not generate a second request.
+                    connection_diagnostics.record_scgi_activity(pid, "live", ok, state.last_live_duration_ms, error)
+                    rows = torrent_cache.snapshot(pid)
+                    if live.get("ok"):
+                        active, speed_status = _live_state_from_rows(pid, rows)
+                        prometheus_metrics.observe_speed_status(profile, speed_status)
+                        live_speed_ready = True
+                        updated = live.get("updated") or []
+                        requires_full_refresh = bool(live.get("requires_full_refresh"))
+                        payload = _live_patch_payload(pid, live)
+                        if payload:
+                            changed = changed or bool(updated)
+                            emitted_payload_size += len(json.dumps(payload, default=str))
+                            _emit_profile(socketio, "torrent_live_patch", payload, pid)
+                        else:
+                            skipped_emissions += 1
+                        if requires_full_refresh:
+                            state.last_list_at = 0.0
+                            run_list = True
+                    # Note: Failed live polls remain in diagnostics/cache; user notification is decided once the whole tick is evaluated.
+                    transport_unavailable = (not ok) and _rtorrent_transport_unavailable(error)
+
+                if run_list and not transport_unavailable:
+                    list_started = time.monotonic()
+                    diff = torrent_cache.refresh(profile)
+                    rtorrent_call_count += 1
+                    state.last_list_at = now
+                    ok = bool(diff.get("ok"))
+                    error = str(diff.get("error") or "")
+                    poller_control.mark_list_poll(state, list_started, ok, error, len(diff.get("added") or []), len(diff.get("updated") or []), len(diff.get("removed") or []))
+                    # Note: SCGI timing is recorded from this existing list refresh only.
+                    connection_diagnostics.record_scgi_activity(pid, "list", ok, state.last_list_duration_ms, error)
+                    rows = torrent_cache.snapshot(pid)
+                    if diff.get("ok"):
+                        active, speed_status = _live_state_from_rows(pid, rows)
+                        prometheus_metrics.observe_speed_status(profile, speed_status)
+                    if diff.get("ok") and not cache_initialized_before_tick:
+                        changed = True
+                        summary = cached_summary(pid, rows, force=True)
+                        prometheus_metrics.observe_torrent_summary(profile, summary)
+                        payload = {
+                            "profile_id": pid,
+                            "torrents": rows,
+                            "summary": summary,
+                            "speed_status": speed_status,
+                            "error": "",
+                            "cache_ready": True,
+                        }
+                        emitted_payload_size += len(json.dumps(payload, default=str))
+                        _emit_profile(socketio, "torrent_snapshot", payload, pid)
+                        speed_status_delivered = True
+                    elif diff.get("ok") and (diff["added"] or diff["updated"] or diff["removed"]):
+                        changed = True
+                        summary = cached_summary(pid, rows, force=True)
+                        prometheus_metrics.observe_torrent_summary(profile, summary)
+                        payload = {**diff, "summary": summary, "speed_status": speed_status}
+                        emitted_payload_size += len(json.dumps(payload, default=str))
+                        _emit_profile(socketio, "torrent_patch", payload, pid)
+                        speed_status_delivered = True
+                    elif diff.get("ok"):
+                        skipped_emissions += 1
+                    # Note: Failed list polls stay silent here so a later successful operation in the same tick can recover before notification.
+                    transport_unavailable = (not ok) and _rtorrent_transport_unavailable(error)
+
+                if live_speed_ready and (not run_system or transport_unavailable) and not speed_status_delivered and speed_status:
+                    emitted_payload_size += len(json.dumps(speed_status, default=str))
+                    _emit_profile(socketio, "speed_status", speed_status, pid)
+                    speed_status_delivered = True
+
+                if run_system and not transport_unavailable:
+                    state.last_system_at = now
+                    rows = torrent_cache.snapshot(pid)
+                    if speed_status is None:
+                        speed_status = _speed_status_from_rows(pid, rows)
+                        prometheus_metrics.observe_speed_status(profile, speed_status)
+                    status = rtorrent.system_status(profile, rows)
+                    rtorrent_call_count += 1
+                    if bool(profile.get("is_remote")):
+                        try:
+                            usage = rtorrent.remote_system_usage(profile)
+                            status.update(usage)
+                            status["usage_available"] = True
+                        except Exception as exc:
+                            status["usage_source"] = "rtorrent-remote"
+                            status["usage_available"] = False
+                            status["usage_error"] = str(exc)
+                    else:
+                        status["cpu"] = psutil.cpu_percent(interval=None)
+                        status["ram"] = psutil.virtual_memory().percent
+                        status["usage_source"] = "local"
+                        status["usage_available"] = True
+                    status["profile_id"] = pid
+                    traffic_history.record(pid, status.get("down_rate", 0), status.get("up_rate", 0), status.get("total_down", 0), status.get("total_up", 0))
+                    status["speed_peaks"] = speed_status["speed_peaks"]
+                    status["poller"] = poller_control.snapshot(pid)
+                    # Note: The exporter captures this already-built system payload instead of polling on scrape.
+                    prometheus_metrics.observe_system_stats(profile, status)
+                    emitted_payload_size += len(json.dumps(status, default=str))
+                    _emit_profile(socketio, "system_stats", status, pid)
+                    speed_status_delivered = True
+
+                if poller_control.should_disk_poll(now, settings, state):
+                    state.last_disk_at = now
+
+                if poller_control.should_tracker_poll(now, settings, state):
+                    state.last_tracker_at = now
+
+                if run_queue and not transport_unavailable:
+                    state.last_queue_at = now
+                    if state.queue_task_running:
+                        skipped_emissions += 1
+                    else:
+                        state.queue_task_running = True
+                        socketio.start_background_task(_run_queue_profile_tasks, socketio, dict(profile), pid, dict(settings))
+
+                if run_slow and not transport_unavailable:
+                    state.last_slow_at = now
+                    if state.slow_task_running:
+                        skipped_emissions += 1
+                    else:
+                        state.slow_task_running = True
+                        socketio.start_background_task(_run_slow_profile_tasks, socketio, dict(profile), pid, dict(settings))
+                if speed_limit_error and ok:
+                    ok = False
+                    error = speed_limit_error
+            except Exception as exc:
+                ok = False
+                error = _rtorrent_error_text(exc)
+                # Preserve fast speed updates when another task in the same tick fails before system_stats is emitted.
+                if live_speed_ready and speed_status and not speed_status_delivered:
+                    emitted_payload_size += len(json.dumps(speed_status, default=str))
+                    _emit_profile(socketio, "speed_status", speed_status, pid)
+                    speed_status_delivered = True
+
+            runtime = poller_control.mark_tick(state, tick_started, active=active, ok=ok, error=error, emitted_payload_size=emitted_payload_size, rtorrent_call_count=rtorrent_call_count, skipped_emissions=skipped_emissions, settings=settings)
+            visible_error = poller_control.user_visible_rtorrent_error(state, settings, error)
+            if poller_control.should_emit_rtorrent_error(state, settings, error):
+                _emit_profile(socketio, "rtorrent_error", {"profile_id": pid, "error": error, "consecutive_failures": state.error_count}, pid)
+            heartbeat.update({"ok": ok, "error": visible_error, "active": active, "poller": runtime})
+            if poller_control.should_heartbeat(time.monotonic(), settings, state, changed):
+                state.last_heartbeat_at = time.monotonic()
+                _emit_profile(socketio, "heartbeat", heartbeat, pid)
+        finally:
+            with _profile_poll_lock:
+                _profile_poll_running.discard(pid)
 
     def poller():
         while True:
@@ -190,162 +462,52 @@ def register_socketio_handlers(socketio):
                 state = poller_control.state_for(pid)
                 now = time.monotonic()
                 live_interval = poller_control.effective_live_interval(settings, state)
-                list_interval = poller_control.effective_list_interval(settings, state)
-                next_sleep = min(
-                    next_sleep,
-                    max(poller_control.MIN_POLL_INTERVAL_SECONDS, live_interval - (now - state.last_live_at)),
-                    max(poller_control.MIN_POLL_INTERVAL_SECONDS, list_interval - (now - state.last_list_at)),
-                    max(poller_control.MIN_POLL_INTERVAL_SECONDS, poller_control.effective_system_interval(settings, state) - (now - state.last_system_at)),
-                    max(poller_control.MIN_POLL_INTERVAL_SECONDS, poller_control.effective_slow_interval(settings, state) - (now - state.last_slow_at)),
-                    max(poller_control.MIN_POLL_INTERVAL_SECONDS, poller_control.effective_queue_interval(settings, state) - (now - state.last_queue_at)),
-                )
+                transport_backoff = (not state.last_ok) and _rtorrent_transport_unavailable(state.last_error)
+                if transport_backoff:
+                    # Note: During a confirmed SCGI outage only the live poll acts as the recovery probe; other background lanes stay quiet until it succeeds.
+                    next_sleep = min(
+                        next_sleep,
+                        max(poller_control.MIN_POLL_INTERVAL_SECONDS, live_interval - (now - state.last_live_at)),
+                    )
+                else:
+                    list_interval = poller_control.effective_list_interval(settings, state)
+                    next_sleep = min(
+                        next_sleep,
+                        max(poller_control.MIN_POLL_INTERVAL_SECONDS, live_interval - (now - state.last_live_at)),
+                        max(poller_control.MIN_POLL_INTERVAL_SECONDS, list_interval - (now - state.last_list_at)),
+                        max(poller_control.MIN_POLL_INTERVAL_SECONDS, poller_control.effective_system_interval(settings, state) - (now - state.last_system_at)),
+                        max(poller_control.MIN_POLL_INTERVAL_SECONDS, poller_control.effective_slow_interval(settings, state) - (now - state.last_slow_at)),
+                        max(poller_control.MIN_POLL_INTERVAL_SECONDS, poller_control.effective_queue_interval(settings, state) - (now - state.last_queue_at)),
+                    )
 
                 run_live = poller_control.should_live_poll(now, settings, state)
-                run_list = poller_control.should_list_poll(now, settings, state)
-                run_system = poller_control.should_system_poll(now, settings, state)
-                run_slow = poller_control.should_slow_poll(now, settings, state)
-                run_queue = poller_control.should_queue_poll(now, settings, state)
+                run_list = False if transport_backoff else poller_control.should_list_poll(now, settings, state)
+                run_system = False if transport_backoff else poller_control.should_system_poll(now, settings, state)
+                run_slow = False if transport_backoff else poller_control.should_slow_poll(now, settings, state)
+                run_queue = False if transport_backoff else poller_control.should_queue_poll(now, settings, state)
                 if not (run_live or run_list or run_system or run_slow or run_queue):
                     continue
 
-                tick_started = time.monotonic()
-                changed = False
-                ok = True
-                error = ""
-                active = state.last_active
-                emitted_payload_size = 0
-                rtorrent_call_count = 0
-                skipped_emissions = 0
-                heartbeat = {"ok": True, "profile_id": pid, "tick": state.tick_count + 1, "error": ""}
-                speed_status = None
-                speed_status_delivered = False
-                live_speed_ready = False
-
+                with _profile_poll_lock:
+                    if pid in _profile_poll_running:
+                        continue
+                    _profile_poll_running.add(pid)
                 try:
-                    # Note: This keeps per-profile runtime limits active after app start, without waiting for UI contact.
-                    _apply_configured_speed_limits(profile)
-                    rows = torrent_cache.snapshot(pid)
-
-                    if run_live:
-                        live_started = time.monotonic()
-                        live = torrent_cache.refresh_live(profile)
-                        rtorrent_call_count += 1
-                        state.last_live_at = now
-                        state.last_fast_at = now
-                        ok = bool(live.get("ok"))
-                        error = str(live.get("error") or "")
-                        poller_control.mark_live_poll(state, live_started, ok, error, len(live.get("updated") or []), bool(live.get("requires_full_refresh")))
-                        rows = torrent_cache.snapshot(pid)
-                        if live.get("ok"):
-                            active, speed_status = _live_state_from_rows(pid, rows)
-                            live_speed_ready = True
-                            updated = live.get("updated") or []
-                            requires_full_refresh = bool(live.get("requires_full_refresh"))
-                            payload = _live_patch_payload(pid, live)
-                            if payload:
-                                changed = changed or bool(updated)
-                                emitted_payload_size += len(json.dumps(payload, default=str))
-                                _emit_profile(socketio, "torrent_live_patch", payload, pid)
-                            else:
-                                skipped_emissions += 1
-                            if requires_full_refresh:
-                                state.last_list_at = 0.0
-                                run_list = True
-                        else:
-                            _emit_profile(socketio, "rtorrent_error", live, pid)
-
-                    if run_list:
-                        list_started = time.monotonic()
-                        diff = torrent_cache.refresh(profile)
-                        rtorrent_call_count += 1
-                        state.last_list_at = now
-                        ok = bool(diff.get("ok"))
-                        error = str(diff.get("error") or "")
-                        poller_control.mark_list_poll(state, list_started, ok, error, len(diff.get("added") or []), len(diff.get("updated") or []), len(diff.get("removed") or []))
-                        rows = torrent_cache.snapshot(pid)
-                        if diff.get("ok"):
-                            active, speed_status = _live_state_from_rows(pid, rows)
-                        if diff.get("ok") and (diff["added"] or diff["updated"] or diff["removed"]):
-                            changed = True
-                            payload = {**diff, "summary": cached_summary(pid, rows, force=True), "speed_status": speed_status}
-                            emitted_payload_size += len(json.dumps(payload, default=str))
-                            _emit_profile(socketio, "torrent_patch", payload, pid)
-                            speed_status_delivered = True
-                        elif not diff.get("ok"):
-                            _emit_profile(socketio, "rtorrent_error", diff, pid)
-                        else:
-                            skipped_emissions += 1
-
-                    if live_speed_ready and not run_system and not speed_status_delivered and speed_status:
-                        emitted_payload_size += len(json.dumps(speed_status, default=str))
-                        _emit_profile(socketio, "speed_status", speed_status, pid)
-                        speed_status_delivered = True
-
-                    if run_system:
-                        state.last_system_at = now
-                        rows = torrent_cache.snapshot(pid)
-                        if speed_status is None:
-                            speed_status = _speed_status_from_rows(pid, rows)
-                        status = rtorrent.system_status(profile, rows)
-                        rtorrent_call_count += 1
-                        if bool(profile.get("is_remote")):
-                            try:
-                                usage = rtorrent.remote_system_usage(profile)
-                                status.update(usage)
-                                status["usage_available"] = True
-                            except Exception as exc:
-                                status["usage_source"] = "rtorrent-remote"
-                                status["usage_available"] = False
-                                status["usage_error"] = str(exc)
-                        else:
-                            status["cpu"] = psutil.cpu_percent(interval=None)
-                            status["ram"] = psutil.virtual_memory().percent
-                            status["usage_source"] = "local"
-                            status["usage_available"] = True
-                        status["profile_id"] = pid
-                        traffic_history.record(pid, status.get("down_rate", 0), status.get("up_rate", 0), status.get("total_down", 0), status.get("total_up", 0))
-                        status["speed_peaks"] = speed_status["speed_peaks"]
-                        status["poller"] = poller_control.snapshot(pid)
-                        emitted_payload_size += len(json.dumps(status, default=str))
-                        _emit_profile(socketio, "system_stats", status, pid)
-                        speed_status_delivered = True
-
-                    if poller_control.should_disk_poll(now, settings, state):
-                        state.last_disk_at = now
-
-                    if poller_control.should_tracker_poll(now, settings, state):
-                        state.last_tracker_at = now
-
-                    if run_queue:
-                        state.last_queue_at = now
-                        if state.queue_task_running:
-                            skipped_emissions += 1
-                        else:
-                            state.queue_task_running = True
-                            socketio.start_background_task(_run_queue_profile_tasks, socketio, dict(profile), pid, dict(settings))
-
-                    if run_slow:
-                        state.last_slow_at = now
-                        if state.slow_task_running:
-                            skipped_emissions += 1
-                        else:
-                            state.slow_task_running = True
-                            socketio.start_background_task(_run_slow_profile_tasks, socketio, dict(profile), pid, dict(settings))
-                except Exception as exc:
-                    ok = False
-                    error = str(exc)
-                    # Preserve fast speed updates when another task in the same tick fails before system_stats is emitted.
-                    if live_speed_ready and speed_status and not speed_status_delivered:
-                        emitted_payload_size += len(json.dumps(speed_status, default=str))
-                        _emit_profile(socketio, "speed_status", speed_status, pid)
-                        speed_status_delivered = True
-                    _emit_profile(socketio, "rtorrent_error", {"profile_id": pid, "error": error}, pid)
-
-                runtime = poller_control.mark_tick(state, tick_started, active=active, ok=ok, error=error, emitted_payload_size=emitted_payload_size, rtorrent_call_count=rtorrent_call_count, skipped_emissions=skipped_emissions, settings=settings)
-                heartbeat.update({"ok": ok, "error": error, "active": active, "poller": runtime})
-                if poller_control.should_heartbeat(time.monotonic(), settings, state, changed):
-                    state.last_heartbeat_at = time.monotonic()
-                    _emit_profile(socketio, "heartbeat", heartbeat, pid)
+                    socketio.start_background_task(
+                        _poll_profile,
+                        dict(profile),
+                        dict(settings),
+                        now,
+                        run_live,
+                        run_list,
+                        run_system,
+                        run_slow,
+                        run_queue,
+                    )
+                except Exception:
+                    with _profile_poll_lock:
+                        _profile_poll_running.discard(pid)
+                    raise
 
             elapsed = time.monotonic() - loop_started
             socketio.sleep(max(poller_control.MIN_POLL_INTERVAL_SECONDS, min(10.0, next_sleep - elapsed)))
@@ -357,8 +519,6 @@ def register_socketio_handlers(socketio):
                 socketio.start_background_task(poller)
                 _started = True
 
-    ensure_poller_started()
-
     @socketio.on("connect")
     def handle_connect():
         ensure_poller_started()
@@ -369,16 +529,16 @@ def register_socketio_handlers(socketio):
         if profile:
             join_room(_profile_room(profile["id"]))
             _register_profile_socket(int(profile["id"]))
-        emit("connected", {"ok": True, "profile": profile})
+        emit("connected", {"ok": True, "profile": profile, "static_hash": static_hash()})
         if not profile:
             emit("profile_required", {"ok": True, "profiles": []})
             return
-        try:
-            _apply_configured_speed_limits(profile, force=True)
-        except Exception as exc:
-            emit("rtorrent_error", {"profile_id": profile["id"], "error": str(exc)})
-        rows = torrent_cache.snapshot(profile["id"])
-        emit("torrent_snapshot", {"profile_id": profile["id"], "torrents": rows, "summary": cached_summary(profile["id"], rows), "speed_status": _speed_status_from_rows(profile["id"], rows)})
+        # Note: Never block the Socket.IO connect handler on rTorrent. The background poller applies
+        # configured limits and refreshes data independently, even while SCGI is unavailable.
+        poller_control.request_immediate_poll(int(profile["id"]))
+        # The snapshot can be very large on installations with tens of thousands of torrents.
+        # Defer it briefly so Engine.IO can finish its polling -> WebSocket probe first.
+        socketio.start_background_task(_emit_initial_profile_state, socketio, str(request.sid), dict(profile))
         emit("poller_settings", {"profile_id": int(profile["id"]), "settings": poller_control.get_settings(int(profile["id"])), "runtime": poller_control.snapshot(int(profile["id"]))})
         emit("download_plan_update", {"profile_id": int(profile["id"]), "settings": download_planner.get_settings(int(profile["id"]))})
 
@@ -391,9 +551,6 @@ def register_socketio_handlers(socketio):
         if auth.enabled() and not auth.ensure_request_user():
             disconnect()
             return
-        old_profile = active_profile()
-        if old_profile:
-            leave_room(_profile_room(old_profile["id"]))
         profile_id = int((data or {}).get("profile_id") or 0)
         if not profile_id:
             emit("profile_required", {"ok": True, "profiles": []})
@@ -402,14 +559,38 @@ def register_socketio_handlers(socketio):
         if not profile:
             emit("rtorrent_error", {"error": "Profile access denied or profile does not exist"})
             return
+
+        # The HTTP activate call may already have changed active_profile() before this WebSocket event arrives.
+        # Use the socket registry as the source of truth so the client really leaves the previous profile room.
+        sid = str(getattr(request, "sid", "") or "")
+        previous_profile_id = _socket_profile_id(sid)
+        if previous_profile_id and previous_profile_id != profile_id:
+            leave_room(_profile_room(previous_profile_id))
         join_room(_profile_room(profile_id))
         _register_profile_socket(profile_id)
-        try:
-            _apply_configured_speed_limits(profile, force=True)
-        except Exception as exc:
-            emit("rtorrent_error", {"profile_id": profile_id, "error": str(exc)})
-        diff = torrent_cache.refresh(profile)
+        # Note: Profile selection must stay responsive with a stopped rTorrent. Return cached state now
+        # and let the process-wide poller perform SCGI work asynchronously.
         rows = torrent_cache.snapshot(profile_id)
-        emit("torrent_snapshot", {"profile_id": profile_id, "torrents": rows, "summary": cached_summary(profile_id, rows, force=True), "speed_status": _speed_status_from_rows(profile_id, rows), "error": diff.get("error", "")})
+        summary = cached_summary(profile_id, rows, force=True)
+        speed_status = _speed_status_from_rows(profile_id, rows)
+        # Note: Profile switching remains cache-only; metrics reuse the same cached snapshot.
+        prometheus_metrics.observe_profile(profile)
+        prometheus_metrics.observe_torrent_summary(profile, summary)
+        prometheus_metrics.observe_speed_status(profile, speed_status)
+        settings = poller_control.get_settings(profile_id)
+        state = poller_control.state_for(profile_id)
+        visible_error = poller_control.user_visible_rtorrent_error(state, settings, torrent_cache.error(profile_id))
+        emit("torrent_snapshot", {
+            "profile_id": profile_id,
+            "torrents": rows,
+            "summary": summary,
+            "speed_status": speed_status,
+            "error": visible_error,
+            "cache_ready": torrent_cache.age_seconds(profile_id) is not None,
+        })
+        poller_control.request_immediate_poll(profile_id)
         emit("poller_settings", {"profile_id": profile_id, "settings": poller_control.get_settings(profile_id), "runtime": poller_control.snapshot(profile_id)})
         emit("download_plan_update", {"profile_id": profile_id, "settings": download_planner.get_settings(profile_id)})
+
+    # Start browser-independent polling only after all Socket.IO handlers are registered.
+    ensure_poller_started()
