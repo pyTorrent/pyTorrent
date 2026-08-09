@@ -26,6 +26,70 @@ FONT_FAMILIES = {
     "adwaita-mono": "Adwaita Mono",
 }
 
+
+FOOTER_ITEM_KEYS = (
+    "cpu", "ram", "usage_chart", "disk",
+    "speed_down", "speed_up", "speed_peaks", "limits", "totals",
+    "version", "port_check", "sockets", "rt_downloads", "rt_uploads",
+    "rt_http", "rt_files", "rt_port", "shown", "selected", "planner",
+    "clock", "docs",
+)
+FOOTER_PINNED_KEY = "docs"
+
+
+def _json_payload(value, fallback):
+    if value is None:
+        return fallback
+    if isinstance(value, str):
+        try:
+            return json.loads(value or json.dumps(fallback))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return fallback
+    return value
+
+
+def _preference_bool(value) -> bool:
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"0", "false", "no", "off", ""}:
+            return False
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+    return bool(value)
+
+
+def normalize_footer_items(value) -> dict[str, bool]:
+    parsed = _json_payload(value, {})
+    if not isinstance(parsed, dict):
+        return {}
+    return {
+        key: _preference_bool(parsed[key])
+        for key in FOOTER_ITEM_KEYS
+        if key in parsed
+    }
+
+
+def normalize_footer_order(value) -> list[str]:
+    parsed = _json_payload(value, [])
+    if not isinstance(parsed, list):
+        parsed = []
+    allowed = set(FOOTER_ITEM_KEYS)
+    order: list[str] = []
+    for item in parsed:
+        key = str(item or "").strip()
+        if key in allowed and key != FOOTER_PINNED_KEY and key not in order:
+            order.append(key)
+    for key in FOOTER_ITEM_KEYS:
+        if key != FOOTER_PINNED_KEY and key not in order:
+            order.append(key)
+    order.append(FOOTER_PINNED_KEY)
+    return order
+
+
+def default_footer_order_json() -> str:
+    return json.dumps(normalize_footer_order([]), separators=(",", ":"))
+
+
 RECOMMENDED_TABLE_COLUMNS = {
     "hidden": ["hash", "priority", "hashing", "active", "message", "complete", "state", "ratio_group"],
     "shown": ["down_total", "to_download", "up_total", "created"],
@@ -365,6 +429,8 @@ PROFILE_PREFERENCE_COLUMNS = frozenset({
     "reverse_dns_enabled",
     "sidebar_labels_expanded",
     "sidebar_shortcuts_expanded",
+    "footer_items_json",
+    "footer_order_json",
     "system_usage_chart_mode",
     "system_usage_chart_expanded",
 })
@@ -374,11 +440,25 @@ def _seed_profile_preferences(conn, user_id: int, profile_id: int) -> dict:
     now = utcnow()
     legacy = conn.execute("SELECT * FROM user_preferences WHERE user_id=?", (user_id,)).fetchone() or {}
     row = conn.execute("SELECT * FROM profile_preferences WHERE user_id=? AND profile_id=?", (user_id, profile_id)).fetchone()
+    footer_items = json.dumps(normalize_footer_items(legacy.get("footer_items_json")), separators=(",", ":"))
+    footer_order = default_footer_order_json()
     if row:
-        return dict(row)
-    # Note: Preserve legacy values during upgrades; brand-new profile preferences start from the recommended layout and enabled helpers.
+        missing: dict[str, str] = {}
+        if row.get("footer_items_json") is None:
+            missing["footer_items_json"] = footer_items
+        if row.get("footer_order_json") is None:
+            missing["footer_order_json"] = footer_order
+        if missing:
+            assignments = ", ".join(f"{column}=?" for column in missing)
+            conn.execute(
+                f"UPDATE profile_preferences SET {assignments}, updated_at=? WHERE user_id=? AND profile_id=?",
+                (*missing.values(), now, user_id, profile_id),
+            )
+            row = conn.execute("SELECT * FROM profile_preferences WHERE user_id=? AND profile_id=?", (user_id, profile_id)).fetchone()
+        return dict(row or {})
+    # Note: Profile-scoped footer state is seeded from the legacy user preference once, then evolves independently per profile.
     conn.execute(
-        "INSERT INTO profile_preferences(user_id,profile_id,table_columns_json,torrent_sort_json,active_filter,peers_refresh_seconds,port_check_enabled,tracker_favicons_enabled,reverse_dns_enabled,sidebar_labels_expanded,sidebar_shortcuts_expanded,system_usage_chart_mode,system_usage_chart_expanded,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO profile_preferences(user_id,profile_id,table_columns_json,torrent_sort_json,active_filter,peers_refresh_seconds,port_check_enabled,tracker_favicons_enabled,reverse_dns_enabled,sidebar_labels_expanded,sidebar_shortcuts_expanded,footer_items_json,footer_order_json,system_usage_chart_mode,system_usage_chart_expanded,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (
             user_id,
             profile_id,
@@ -391,6 +471,8 @@ def _seed_profile_preferences(conn, user_id: int, profile_id: int) -> dict:
             int(legacy["reverse_dns_enabled"]) if legacy.get("reverse_dns_enabled") is not None else 1,
             int(legacy.get("sidebar_labels_expanded") or 0),
             int(legacy.get("sidebar_shortcuts_expanded") or 0),
+            footer_items,
+            footer_order,
             str(legacy.get("system_usage_chart_mode") or "combined"),
             int(legacy.get("system_usage_chart_expanded") or 0),
             now,
@@ -413,7 +495,7 @@ def save_profile_preferences(user_id: int, profile_id: int | None, data: dict) -
     profile_id = int(profile_id)
     now = utcnow()
     with connect() as conn:
-        current = _seed_profile_preferences(conn, user_id, profile_id)
+        _seed_profile_preferences(conn, user_id, profile_id)
         updates: dict[str, object] = {}
         if data.get("table_columns_json") is not None:
             updates["table_columns_json"] = str(data.get("table_columns_json"))
@@ -425,20 +507,19 @@ def save_profile_preferences(user_id: int, profile_id: int | None, data: dict) -
         if data.get("tracker_favicons_enabled") is not None:
             updates["tracker_favicons_enabled"] = 1 if data.get("tracker_favicons_enabled") else 0
         if data.get("reverse_dns_enabled") is not None:
-            # Note: Reverse DNS is stored per profile because PTR lookups depend on swarm size and profile network latency.
             updates["reverse_dns_enabled"] = 1 if data.get("reverse_dns_enabled") else 0
         if data.get("sidebar_labels_expanded") is not None:
-            # Note: Label collapse state is per profile because each rTorrent can have a very different label set.
             updates["sidebar_labels_expanded"] = 1 if data.get("sidebar_labels_expanded") else 0
         if data.get("sidebar_shortcuts_expanded") is not None:
-            # Note: Shortcut help visibility is stored with profile preferences to survive refreshes.
             updates["sidebar_shortcuts_expanded"] = 1 if data.get("sidebar_shortcuts_expanded") else 0
+        if data.get("footer_items_json") is not None:
+            updates["footer_items_json"] = json.dumps(normalize_footer_items(data.get("footer_items_json")), separators=(",", ":"))
+        if data.get("footer_order_json") is not None:
+            updates["footer_order_json"] = json.dumps(normalize_footer_order(data.get("footer_order_json")), separators=(",", ":"))
         if data.get("system_usage_chart_mode") is not None:
-            # Note: CPU/RAM chart layout is profile-scoped so each server view can keep its preferred footer density.
             mode = str(data.get("system_usage_chart_mode") or "combined").strip().lower()
             updates["system_usage_chart_mode"] = mode if mode in {"combined", "split"} else "combined"
         if data.get("system_usage_chart_expanded") is not None:
-            # Note: Remember whether the larger CPU/RAM panel should reopen for this user/profile pair.
             updates["system_usage_chart_expanded"] = 1 if data.get("system_usage_chart_expanded") else 0
         if data.get("torrent_sort_json") is not None:
             value = data.get("torrent_sort_json") if isinstance(data.get("torrent_sort_json"), str) else json.dumps(data.get("torrent_sort_json"))
@@ -464,27 +545,10 @@ def save_profile_preferences(user_id: int, profile_id: int | None, data: dict) -
             updates["active_filter"] = value
         if not updates:
             return
-        merged = {**current, **updates}
+        assignments = ", ".join(f"{column}=?" for column in updates)
         conn.execute(
-            "INSERT INTO profile_preferences(user_id,profile_id,table_columns_json,torrent_sort_json,active_filter,peers_refresh_seconds,port_check_enabled,tracker_favicons_enabled,reverse_dns_enabled,sidebar_labels_expanded,sidebar_shortcuts_expanded,system_usage_chart_mode,system_usage_chart_expanded,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
-            "ON CONFLICT(user_id,profile_id) DO UPDATE SET table_columns_json=excluded.table_columns_json, torrent_sort_json=excluded.torrent_sort_json, active_filter=excluded.active_filter, peers_refresh_seconds=excluded.peers_refresh_seconds, port_check_enabled=excluded.port_check_enabled, tracker_favicons_enabled=excluded.tracker_favicons_enabled, reverse_dns_enabled=excluded.reverse_dns_enabled, sidebar_labels_expanded=excluded.sidebar_labels_expanded, sidebar_shortcuts_expanded=excluded.sidebar_shortcuts_expanded, system_usage_chart_mode=excluded.system_usage_chart_mode, system_usage_chart_expanded=excluded.system_usage_chart_expanded, updated_at=excluded.updated_at",
-            (
-                user_id,
-                profile_id,
-                merged.get("table_columns_json"),
-                merged.get("torrent_sort_json"),
-                merged.get("active_filter") or "all",
-                int(merged.get("peers_refresh_seconds") or 0),
-                int(merged.get("port_check_enabled") or 0),
-                int(merged.get("tracker_favicons_enabled") or 0),
-                int(merged.get("reverse_dns_enabled") or 0),
-                int(merged.get("sidebar_labels_expanded") or 0),
-                int(merged.get("sidebar_shortcuts_expanded") or 0),
-                str(merged.get("system_usage_chart_mode") or "combined"),
-                int(merged.get("system_usage_chart_expanded") or 0),
-                merged.get("created_at") or now,
-                now,
-            ),
+            f"UPDATE profile_preferences SET {assignments}, updated_at=? WHERE user_id=? AND profile_id=?",
+            (*updates.values(), now, user_id, profile_id),
         )
 
 
@@ -509,7 +573,6 @@ def save_preferences(data: dict, user_id: int | None = None, profile_id: int | N
     allowed_theme = data.get("theme") if data.get("theme") in {"light", "dark"} else None
     bootstrap_theme = data.get("bootstrap_theme") if data.get("bootstrap_theme") in BOOTSTRAP_THEMES else None
     font_family = data.get("font_family") if data.get("font_family") in FONT_FAMILIES else None
-    footer_items_json = data.get("footer_items_json")
     title_speed_enabled = data.get("title_speed_enabled")
     automation_toasts_enabled = data.get("automation_toasts_enabled")
     smart_queue_toasts_enabled = data.get("smart_queue_toasts_enabled")
@@ -595,13 +658,6 @@ def save_preferences(data: dict, user_id: int | None = None, profile_id: int | N
         if compact_torrent_list_enabled is not None:
             # Note: Compact torrent list is a visual-only preference for desktop and mobile list density.
             conn.execute("UPDATE user_preferences SET compact_torrent_list_enabled=?, updated_at=? WHERE user_id=?", (1 if compact_torrent_list_enabled else 0, now, user_id))
-        if footer_items_json is not None:
-            # Note: Store only JSON objects so footer visibility can be extended without schema churn.
-            value = footer_items_json if isinstance(footer_items_json, str) else json.dumps(footer_items_json)
-            parsed = json.loads(value or "{}")
-            if not isinstance(parsed, dict):
-                parsed = {}
-            conn.execute("UPDATE user_preferences SET footer_items_json=?, updated_at=? WHERE user_id=?", (json.dumps(parsed), now, user_id))
         if detail_panel_height is not None:
             try:
                 height = int(detail_panel_height or 255)

@@ -84,6 +84,8 @@ CREATE TABLE IF NOT EXISTS profile_preferences (
   reverse_dns_enabled INTEGER DEFAULT 1,
   sidebar_labels_expanded INTEGER DEFAULT 0,
   sidebar_shortcuts_expanded INTEGER DEFAULT 0,
+  footer_items_json TEXT,
+  footer_order_json TEXT,
   system_usage_chart_mode TEXT DEFAULT 'combined',
   system_usage_chart_expanded INTEGER DEFAULT 0,
   created_at TEXT NOT NULL,

@@ -536,11 +536,60 @@ def build_libtorrent(base_dir, libtorrent_ref, curl_install=None, cares_install=
     return install_dir, version
 
 
+
+def apply_legacy_rtorrent_lockfile_patch(source_dir, rtorrent_ref):
+    """Backport the session lock buffer fix to rTorrent releases older than 0.10.0."""
+    version = extract_version_tuple(rtorrent_ref)
+    if version is None or version >= (0, 10, 0):
+        return False
+
+    lockfile_path = Path(source_dir) / "src" / "utils" / "lockfile.cc"
+    if not lockfile_path.exists():
+        raise InstallError(
+            f"Cannot apply legacy rTorrent lockfile patch: {lockfile_path} does not exist."
+        )
+
+    source = lockfile_path.read_text(encoding="utf-8")
+
+    # Upstream fix for the pre-0.10.0 Lockfile::try_lock() buffer overflow:
+    # after advancing the destination pointer by strlen(buf), snprintf must only
+    # receive the number of bytes that remain in the 256-byte buffer.
+    already_fixed = re.search(
+        r"::snprintf\(buf\s*\+\s*len,\s*255\s*-\s*len,\s*\":\+%i\\n\",\s*::getpid\(\)\);",
+        source,
+    )
+    if already_fixed:
+        print(f"Legacy rTorrent session lock patch already present ({rtorrent_ref}).")
+        return False
+
+    vulnerable = re.compile(
+        r'(?P<indent>^[ \t]*)::snprintf\(buf\s*\+\s*std::strlen\(buf\),\s*255,\s*":\+%i\\n",\s*::getpid\(\)\);',
+        re.MULTILINE,
+    )
+    match = vulnerable.search(source)
+    if not match:
+        raise InstallError(
+            f"rTorrent {rtorrent_ref} is older than 0.10.0, but the expected vulnerable "
+            f"Lockfile::try_lock() code was not found in {lockfile_path}. Refusing to build "
+            "without verifying the session lock fix."
+        )
+
+    indent = match.group("indent")
+    replacement = (
+        f"{indent}ssize_t len = std::strlen(buf);\n"
+        f'{indent}::snprintf(buf + len, 255 - len, ":+%i\\n", ::getpid());'
+    )
+    source = vulnerable.sub(lambda _match: replacement, source, count=1)
+    lockfile_path.write_text(source, encoding="utf-8")
+    print(f"Applied legacy rTorrent session lock patch ({rtorrent_ref}).")
+    return True
+
 def build_rtorrent(base_dir, rtorrent_ref, libtorrent_install, rpc_backend, xmlrpc_install=None, curl_install=None, cares_install=None, *, debug=False):
     source_dir = Path(base_dir) / "rtorrent"
     install_dir = Path(base_dir) / "rtorrent_install"
 
     clone_or_update_repo("https://github.com/rakshasa/rtorrent.git", source_dir, rtorrent_ref, debug=debug)
+    apply_legacy_rtorrent_lockfile_patch(source_dir, rtorrent_ref)
 
     prefixes = [libtorrent_install]
     xmlrpc_config = None
