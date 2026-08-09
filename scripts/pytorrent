@@ -13,13 +13,22 @@ SERVICE_NAME="${PYTORRENT_SERVICE_NAME:-pytorrent}"
 REPO_URL="${PYTORRENT_REPO_URL:-https://github.com/pyTorrent/pyTorrent.git}"
 REPO_BRANCH="${PYTORRENT_REPO_BRANCH:-master}"
 
-log() { printf '[pyTorrent] %s\n' "$*"; }
-fail() { printf '[pyTorrent] ERROR: %s\n' "$*" >&2; exit 1; }
-need_root() { [[ "${EUID}" -eq 0 ]] || fail "Run as root (sudo pytorrent $*)."; }
+log() {
+    printf '[pyTorrent] %s\n' "$*"
+}
+
+fail() {
+    printf '[pyTorrent] ERROR: %s\n' "$*" >&2
+    exit 1
+}
+
+need_root() {
+    [[ "${EUID}" -eq 0 ]] || fail "Run as root (sudo pytorrent $*)."
+}
 
 as_app() {
     if command -v sudo >/dev/null 2>&1; then
-        sudo -u "${APP_USER}" -- "$@"
+        sudo -H -u "${APP_USER}" -- "$@"
     else
         runuser -u "${APP_USER}" -- "$@"
     fi
@@ -28,20 +37,44 @@ as_app() {
 quiet() {
     local tmp rc
     tmp="$(mktemp)"
+
     if "$@" >"${tmp}" 2>&1; then
         rm -f "${tmp}"
         return 0
     fi
+
     rc=$?
     cat "${tmp}" >&2
     rm -f "${tmp}"
     return "${rc}"
 }
 
+ensure_git_safe() {
+    if ! git config --global --get-all safe.directory 2>/dev/null \
+        | grep -Fxq -- "${APP_DIR}"; then
+        log "Adding ${APP_DIR} to Git safe.directory for $(id -un)..."
+        git config --global --add safe.directory "${APP_DIR}"
+    fi
+
+    if [[ "${EUID}" -eq 0 && "$(id -un)" != "${APP_USER}" ]]; then
+        if ! as_app git config --global --get-all safe.directory 2>/dev/null \
+            | grep -Fxq -- "${APP_DIR}"; then
+            log "Adding ${APP_DIR} to Git safe.directory for ${APP_USER}..."
+            as_app git config --global --add safe.directory "${APP_DIR}"
+        fi
+    fi
+}
+
 cmd_update() {
     need_root update
-    [[ -d "${APP_DIR}/.git" ]] || fail "${APP_DIR} is not a Git repository. Reinstall pyTorrent with the current installer."
-    [[ -x "${APP_DIR}/.venv/bin/python" ]] || fail "Missing virtualenv in ${APP_DIR}/.venv."
+
+    [[ -d "${APP_DIR}/.git" ]] || \
+        fail "${APP_DIR} is not a Git repository. Reinstall pyTorrent with the current installer."
+
+    [[ -x "${APP_DIR}/.venv/bin/python" ]] || \
+        fail "Missing virtualenv in ${APP_DIR}/.venv."
+
+    ensure_git_safe
 
     log "Updating Git repository (${REPO_BRANCH})..."
     quiet as_app git -C "${APP_DIR}" fetch --quiet origin "${REPO_BRANCH}"
@@ -53,16 +86,32 @@ cmd_update() {
 
     if [[ -f "${APP_DIR}/scripts/download_frontend_libs.py" ]]; then
         log "Updating frontend static files..."
-        quiet as_app env PYTORRENT_INSTALL_VERBOSE=0 "${APP_DIR}/.venv/bin/python" "${APP_DIR}/scripts/download_frontend_libs.py"
+        quiet as_app env \
+            PYTORRENT_INSTALL_VERBOSE=0 \
+            "${APP_DIR}/.venv/bin/python" \
+            "${APP_DIR}/scripts/download_frontend_libs.py"
     fi
 
     log "Applying database migrations..."
-    quiet as_app env PYTHONPATH="${APP_DIR}" "${APP_DIR}/.venv/bin/python" -c 'from pytorrent.db import init_db; init_db()'
+    quiet as_app env \
+        PYTHONPATH="${APP_DIR}" \
+        "${APP_DIR}/.venv/bin/python" \
+        -c 'from pytorrent.db import init_db; init_db()'
 
     install -m 0755 "${APP_DIR}/scripts/pytorrent" /usr/local/bin/pytorrent
+
     log "Restarting ${SERVICE_NAME}..."
     systemctl restart "${SERVICE_NAME}"
+
     log "Update complete."
+}
+
+cmd_version() {
+    [[ -d "${APP_DIR}/.git" ]] || \
+        fail "${APP_DIR} is not a Git repository."
+
+    ensure_git_safe
+    git -C "${APP_DIR}" rev-parse --short HEAD
 }
 
 usage() {
@@ -81,13 +130,45 @@ USAGE
 }
 
 case "${1:-}" in
-    update) cmd_update ;;
-    restart) need_root restart; log "Restarting ${SERVICE_NAME}..."; systemctl restart "${SERVICE_NAME}" ;;
-    start) need_root start; log "Starting ${SERVICE_NAME}..."; systemctl start "${SERVICE_NAME}" ;;
-    stop) need_root stop; log "Stopping ${SERVICE_NAME}..."; systemctl stop "${SERVICE_NAME}" ;;
-    status) systemctl status "${SERVICE_NAME}" --no-pager ;;
-    logs) journalctl -u "${SERVICE_NAME}" -f ;;
-    version) git -C "${APP_DIR}" rev-parse --short HEAD ;;
-    -h|--help|help|"") usage ;;
-    *) fail "Unknown command: $1" ;;
+    update)
+        cmd_update
+        ;;
+
+    restart)
+        need_root restart
+        log "Restarting ${SERVICE_NAME}..."
+        systemctl restart "${SERVICE_NAME}"
+        ;;
+
+    start)
+        need_root start
+        log "Starting ${SERVICE_NAME}..."
+        systemctl start "${SERVICE_NAME}"
+        ;;
+
+    stop)
+        need_root stop
+        log "Stopping ${SERVICE_NAME}..."
+        systemctl stop "${SERVICE_NAME}"
+        ;;
+
+    status)
+        systemctl status "${SERVICE_NAME}" --no-pager
+        ;;
+
+    logs)
+        journalctl -u "${SERVICE_NAME}" -f
+        ;;
+
+    version)
+        cmd_version
+        ;;
+
+    -h|--help|help|"")
+        usage
+        ;;
+
+    *)
+        fail "Unknown command: $1"
+        ;;
 esac
