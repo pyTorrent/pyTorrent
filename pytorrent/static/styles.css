@@ -1409,12 +1409,22 @@ body.resizing-details {
 }
 
 .nav-btn {
-  border-radius: 0.45rem !important;
-  margin: 0 !important;
-  display: inline-flex;
   align-items: center;
-  justify-content: center;
+  border-radius: 0.45rem !important;
+  display: inline-flex;
   gap: 0.25rem;
+  justify-content: center;
+  margin: 0 !important;
+}
+
+/* UI note: Quiet navigation keeps secondary destinations available without competing with primary torrent actions. */
+.nav-btn-quiet {
+  --bs-btn-bg: transparent;
+  --bs-btn-border-color: transparent;
+  --bs-btn-color: var(--bs-secondary-color);
+  --bs-btn-hover-bg: var(--bs-tertiary-bg);
+  --bs-btn-hover-border-color: var(--bs-border-color);
+  --bs-btn-hover-color: var(--bs-body-color);
 }
 
 .nav-btn+.nav-btn,
@@ -4089,23 +4099,142 @@ body.sorting-preference-cards * {
   outline: 0;
 }
 
-.jobs-toolbar,
-.jobs-toolbar-actions,
-.jobs-toolbar-toggle {
+/* Jobs and operation-log modal records */
+.records-modal-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.records-toolbar,
+.records-toolbar-main,
+.records-toolbar-options {
+  align-items: center;
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
 }
 
-.jobs-toolbar {
-  align-items: center;
+.records-toolbar {
+  flex: 0 0 auto;
   justify-content: space-between;
-  margin-bottom: 0.5rem;
 }
 
-.jobs-toolbar-actions,
-.jobs-toolbar-toggle {
+.records-toolbar-main {
+  flex: 1 1 24rem;
+  min-width: 0;
+}
+
+.records-toolbar-options {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.records-refresh-button {
   align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--bs-secondary-color);
+  display: inline-flex;
+  height: 2rem;
+  justify-content: center;
+  padding: 0;
+  width: 2rem;
+}
+
+.records-refresh-button:hover,
+.records-refresh-button:focus-visible,
+.records-refresh-button.is-refreshing {
+  background: var(--bs-tertiary-bg);
+  border-color: var(--bs-border-color);
+  color: var(--bs-body-color);
+}
+
+.records-refresh-button.is-refreshing i {
+  animation: spinner-border 0.75s linear infinite;
+}
+
+.records-refresh-state {
+  align-items: center;
+  color: var(--bs-secondary-color);
+  display: inline-flex;
+  font-size: 0.78rem;
+  gap: 0.35rem;
+  min-width: 5.75rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+  visibility: hidden;
+}
+
+.records-refresh-state.is-active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.records-refresh-state .spinner-border {
+  height: 0.75rem;
+  width: 0.75rem;
+}
+
+.records-actions-trigger {
+  color: var(--bs-secondary-color);
+}
+
+.records-table-viewport {
+  -webkit-overflow-scrolling: touch;
+  background: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.55rem;
+  contain: layout paint;
+  flex: 0 0 auto;
+  height: clamp(18rem, 52vh, 38rem);
+  min-width: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  position: relative;
+  scrollbar-gutter: stable both-edges;
+  width: 100%;
+}
+
+/* UI note: Record tables fill the viewport first; horizontal overflow appears only when a table genuinely exceeds the available width. */
+.records-table-viewport>.responsive-table-wrap {
+  border: 0;
+  border-radius: 0;
+  max-width: none;
+  min-width: 100%;
+  overflow: visible;
+  width: 100%;
+}
+
+/* UI note: Empty Jobs/Logs states are centered inside the full stable records viewport. */
+.records-table-viewport>.empty-state {
+  display: flex;
+  justify-content: center;
+  margin: 0 auto;
+  min-height: 100%;
+  width: 100%;
+}
+
+/* UI note: Job records start below the action toolbar instead of visually touching its controls. */
+#jobsTable {
+  margin-top: 0.75rem;
+}
+
+.records-initial-state {
+  align-items: center;
+  color: var(--bs-secondary-color);
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  min-height: 100%;
+  padding: 1rem;
+}
+
+.records-pager {
+  flex: 0 0 auto;
+  min-height: 2rem;
 }
 
 .jobs-show-details {
@@ -4113,10 +4242,45 @@ body.sorting-preference-cards * {
   margin-bottom: 0;
 }
 
+.jobs-actions-menu .dropdown-item {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.job-row-action {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--bs-secondary-color);
+  display: inline-flex;
+  height: 1.75rem;
+  justify-content: center;
+  padding: 0;
+  width: 1.75rem;
+}
+
+.job-row-action:hover,
+.job-row-action:focus-visible {
+  background: var(--bs-tertiary-bg);
+  color: var(--bs-body-color);
+}
+
+.job-row-action-warning:hover,
+.job-row-action-warning:focus-visible {
+  color: var(--bs-warning-text-emphasis);
+}
+
+.job-row-action-danger:hover,
+.job-row-action-danger:focus-visible {
+  color: var(--bs-danger-text-emphasis);
+}
+
 .jobs-table {
   min-width: 1080px;
   white-space: normal;
 }
+
 
 .jobs-table th:nth-child(8),
 .jobs-table td:nth-child(8),
@@ -5864,8 +6028,6 @@ body,
   gap: 0.85rem;
 }
 
-.operation-log-toolbar,
-.operation-log-toolbar-main,
 .operation-log-settings-grid,
 .operation-log-default-filter-row,
 .operation-log-switches {
@@ -5875,21 +6037,8 @@ body,
   gap: 0.5rem;
 }
 
-.operation-log-toolbar {
-  justify-content: space-between;
-}
-
-.operation-log-toolbar-main {
-  flex: 1 1 auto;
-}
-
 .operation-log-toolbar-toggle {
-  align-items: center;
-  display: flex;
-  flex: 0 0 auto;
-  flex-wrap: wrap;
   gap: 0.75rem;
-  margin-left: auto;
 }
 
 .operation-log-hide-jobs,
@@ -6101,9 +6250,6 @@ body,
     width: 100%;
   }
 
-  .operation-log-toolbar,
-  .operation-log-toolbar-main,
-  .operation-log-toolbar-toggle,
   .operation-log-default-filter-row,
   .operation-log-switches {
     align-items: stretch;
@@ -6112,7 +6258,6 @@ body,
 
   .operation-log-toolbar-toggle {
     gap: 0.35rem;
-    margin-left: 0;
   }
 
   .operation-log-view-settings {
