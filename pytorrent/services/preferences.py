@@ -576,6 +576,7 @@ def save_preferences(data: dict, user_id: int | None = None, profile_id: int | N
     title_speed_enabled = data.get("title_speed_enabled")
     automation_toasts_enabled = data.get("automation_toasts_enabled")
     smart_queue_toasts_enabled = data.get("smart_queue_toasts_enabled")
+    notification_history_enabled = data.get("notification_history_enabled")
     easter_egg_enabled = data.get("easter_egg_enabled")
     easter_egg_loading_image_url = data.get("easter_egg_loading_image_url")
     easter_egg_click_image_url = data.get("easter_egg_click_image_url")
@@ -592,8 +593,7 @@ def save_preferences(data: dict, user_id: int | None = None, profile_id: int | N
     download_location_mode = data.get("download_location_mode")
     download_last_path = data.get("download_last_path")
     download_remember_last_enabled = data.get("download_remember_last_enabled")
-    # Note: The Add modal remember switch is a shortcut for the remember-last mode.
-    # Keeping this normalization server-side protects API callers and stale frontend bundles.
+    # Note: Normalize remember-last server-side so the Add action and direct API callers persist the same location behavior.
     if download_remember_last_enabled is True and download_location_mode is None:
         download_location_mode = "remember_last"
     if download_location_mode == "remember_last" and download_remember_last_enabled is None:
@@ -632,6 +632,9 @@ def save_preferences(data: dict, user_id: int | None = None, profile_id: int | N
         if smart_queue_toasts_enabled is not None:
             # Note: Smart Queue toast noise can be disabled independently from automation notifications.
             conn.execute("UPDATE user_preferences SET smart_queue_toasts_enabled=?, updated_at=? WHERE user_id=?", (1 if smart_queue_toasts_enabled else 0, now, user_id))
+        if notification_history_enabled is not None:
+            # Note: Toast history is an opt-in UX preference; message contents remain browser-local in localStorage.
+            conn.execute("UPDATE user_preferences SET notification_history_enabled=?, updated_at=? WHERE user_id=?", (1 if notification_history_enabled else 0, now, user_id))
         if easter_egg_enabled is not None:
             conn.execute("UPDATE user_preferences SET easter_egg_enabled=?, updated_at=? WHERE user_id=?", (1 if (easter_egg_enabled and easter_egg_has_image) else 0, now, user_id))
         elif (easter_egg_loading_image_url is not None or easter_egg_click_image_url is not None) and not easter_egg_has_image:

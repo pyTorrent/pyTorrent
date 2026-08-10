@@ -1309,6 +1309,103 @@ body.resizing-details {
   padding: 0.05rem 0.35rem;
 }
 
+.notification-history-wrap {
+  flex: 0 0 auto;
+}
+
+.notification-history-btn {
+  position: relative;
+}
+
+.notification-history-badge {
+  position: absolute;
+  top: -0.42rem;
+  right: -0.42rem;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  padding: 0 0.25rem;
+  color: var(--bs-white);
+  background: var(--bs-danger);
+  border: 2px solid var(--pytorrent-topbar-bg, var(--bs-secondary-bg));
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 0.95rem;
+  text-align: center;
+}
+
+.notification-history-menu {
+  width: min(25rem, calc(100vw - 1rem));
+  max-height: min(34rem, 76vh);
+  padding: 0;
+  overflow: hidden;
+}
+
+.notification-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid var(--bs-border-color);
+}
+
+.notification-history-list {
+  display: grid;
+  max-height: min(29rem, 66vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.notification-history-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.65rem;
+  align-items: start;
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--bs-border-color) 70%, transparent);
+}
+
+.notification-history-item:last-child {
+  border-bottom: 0;
+}
+
+.notification-history-item>i {
+  margin-top: 0.2rem;
+  color: var(--bs-secondary-color);
+}
+
+.notification-history-item>div {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.notification-history-item span {
+  overflow-wrap: anywhere;
+}
+
+.notification-history-item small {
+  color: var(--bs-secondary-color);
+}
+
+.notification-history-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+  padding: 0.08rem 0.4rem;
+  color: var(--bs-secondary-color);
+  background: var(--bs-tertiary-bg);
+  border-radius: 999px;
+  font-size: 0.72rem;
+}
+
+.notification-history-empty {
+  padding: 1rem;
+  color: var(--bs-secondary-color);
+  text-align: center;
+}
+
 @media (max-width: 1100px) {
   :root {
     --topbar: 88px;
@@ -4131,51 +4228,18 @@ body.sorting-preference-cards * {
   margin-left: auto;
 }
 
-.records-refresh-button {
-  align-items: center;
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--bs-secondary-color);
-  display: inline-flex;
-  height: 2rem;
-  justify-content: center;
-  padding: 0;
-  width: 2rem;
-}
 
-.records-refresh-button:hover,
-.records-refresh-button:focus-visible,
-.records-refresh-button.is-refreshing {
-  background: var(--bs-tertiary-bg);
-  border-color: var(--bs-border-color);
-  color: var(--bs-body-color);
-}
-
-.records-refresh-button.is-refreshing i {
-  animation: spinner-border 0.75s linear infinite;
-}
-
-.records-refresh-state {
+.records-live-label {
   align-items: center;
   color: var(--bs-secondary-color);
   display: inline-flex;
   font-size: 0.78rem;
   gap: 0.35rem;
-  min-width: 5.75rem;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 120ms ease;
-  visibility: hidden;
+  white-space: nowrap;
 }
 
-.records-refresh-state.is-active {
-  opacity: 1;
-  visibility: visible;
-}
-
-.records-refresh-state .spinner-border {
-  height: 0.75rem;
-  width: 0.75rem;
+.records-live-label i {
+  font-size: 0.7rem;
 }
 
 .records-actions-trigger {
@@ -5054,6 +5118,34 @@ body.sorting-preference-cards * {
   margin-bottom: .75rem;
 }
 
+.light-tabs .nav-pills {
+  gap: 0.2rem;
+  border-bottom: 1px solid var(--bs-border-color);
+}
+
+.light-tabs .nav-pills .nav-link {
+  margin-bottom: -1px;
+  padding: 0.45rem 0.7rem;
+  color: var(--bs-secondary-color);
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0.45rem 0.45rem 0 0;
+}
+
+.light-tabs .nav-pills .nav-link:hover,
+.light-tabs .nav-pills .nav-link:focus-visible {
+  color: var(--bs-body-color);
+  background: color-mix(in srgb, var(--bs-secondary-bg) 70%, transparent);
+}
+
+.light-tabs .nav-pills .nav-link.active {
+  color: var(--bs-body-color);
+  background: color-mix(in srgb, var(--bs-primary) 9%, transparent);
+  border-bottom-color: var(--bs-primary);
+  box-shadow: none;
+}
+
 .column-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
@@ -5301,7 +5393,7 @@ body,
 }
 
 .add-option-switch,
-.add-option-check {
+.add-option-action {
   align-items: center;
   display: flex;
   gap: 0.55rem;
@@ -5313,7 +5405,7 @@ body,
 }
 
 .add-option-switch .form-check-input,
-.add-option-check .form-check-input {
+.add-option-action .form-check-input {
   flex: 0 0 auto;
   margin: 0;
 }
@@ -5360,11 +5452,6 @@ body,
   .create-properties-grid,
   .create-meta-grid {
     grid-template-columns: 1fr;
-  }
-
-  .add-option-switch,
-  .add-option-check {
-    justify-content: flex-start;
   }
 }
 

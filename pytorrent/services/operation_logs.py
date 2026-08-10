@@ -5,6 +5,21 @@ from typing import Any
 from ..db import connect, utcnow, default_user_id
 from . import auth
 
+_socketio = None
+
+
+def set_socketio(socketio) -> None:
+    """Register Socket.IO so new operation logs can be streamed to the active profile room."""
+    global _socketio
+    _socketio = socketio
+
+
+def _emit_created_log(profile_id: int, row: dict) -> None:
+    """Emit one newly inserted log row without forcing clients to reload the whole table."""
+    if not _socketio or not profile_id or not row:
+        return
+    _socketio.emit("operation_log_created", {"profile_id": int(profile_id), "log": row}, to=f"profile:{int(profile_id)}")
+
 VALID_RETENTION_MODES = {"days", "lines", "both", "manual"}
 
 DEFAULT_SETTINGS = {
@@ -279,6 +294,16 @@ def record(profile_id: int | None, event_type: str, message: str, *, severity: s
     except Exception:
         # Logging must never fail because cleanup metadata could not be updated.
         pass
+    if int(profile_id or 0):
+        try:
+            # Note: Fetch after retention so a row removed immediately by policy is never streamed to the browser.
+            with connect() as conn:
+                created = conn.execute("SELECT * FROM operation_logs WHERE id=?", (row_id,)).fetchone()
+            if created:
+                _emit_created_log(int(profile_id), _row_to_public(created))
+        except Exception:
+            # Note: Live delivery is best-effort and must never make log persistence fail.
+            pass
     return row_id
 
 

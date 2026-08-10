@@ -35,13 +35,11 @@ class JobsLogsUiTests(unittest.TestCase):
         # Note: Existing IDs are the public contract between the template and current event handlers.
         control_ids = [
             "jobsModal",
-            "refreshJobsBtn",
             "clearJobsBtn",
             "emergencyClearJobsBtn",
             "jobsShowDetails",
             "jobsTable",
             "logsModal",
-            "refreshOperationLogsBtn",
             "operationLogTypeFilter",
             "operationLogSearch",
             "operationLogHideJobs",
@@ -63,8 +61,9 @@ class JobsLogsUiTests(unittest.TestCase):
         # Note: Fixed record viewports prevent table height changes from moving the rest of the modal.
         self.assertIn('id="jobsTable" class="records-table-viewport"', self.index)
         self.assertIn('id="operationLogsTable" class="records-table-viewport mt-3"', self.index)
-        self.assertIn('id="refreshJobsBtn" class="btn btn-sm records-refresh-button"', self.index)
-        self.assertIn('id="refreshOperationLogsBtn" class="btn btn-sm records-refresh-button"', self.index)
+        self.assertNotIn('id="refreshJobsBtn"', self.index)
+        self.assertNotIn('id="refreshOperationLogsBtn"', self.index)
+        self.assertIn('class="records-live-label"', self.index)
         self.assertIn('class="dropdown jobs-actions-menu"', self.index)
         self.assertIn("height: clamp(18rem, 52vh, 38rem);", self.styles)
         self.assertIn("scrollbar-gutter: stable both-edges;", self.styles)
@@ -80,13 +79,13 @@ class JobsLogsUiTests(unittest.TestCase):
         self.assertIn("width: 100%;", records_wrapper.group(1))
         self.assertNotIn("width: max-content;", records_wrapper.group(1))
 
-    def test_refresh_keeps_existing_content_visible(self) -> None:
-        # Note: Loading feedback must not replace populated Jobs or Logs tables with a spinner.
-        self.assertIn("setRecordsRefreshState(box, 'jobsRefreshState'", self.jobs)
-        self.assertIn("setRecordsRefreshState(box, 'operationLogsRefreshState'", self.logs)
-        self.assertNotIn("replaceHtmlPreserveScroll(box, '<span class=\"spinner-border spinner-border-sm\"></span> Loading jobs...')", self.jobs)
-        self.assertNotIn("replaceHtmlPreserveScroll(box, '<span class=\"spinner-border spinner-border-sm\"></span> Loading logs...')", self.logs)
-        self.assertIn("Refresh feedback lives outside the table", self.shared)
+    def test_live_updates_replace_manual_refresh_controls(self) -> None:
+        # Note: Jobs and Logs no longer expose manual refresh buttons; logs support row-level live insertion.
+        self.assertNotIn("refreshJobsBtn", self.index)
+        self.assertNotIn("refreshOperationLogsBtn", self.index)
+        self.assertIn("applyLiveOperationLog", self.logs)
+        self.assertIn("operationLogRowHtml", self.logs)
+        self.assertIn("data-log-id", self.logs)
 
     def test_stale_async_results_are_ignored(self) -> None:
         # Note: Request sequence guards keep older responses from overwriting newer state or filters.
@@ -103,14 +102,19 @@ class JobsLogsUiTests(unittest.TestCase):
         self.assertIn("renderJobsTable", detail_events[0])
         self.assertNotIn("loadJobs", detail_events[0])
 
+    def test_logs_pagination_is_clamped_after_total_changes(self) -> None:
+        # Note: Retention and cleanup can shrink totals while the modal is open, so invalid pages must be corrected automatically.
+        self.assertIn("operationLogsPage >= pages", self.logs)
+        self.assertIn("operationLogsPage = pages - 1", self.logs)
+        self.assertIn("renderOperationLogsPager", self.logs)
+
     def test_new_css_rules_are_defined_once(self) -> None:
         # Note: Shared Jobs/Logs selectors must stay centralized instead of accumulating overrides.
         selectors = [
             ".nav-btn-quiet {",
             ".records-modal-body {",
             ".records-toolbar {",
-            ".records-refresh-button {",
-            ".records-refresh-state {",
+            ".records-live-label {",
             ".records-table-viewport {",
             ".records-pager {",
             ".job-row-action {",

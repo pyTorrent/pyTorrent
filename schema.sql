@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS user_preferences (
   title_speed_enabled INTEGER DEFAULT 1,
   automation_toasts_enabled INTEGER DEFAULT 1,
   smart_queue_toasts_enabled INTEGER DEFAULT 1,
+  notification_history_enabled INTEGER DEFAULT 0,
   easter_egg_enabled INTEGER DEFAULT 0,
   easter_egg_loading_image_url TEXT DEFAULT '',
   easter_egg_click_image_url TEXT DEFAULT '',

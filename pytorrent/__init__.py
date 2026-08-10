@@ -141,7 +141,10 @@ def create_app() -> Flask:
 
     socketio.init_app(app)
     from .services.workers import set_socketio, start_watchdog
+    from .services.operation_logs import set_socketio as set_operation_logs_socketio
     set_socketio(socketio)
+    # Note: Operation logs reuse the same Socket.IO instance and profile rooms as the rest of the live UI.
+    set_operation_logs_socketio(socketio)
     start_watchdog()
     from .services.websocket import register_socketio_handlers
     register_socketio_handlers(socketio)
