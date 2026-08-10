@@ -479,9 +479,22 @@ def save_user(data: dict[str, Any], user_id: int | None = None) -> dict[str, Any
         raise ValueError("Username is required")
     with connect() as conn:
         if user_id:
-            row = conn.execute("SELECT id FROM users WHERE id=?", (user_id,)).fetchone()
+            row = conn.execute("SELECT id,username,role,is_active FROM users WHERE id=?", (user_id,)).fetchone()
             if not row:
                 raise ValueError("User does not exist")
+            existing_username = str(row.get("username") or "").strip()
+            built_in = existing_username.lower() in {"default", "admin"}
+            if built_in and username.lower() != existing_username.lower():
+                raise ValueError("Cannot rename built-in user")
+            if built_in and (role != "admin" or not is_active):
+                raise ValueError("Cannot disable or demote built-in administrator")
+            if row.get("role") == "admin" and int(row.get("is_active") or 0) and (role != "admin" or not is_active):
+                other = conn.execute(
+                    "SELECT COUNT(*) AS n FROM users WHERE id<>? AND role='admin' AND is_active=1",
+                    (int(user_id),),
+                ).fetchone()
+                if int((other or {}).get("n") or 0) == 0:
+                    raise ValueError("Cannot disable or demote the last active administrator")
             conn.execute(
                 "UPDATE users SET username=?, email=?, display_name=?, role=?, is_active=?, updated_at=? WHERE id=?",
                 (username, str(data.get("email") or "").strip() or None, str(data.get("display_name") or "").strip() or None, role, is_active, now, user_id),
@@ -520,12 +533,19 @@ def delete_user(user_id: int) -> dict[str, object]:
         # Note: The built-in fallback account must stay in the database for auth-disabled and recovery flows.
         raise ValueError("Cannot delete the default user")
     with connect() as conn:
-        row = conn.execute("SELECT username FROM users WHERE id=?", (uid,)).fetchone()
+        row = conn.execute("SELECT username,role,is_active FROM users WHERE id=?", (uid,)).fetchone()
         if not row:
             raise ValueError("User does not exist")
         if str(row.get("username") or "").lower() in {"default", "admin"}:
             # Note: Protect bootstrap accounts by name as well as by id.
             raise ValueError("Cannot delete built-in user")
+        if row.get("role") == "admin" and int(row.get("is_active") or 0):
+            other = conn.execute(
+                "SELECT COUNT(*) AS n FROM users WHERE id<>? AND role='admin' AND is_active=1",
+                (uid,),
+            ).fetchone()
+            if int((other or {}).get("n") or 0) == 0:
+                raise ValueError("Cannot delete the last active administrator")
         return purge_user(conn, uid)
 
 

@@ -1435,16 +1435,37 @@ def add_magnet(profile: dict, uri: str, start: bool = True, directory: str = "",
 
 
 def set_limits(profile: dict, down: int | None, up: int | None):
-    """Set global speed limits in bytes/s.
-
-    rTorrent XML-RPC setters need an empty target string as the first
-    argument. Without it rTorrent returns: target must be a string.
-    """
+    """Set global speed limits in bytes/s with best-effort runtime rollback."""
     c = client_for(profile)
+    changes = []
     if down is not None:
-        c.call("throttle.global_down.max_rate.set", "", int(down))
+        changes.append(("throttle.global_down.max_rate", "throttle.global_down.max_rate.set", int(down)))
     if up is not None:
-        c.call("throttle.global_up.max_rate.set", "", int(up))
+        changes.append(("throttle.global_up.max_rate", "throttle.global_up.max_rate.set", int(up)))
+
+    previous = {}
+    for getter, _setter, _value in changes:
+        try:
+            previous[getter] = int(c.call(getter) or 0)
+        except Exception:
+            pass
+
+    applied = []
+    try:
+        for getter, setter, value in changes:
+            c.call(setter, "", value)
+            applied.append((getter, setter))
+    except Exception:
+        # A failure of the second setter must not leave only half of the
+        # requested limit pair active. Restore values we managed to read.
+        for getter, setter in reversed(applied):
+            if getter not in previous:
+                continue
+            try:
+                c.call(setter, "", previous[getter])
+            except Exception:
+                pass
+        raise
     return {"ok": True, "down": int(down or 0), "up": int(up or 0)}
 
 

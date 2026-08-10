@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from typing import Iterable
 
@@ -107,6 +108,97 @@ def _run_savepoint(conn: sqlite3.Connection, name: str, callback):
     return result
 
 
+
+
+def _job_touches_profile(row: dict, profile_id: int) -> bool:
+    pid = int(profile_id)
+    try:
+        if int(row.get("profile_id") or 0) == pid:
+            return True
+    except (TypeError, ValueError):
+        pass
+    try:
+        payload = json.loads(row.get("payload_json") or "{}")
+    except Exception:
+        payload = {}
+    try:
+        return int((payload or {}).get("target_profile_id") or 0) == pid
+    except (TypeError, ValueError):
+        return False
+
+
+def _guard_profile_jobs(conn: sqlite3.Connection, profile_id: int) -> dict[str, int]:
+    """Prevent a profile from disappearing underneath an executing worker.
+
+    A no-op write acquires SQLite's writer lock before the running-job check.
+    Pending source-profile jobs are removed by the normal profile purge. Pending
+    cross-profile transfer jobs are cancelled so a queued worker cannot start
+    against a target profile that is being deleted.
+    """
+    pid = int(profile_id)
+    conn.execute("UPDATE rtorrent_profiles SET updated_at=updated_at WHERE id=?", (pid,))
+    active = conn.execute(
+        "SELECT id,profile_id,payload_json,status FROM jobs WHERE status IN ('pending','running') ORDER BY created_at,id"
+    ).fetchall()
+    running = [row for row in active if row.get("status") == "running" and _job_touches_profile(row, pid)]
+    if running:
+        raise DeletionError(
+            f"Profile has {len(running)} running job(s). Finish or cancel them before deleting the profile."
+        )
+    cancelled = 0
+    for row in active:
+        if row.get("status") != "pending" or not _job_touches_profile(row, pid):
+            continue
+        if int(row.get("profile_id") or 0) == pid:
+            continue
+        cur = conn.execute(
+            "UPDATE jobs SET status='cancelled', error=?, finished_at=COALESCE(finished_at,CURRENT_TIMESTAMP), updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending'",
+            ("Cancelled because the target profile was deleted", row["id"]),
+        )
+        cancelled += max(0, int(cur.rowcount or 0))
+    return {"running": 0, "cancelled_cross_profile_pending": cancelled}
+
+
+def _guard_user_jobs(conn: sqlite3.Connection, user_id: int) -> None:
+    uid = int(user_id)
+    conn.execute("UPDATE users SET updated_at=updated_at WHERE id=?", (uid,))
+    row = conn.execute(
+        "SELECT COUNT(*) AS count FROM jobs WHERE user_id=? AND status='running'",
+        (uid,),
+    ).fetchone()
+    count = int((row or {}).get("count") or 0)
+    if count:
+        raise DeletionError(
+            f"User has {count} running job(s). Finish or cancel them before deleting the user."
+        )
+
+
+def _delete_user_indirect_rows(conn: sqlite3.Connection, user_id: int) -> dict[str, int]:
+    """Delete rows that reference user-owned definitions without a user_id column."""
+    uid = int(user_id)
+    deleted: dict[str, int] = {}
+
+    rule_rows = conn.execute("SELECT id FROM automation_rules WHERE user_id=?", (uid,)).fetchall()
+    rule_ids = [int(row["id"]) for row in rule_rows]
+    if rule_ids:
+        placeholders = ",".join("?" for _ in rule_ids)
+        cur = conn.execute(f"DELETE FROM automation_rule_state WHERE rule_id IN ({placeholders})", tuple(rule_ids))
+        if cur.rowcount and cur.rowcount > 0:
+            deleted["automation_rule_state"] = int(cur.rowcount)
+
+    group_rows = conn.execute("SELECT id FROM ratio_groups WHERE user_id=?", (uid,)).fetchall()
+    group_ids = [int(row["id"]) for row in group_rows]
+    if group_ids:
+        placeholders = ",".join("?" for _ in group_ids)
+        cur = conn.execute(f"DELETE FROM ratio_assignments WHERE group_id IN ({placeholders})", tuple(group_ids))
+        if cur.rowcount and cur.rowcount > 0:
+            deleted["ratio_assignments"] = int(cur.rowcount)
+        # Historical rows keep the group name but must not point at a definition that no longer exists.
+        conn.execute(f"UPDATE ratio_history SET group_id=NULL WHERE group_id IN ({placeholders}) AND user_id<>?", (*group_ids, uid))
+
+    return deleted
+
+
 def _delete_profile_app_settings(conn: sqlite3.Connection, profile_id: int) -> int:
     pid = int(profile_id)
     keys = (
@@ -212,6 +304,7 @@ def purge_profile(conn: sqlite3.Connection, profile_id: int) -> dict[str, object
     }
 
     def _purge() -> dict[str, object]:
+        job_guard = _guard_profile_jobs(conn, pid)
         deleted = _delete_rows_by_column(conn, "profile_id", pid, exclude={"rtorrent_profiles"})
         _merge_counts(
             deleted,
@@ -244,6 +337,7 @@ def purge_profile(conn: sqlite3.Connection, profile_id: int) -> dict[str, object
             "deleted_rows": deleted,
             "deleted_app_settings": app_settings_deleted,
             "active_profile_fallbacks": fallbacks,
+            "job_guard": job_guard,
         }
 
     try:
@@ -262,6 +356,7 @@ def purge_user(conn: sqlite3.Connection, user_id: int) -> dict[str, object]:
         raise ValueError("User does not exist")
 
     def _purge() -> dict[str, object]:
+        _guard_user_jobs(conn, uid)
         profile_rows = conn.execute("SELECT id FROM rtorrent_profiles WHERE user_id=? ORDER BY id", (uid,)).fetchall()
         deleted_profiles: list[int] = []
         profile_results: list[dict[str, object]] = []
@@ -270,7 +365,8 @@ def purge_user(conn: sqlite3.Connection, user_id: int) -> dict[str, object]:
             profile_results.append(purge_profile(conn, pid))
             deleted_profiles.append(pid)
 
-        deleted = _delete_rows_by_column(conn, "user_id", uid, exclude={"users", "rtorrent_profiles"})
+        deleted = _delete_user_indirect_rows(conn, uid)
+        _merge_counts(deleted, _delete_rows_by_column(conn, "user_id", uid, exclude={"users", "rtorrent_profiles"}))
         _merge_counts(
             deleted,
             _delete_fk_children(conn, "users", "id", uid, exclude={"users", "rtorrent_profiles"}),

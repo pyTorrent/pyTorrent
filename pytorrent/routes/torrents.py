@@ -175,7 +175,11 @@ def torrent_folder_priority(torrent_hash: str):
     if not profile:
         return jsonify({"ok": False, "error": "No profile"}), 400
     data = request.get_json(silent=True) or {}
-    result = rtorrent.set_folder_priority(profile, torrent_hash, str(data.get("path") or ""), int(data.get("priority") or 0))
+    try:
+        priority = int(data.get("priority") or 0)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "priority must be an integer"}), 400
+    result = rtorrent.set_folder_priority(profile, torrent_hash, str(data.get("path") or ""), priority)
     status = 207 if result.get("errors") else 200
     return ok(result), status
 
@@ -803,44 +807,58 @@ def torrent_add():
     profile = request_profile()
     if not profile:
         return jsonify({"ok": False, "error": "No profile"}), 400
-    job_ids = []
+
     if request.content_type and request.content_type.startswith("multipart/form-data"):
         start = request.form.get("start", "1") in {"1", "true", "on", "yes"}
         directory = request.form.get("directory", "") or active_default_download_path(profile)
         label = request.form.get("label", "")
         uris = [x.strip() for x in request.form.get("uris", "").splitlines() if x.strip()]
-        for uri in uris:
-            job_ids.append(enqueue("add_magnet", profile["id"], {"uri": uri, "start": start, "directory": directory, "label": label}))
         existing_hashes = {str(t.get("hash") or "").upper() for t in torrent_cache.snapshot(profile["id"])}
         priority_payload = _parse_priority_payload(request.form.get("file_priorities"))
         allow_duplicates = request.form.get("allow_duplicates", "0") in {"1", "true", "on", "yes"}
         skipped_duplicates = []
-        uploaded_files = [(uploaded.filename, uploaded.read()) for uploaded in request.files.getlist("files")]
-        if _should_check_free_space(profile) and uploaded_files:
-            space_items = []
-            for filename_hint, raw_data in uploaded_files:
-                meta = parse_torrent(raw_data)
-                info_hash = str(meta.get("info_hash") or "").upper()
-                filename_hint = filename_hint or meta.get("name") or info_hash
-                file_priorities = _priorities_for(priority_payload, filename_hint, info_hash)
-                space_items.append({"filename": filename_hint, "info_hash": info_hash, "required_bytes": _selected_torrent_size(meta, file_priorities)})
+
+        uploaded_items = []
+        for uploaded in request.files.getlist("files"):
+            raw = uploaded.read()
+            meta = parse_torrent(raw)
+            info_hash = str(meta.get("info_hash") or "").upper()
+            filename = uploaded.filename or meta.get("name") or info_hash
+            file_priorities = _priorities_for(priority_payload, filename, info_hash)
+            uploaded_items.append({
+                "filename": filename, "raw": raw, "meta": meta, "info_hash": info_hash,
+                "file_priorities": file_priorities,
+            })
+
+        if _should_check_free_space(profile) and uploaded_items:
+            space_items = [
+                {
+                    "filename": item["filename"],
+                    "info_hash": item["info_hash"],
+                    "required_bytes": _selected_torrent_size(item["meta"], item["file_priorities"]),
+                }
+                for item in uploaded_items
+            ]
             space = _space_check_payload(profile, directory, space_items)
             if not space.get("ok"):
                 return jsonify({"ok": False, "error": space.get("message"), "space_check": space}), 409
-        for filename_hint, raw in uploaded_files:
-            meta = parse_torrent(raw)
-            info_hash = str(meta.get("info_hash") or "").upper()
-            filename = filename_hint or meta.get("name") or info_hash
-            if info_hash and info_hash in existing_hashes and not allow_duplicates:
-                skipped_duplicates.append({"filename": filename, "info_hash": info_hash})
-                continue
-            file_priorities = []
-            if isinstance(priority_payload, dict):
-                file_priorities = _priorities_for(priority_payload, filename, info_hash)
-            elif isinstance(priority_payload, list):
-                file_priorities = priority_payload
 
-            size_check = rtorrent.validate_torrent_upload_size(profile, raw, start, directory, label, file_priorities or None)
+        specs = [
+            {
+                "action_name": "add_magnet",
+                "profile_id": profile["id"],
+                "payload": {"uri": uri, "start": start, "directory": directory, "label": label},
+            }
+            for uri in uris
+        ]
+        for item in uploaded_items:
+            info_hash = item["info_hash"]
+            if info_hash and info_hash in existing_hashes and not allow_duplicates:
+                skipped_duplicates.append({"filename": item["filename"], "info_hash": info_hash})
+                continue
+            size_check = rtorrent.validate_torrent_upload_size(
+                profile, item["raw"], start, directory, label, item["file_priorities"] or None
+            )
             if not size_check.get("ok"):
                 return jsonify({
                     "ok": False,
@@ -851,16 +869,40 @@ def torrent_add():
                     ),
                     "xmlrpc_limit": size_check,
                 }), 413
-            data_b64 = base64.b64encode(raw).decode("ascii")
-            job_ids.append(enqueue("add_torrent_raw", profile["id"], {"filename": filename, "data_b64": data_b64, "start": start, "directory": directory, "label": label, "file_priorities": file_priorities or None}))
+            specs.append({
+                "action_name": "add_torrent_raw",
+                "profile_id": profile["id"],
+                "payload": {
+                    "filename": item["filename"],
+                    "data_b64": base64.b64encode(item["raw"]).decode("ascii"),
+                    "start": start,
+                    "directory": directory,
+                    "label": label,
+                    "file_priorities": item["file_priorities"] or None,
+                },
+            })
+
+        # Validation finishes before the first queued row. The whole add batch is committed atomically.
+        job_ids = enqueue_many(specs)
         return ok({"job_ids": job_ids, "skipped_duplicates": skipped_duplicates})
+
     data = request.get_json(silent=True) or {}
     uris = data.get("uris") or []
     if isinstance(uris, str):
         uris = [x.strip() for x in uris.splitlines() if x.strip()]
-    for uri in uris:
-        job_ids.append(enqueue("add_magnet", profile["id"], {"uri": uri, "start": data.get("start", True), "directory": data.get("directory", "") or active_default_download_path(profile), "label": data.get("label", "")}))
-    return ok({"job_ids": job_ids})
+    directory = data.get("directory", "") or active_default_download_path(profile)
+    specs = [
+        {
+            "action_name": "add_magnet",
+            "profile_id": profile["id"],
+            "payload": {
+                "uri": uri, "start": data.get("start", True),
+                "directory": directory, "label": data.get("label", ""),
+            },
+        }
+        for uri in uris
+    ]
+    return ok({"job_ids": enqueue_many(specs)})
 
 
 
@@ -940,10 +982,9 @@ def speed_limits():
     if not profile:
         return jsonify({"ok": False, "error": "No profile"}), 400
     data = request.get_json(silent=True) or {}
-    limits = profile_speed_limits.save_limits(profile["id"], data.get("down"), data.get("up"))
-    # Note: Manual speed limits are stored once per rTorrent profile, so every user opening this profile sees and applies the same values.
-    job_id = enqueue("set_limits", profile["id"], {"down": limits["down"], "up": limits["up"]})
-    return ok({"job_id": job_id, "limits": limits})
+    # Desired limits and the apply job are committed together. A final worker failure restores the prior DB values.
+    queued = profile_speed_limits.queue_limits(profile["id"], data.get("down"), data.get("up"), user_id=default_user_id())
+    return ok({"job_id": queued["job_id"], "limits": queued["limits"]})
 
 
 @bp.get("/speed/profiles")

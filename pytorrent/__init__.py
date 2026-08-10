@@ -43,6 +43,32 @@ def register_error_pages(app: Flask) -> None:
             icon="fa-compass-drafting",
         ), 404
 
+    @app.errorhandler(ValueError)
+    def bad_request_value(error):
+        message = str(error).strip() or "Invalid request"
+        if _wants_json_response():
+            return jsonify({"ok": False, "error": message}), 400
+        return render_template(
+            "error.html",
+            code=400,
+            title="Invalid request",
+            message=message,
+            icon="fa-triangle-exclamation",
+        ), 400
+
+    @app.errorhandler(PermissionError)
+    def forbidden_operation(error):
+        message = str(error).strip() or "Forbidden"
+        if _wants_json_response():
+            return jsonify({"ok": False, "error": message}), 403
+        return render_template(
+            "error.html",
+            code=403,
+            title="Forbidden",
+            message=message,
+            icon="fa-lock",
+        ), 403
+
     @app.errorhandler(sqlite3.IntegrityError)
     def database_integrity_error(error):
         # Note: Constraint failures on destructive API operations are conflicts, not application crashes.

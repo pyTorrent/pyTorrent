@@ -202,6 +202,51 @@ class SafeDeletionTests(unittest.TestCase):
         self.assertIsNotNone(self.conn.execute("SELECT 1 FROM rtorrent_profiles WHERE id=30").fetchone())
         self.assertIsNone(self.conn.execute("SELECT 1 FROM app_settings WHERE key='backup:auto:app:3'").fetchone())
 
+    def test_profile_purge_blocks_running_jobs_and_cancels_pending_target_transfer(self) -> None:
+        self._profile(40)
+        self._profile(41)
+        self.conn.execute(
+            "INSERT INTO jobs(id,user_id,profile_id,action,payload_json,status,created_at,updated_at) VALUES('running',1,40,'start','{}','running',?,?)",
+            (self.now, self.now),
+        )
+        with self.assertRaises(_deletion.DeletionError):
+            _deletion.purge_profile(self.conn, 40)
+        self.assertIsNotNone(self.conn.execute("SELECT 1 FROM rtorrent_profiles WHERE id=40").fetchone())
+
+        self.conn.execute("UPDATE jobs SET status='done' WHERE id='running'")
+        self.conn.execute(
+            "INSERT INTO jobs(id,user_id,profile_id,action,payload_json,status,created_at,updated_at) VALUES('transfer',1,41,'profile_transfer','{\"target_profile_id\":40}','pending',?,?)",
+            (self.now, self.now),
+        )
+        _deletion.purge_profile(self.conn, 40)
+        transfer = self.conn.execute("SELECT status FROM jobs WHERE id='transfer'").fetchone()
+        self.assertEqual(transfer["status"], "cancelled")
+
+    def test_user_purge_cleans_indirect_rule_and_ratio_links_on_shared_profile(self) -> None:
+        self._profile(50, owner=1)
+        self._user(5, "shared-writer")
+        rule_id = self.conn.execute(
+            "INSERT INTO automation_rules(user_id,profile_id,name,enabled,conditions_json,effects_json,cooldown_minutes,created_at,updated_at) VALUES(5,50,'rule',1,'[]','[]',0,?,?)",
+            (self.now, self.now),
+        ).lastrowid
+        self.conn.execute(
+            "INSERT INTO automation_rule_state(rule_id,profile_id,torrent_hash,updated_at) VALUES(?,50,'HASH',?)",
+            (rule_id, self.now),
+        )
+        group_id = self.conn.execute(
+            "INSERT INTO ratio_groups(user_id,profile_id,name,created_at,updated_at) VALUES(5,50,'group',?,?)",
+            (self.now, self.now),
+        ).lastrowid
+        self.conn.execute(
+            "INSERT INTO ratio_assignments(profile_id,torrent_hash,group_id,group_name,updated_at) VALUES(50,'HASH',?,'group',?)",
+            (group_id, self.now),
+        )
+
+        _deletion.purge_user(self.conn, 5)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) AS n FROM automation_rule_state WHERE rule_id=?", (rule_id,)).fetchone()["n"], 0)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) AS n FROM ratio_assignments WHERE group_id=?", (group_id,)).fetchone()["n"], 0)
+        self.assertIsNotNone(self.conn.execute("SELECT 1 FROM rtorrent_profiles WHERE id=50").fetchone())
+
     def test_deletion_sources_keep_api_token_revoke_idempotent_and_profile_route_guarded(self) -> None:
         auth_source = (ROOT / "pytorrent" / "services" / "auth.py").read_text(encoding="utf-8")
         profile_route_source = (ROOT / "pytorrent" / "routes" / "profiles.py").read_text(encoding="utf-8")

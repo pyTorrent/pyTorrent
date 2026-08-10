@@ -243,6 +243,43 @@ def _backup_type(payload: dict) -> str:
     return str(payload.get("backup_type") or ("profile" if payload.get("source_profile_id") else "app"))
 
 
+def _foreign_key_violations(conn) -> list:
+    return conn.execute("PRAGMA foreign_key_check").fetchall()
+
+
+def _prune_non_backup_fk_orphans(conn, protected_tables: set[str]) -> None:
+    """Drop stale derived rows that reference parents intentionally replaced by an app restore."""
+    # Runtime/API-token tables are intentionally not part of portable application
+    # backups. If a restored snapshot removes their parent user/profile, keeping
+    # those live rows would create an orphan. Valid rows are preserved.
+    for _ in range(8):
+        violations = _foreign_key_violations(conn)
+        removable = []
+        for row in violations:
+            table = str(row.get("table") if isinstance(row, dict) else row[0])
+            rowid = row.get("rowid") if isinstance(row, dict) else row[1]
+            if table not in protected_tables and rowid is not None:
+                removable.append((table, rowid))
+        if not removable:
+            return
+        for table, rowid in removable:
+            quoted = table.replace('"', '""')
+            conn.execute(f'DELETE FROM "{quoted}" WHERE rowid=?', (rowid,))
+
+
+def _assert_foreign_keys_valid(conn) -> None:
+    violations = _foreign_key_violations(conn)
+    if not violations:
+        return
+    sample = []
+    for row in violations[:5]:
+        table = row.get("table") if isinstance(row, dict) else row[0]
+        rowid = row.get("rowid") if isinstance(row, dict) else row[1]
+        parent = row.get("parent") if isinstance(row, dict) else row[2]
+        sample.append(f"{table}[{rowid}] -> {parent}")
+    raise ValueError("Backup contains invalid database references: " + "; ".join(sample))
+
+
 def restore_app_backup(backup_id: int, user_id: int | None = None) -> dict:
     user_id = user_id or auth.current_user_id() or default_user_id()
     _require_admin(user_id)
@@ -252,23 +289,30 @@ def restore_app_backup(backup_id: int, user_id: int | None = None) -> dict:
     tables = payload.get("tables") or {}
     restored = {}
     with connect() as conn:
+        # FK checks are disabled only while rows are restored in backup order.
+        # The complete candidate database is validated before this transaction commits.
         conn.execute("PRAGMA foreign_keys = OFF")
-        try:
-            for table in APP_BACKUP_TABLES:
-                rows = tables.get(table) or []
-                if not rows:
-                    continue
-                available = _table_columns(conn, table)
-                columns = [col for col in rows[0].keys() if col in available]
-                if not columns:
-                    continue
-                placeholders = ",".join("?" for _ in columns)
-                conn.execute(f"DELETE FROM {table}")
-                for row in rows:
-                    conn.execute(f"INSERT INTO {table}({','.join(columns)}) VALUES({placeholders})", [row.get(col) for col in columns])
-                restored[table] = len(rows)
-        finally:
-            conn.execute("PRAGMA foreign_keys = ON")
+        for table in APP_BACKUP_TABLES:
+            # Missing tables are tolerated for backwards-compatible older backups;
+            # an explicitly present empty table means "restore it as empty".
+            if table not in tables:
+                continue
+            rows = tables.get(table) or []
+            conn.execute(f"DELETE FROM {table}")
+            if not rows:
+                restored[table] = 0
+                continue
+            available = _table_columns(conn, table)
+            columns = [col for col in rows[0].keys() if col in available]
+            if not columns:
+                restored[table] = 0
+                continue
+            placeholders = ",".join("?" for _ in columns)
+            for row in rows:
+                conn.execute(f"INSERT INTO {table}({','.join(columns)}) VALUES({placeholders})", [row.get(col) for col in columns])
+            restored[table] = len(rows)
+        _prune_non_backup_fk_orphans(conn, set(APP_BACKUP_TABLES))
+        _assert_foreign_keys_valid(conn)
     return {"restored": restored, "backup_type": "app"}
 
 
@@ -307,29 +351,28 @@ def restore_profile_backup(backup_id: int, target_profile_id: int, user_id: int 
     restored = {}
     with connect() as conn:
         conn.execute("PRAGMA foreign_keys = OFF")
-        try:
-            for table in PROFILE_BACKUP_TABLES:
-                rows = tables.get(table) or []
-                if table == "disk_monitor_preferences":
-                    rows = _single_profile_row([dict(row) for row in rows])
-                where = PROFILE_TABLE_FILTERS.get(table)
-                params = _profile_filter_params(table, user_id, int(target_profile_id))
-                conn.execute(f"DELETE FROM {table} WHERE {where}", params)
-                if not rows:
+        for table in PROFILE_BACKUP_TABLES:
+            rows = tables.get(table) or []
+            if table == "disk_monitor_preferences":
+                rows = _single_profile_row([dict(row) for row in rows])
+            where = PROFILE_TABLE_FILTERS.get(table)
+            params = _profile_filter_params(table, user_id, int(target_profile_id))
+            conn.execute(f"DELETE FROM {table} WHERE {where}", params)
+            if not rows:
+                restored[table] = 0
+                continue
+            count = 0
+            for row in rows:
+                clean = _rewrite_profile_row(table, dict(row), user_id, int(target_profile_id))
+                available = _table_columns(conn, table)
+                columns = [col for col in clean.keys() if col in available]
+                if not columns:
                     continue
-                count = 0
-                for row in rows:
-                    clean = _rewrite_profile_row(table, dict(row), user_id, int(target_profile_id))
-                    available = _table_columns(conn, table)
-                    columns = [col for col in clean.keys() if col in available]
-                    if not columns:
-                        continue
-                    placeholders = ",".join("?" for _ in columns)
-                    conn.execute(f"INSERT INTO {table}({','.join(columns)}) VALUES({placeholders})", [clean.get(col) for col in columns])
-                    count += 1
-                restored[table] = count
-        finally:
-            conn.execute("PRAGMA foreign_keys = ON")
+                placeholders = ",".join("?" for _ in columns)
+                conn.execute(f"INSERT INTO {table}({','.join(columns)}) VALUES({placeholders})", [clean.get(col) for col in columns])
+                count += 1
+            restored[table] = count
+        _assert_foreign_keys_valid(conn)
     return {"restored": restored, "backup_type": "profile", "profile_id": int(target_profile_id)}
 
 

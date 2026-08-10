@@ -533,39 +533,85 @@ def store_config_overrides(profile: dict, values: dict, apply_on_start: bool, ba
     return stored
 
 
+def _apply_rtorrent_config_value(client, key: str, meta: dict, normalized_value: str) -> None:
+    rpc_value = int(normalized_value) if meta.get("type") in {"bool", "number"} else normalized_value
+    method = _rtorrent_set_method(key, meta)
+    try:
+        client.call(method, "", rpc_value)
+    except Exception:
+        client.call(method, rpc_value)
+
+
 def set_config(profile: dict, values: dict, apply_now: bool = True, apply_on_start: bool = False, clear_keys: list[str] | None = None) -> dict:
     updated, errors = [], []
     known = {f["key"]: f for f in RTORRENT_CONFIG_FIELDS}
-    c = client_for(profile)
-    baseline_values = {}
+
+    # Validate every writable value before touching either rTorrent or the database.
+    # This prevents a malformed value near the end of the payload from leaving an
+    # earlier subset already applied.
+    normalized_values = {}
     for key, raw_value in (values or {}).items():
         meta = known.get(key)
         if not meta or meta.get("readonly"):
             continue
+        normalized_values[key] = _normalize_config_value(meta, raw_value)
+
+    if not apply_now:
+        # Preserve the reference-value behavior of the original save path when
+        # rTorrent is reachable, but do not make a database-only save depend on
+        # the daemon being online.
+        baseline_values = {}
+        try:
+            c = client_for(profile)
+            for key in normalized_values:
+                meta = known[key]
+                try:
+                    baseline_values[key] = _read_rtorrent_config_value(c, key, meta)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        stored = store_config_overrides(profile, normalized_values, apply_on_start, baseline_values, clear_keys)
+        return {"ok": True, "updated": [], "stored": stored, "errors": []}
+
+    c = client_for(profile)
+    baseline_values = {}
+    for key in normalized_values:
+        meta = known[key]
         try:
             baseline_values[key] = _read_rtorrent_config_value(c, key, meta)
         except Exception:
+            # Preserve historical behavior: a setter may still work even when a
+            # getter is unavailable on a particular rTorrent build.
             pass
-    stored = store_config_overrides(profile, values, apply_on_start, baseline_values, clear_keys)
-    if not apply_now:
-        return {"ok": True, "updated": [], "stored": stored, "errors": []}
-    for key, raw_value in (values or {}).items():
-        if key not in known:
-            continue
+
+    successful_values = {}
+    for key, value in normalized_values.items():
         meta = known[key]
-        if meta.get("readonly"):
-            continue
-        value = _normalize_config_value(meta, raw_value)
-        rpc_value = int(value) if meta.get("type") in {"bool", "number"} else value
         try:
-            method = _rtorrent_set_method(key, meta)
-            try:
-                c.call(method, "", rpc_value)
-            except Exception:
-                c.call(method, rpc_value)
+            _apply_rtorrent_config_value(c, key, meta, value)
+            successful_values[key] = value
             updated.append(key)
         except Exception as exc:
             errors.append({"key": key, "error": str(exc)})
+
+    try:
+        # Persist only values that rTorrent actually accepted. Failed runtime
+        # changes keep their previous saved override instead of creating a DB/runtime split.
+        stored = store_config_overrides(profile, successful_values, apply_on_start, baseline_values, clear_keys)
+    except Exception:
+        # If the database write itself fails after runtime changes, restore every
+        # value for which a baseline was available. This is best-effort because
+        # some rTorrent builds expose setters without matching getters.
+        for key in reversed(updated):
+            if key not in baseline_values:
+                continue
+            try:
+                _apply_rtorrent_config_value(c, key, known[key], baseline_values[key])
+            except Exception:
+                pass
+        raise
+
     return {"ok": not errors, "updated": updated, "stored": stored, "errors": errors}
 
 

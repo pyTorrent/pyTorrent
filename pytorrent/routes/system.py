@@ -578,6 +578,8 @@ def rtorrent_config_save():
         if not result.get('ok'):
             return jsonify({'ok': False, 'error': 'Some settings were not saved', 'result': result}), 400
         return ok({'result': result})
+    except ValueError as exc:
+        return jsonify({'ok': False, 'error': str(exc)}), 400
     except Exception as exc:
         return jsonify({'ok': False, 'error': str(exc)}), 500
 
@@ -603,6 +605,8 @@ def rtorrent_config_generate():
     try:
         data = request.get_json(silent=True) or {}
         return ok({'config_text': rtorrent.generate_config_text(data.get('values') or {})})
+    except ValueError as exc:
+        return jsonify({'ok': False, 'error': str(exc)}), 400
     except Exception as exc:
         return jsonify({'ok': False, 'error': str(exc)}), 500
 

@@ -24,7 +24,7 @@ from ..services.auth import current_user_id as default_user_id, current_user, li
 from ..services import auth, preferences, rtorrent, torrent_stats, speed_peaks, tracker_cache, rss as rss_service, ratio_rules, backup as backup_service, download_planner, operation_logs, poller_control, database_maintenance
 from ..services.torrent_cache import torrent_cache
 from ..services.torrent_summary import cached_summary
-from ..services.workers import enqueue, list_jobs, cancel_job, retry_job, force_job, clear_jobs, emergency_clear_jobs
+from ..services.workers import enqueue, enqueue_many, list_jobs, cancel_job, retry_job, force_job, clear_jobs, emergency_clear_jobs
 from ..services.geoip import lookup_ip
 from ..services.torrent_meta import parse_torrent
 
@@ -300,6 +300,8 @@ def enqueue_bulk_parts(profile: dict, action_name: str, data: dict) -> list[dict
         return [{"job_id": job_id, "label": "bulk-1", "part": 1, "parts": 1, "hashes": hashes, "hash_count": len(hashes)}]
 
     jobs = []
+    specs = []
+    metadata = []
     items_by_hash = {str(item.get("hash")): item for item in (base_payload.get("job_context") or {}).get("items") or []}
     for index, chunk in enumerate(chunks, start=1):
         payload = dict(base_payload)
@@ -315,8 +317,13 @@ def enqueue_bulk_parts(profile: dict, action_name: str, data: dict) -> list[dict
             "items": [items_by_hash[h] for h in chunk if h in items_by_hash],
         })
         payload["job_context"] = context
-        job_id = enqueue(action_name, profile["id"], payload)
-        jobs.append({"job_id": job_id, "label": context["bulk_label"], "part": index, "parts": len(chunks), "hashes": chunk, "hash_count": len(chunk)})
+        specs.append({"action_name": action_name, "profile_id": profile["id"], "payload": payload})
+        metadata.append({"label": context["bulk_label"], "part": index, "parts": len(chunks), "hashes": chunk, "hash_count": len(chunk)})
+
+    # Insert all bulk parts in one transaction; either every part is queued or none are.
+    job_ids = enqueue_many(specs)
+    for job_id, meta in zip(job_ids, metadata):
+        jobs.append({"job_id": job_id, **meta})
     return jobs
 
 

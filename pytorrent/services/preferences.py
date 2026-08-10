@@ -200,62 +200,75 @@ def active_profile(user_id: int | None = None):
         return profiles[0] if profiles else None
 
 
-def save_profile(data: dict, user_id: int | None = None):
-    user_id = user_id or auth.current_user_id() or default_user_id()
-    now = utcnow()
-    name = str(data.get("name") or "rTorrent").strip()
+def _profile_values(data: dict) -> dict:
+    name = str(data.get("name") or "rTorrent").strip() or "rTorrent"
     scgi_url = str(data.get("scgi_url") or "").strip()
-    timeout = _int_setting(data, "timeout_seconds", 5, 1, 300)
-    max_parallel = _int_setting(data, "max_parallel_jobs", 5, 1, 64)
-    light_parallel = _int_setting(data, "light_parallel_jobs", 4, 1, 64)
-    light_timeout = _int_setting(data, "light_job_timeout_seconds", 300, 30, 86400)
-    heavy_timeout = _int_setting(data, "heavy_job_timeout_seconds", 7200, 300, 172800)
-    pending_timeout = _int_setting(data, "pending_job_timeout_seconds", 900, 60, 86400)
-    is_remote = 1 if data.get("is_remote") else 0
-    is_default = 1 if data.get("is_default") else 0
     if not scgi_url.startswith("scgi://"):
         raise ValueError("SCGI URL must start with scgi://")
-    with connect() as conn:
-        if is_default:
-            conn.execute("UPDATE rtorrent_profiles SET is_default=0 WHERE user_id=?", (user_id,))
-        cur = conn.execute(
-            "INSERT INTO rtorrent_profiles(user_id,name,scgi_url,is_default,timeout_seconds,max_parallel_jobs,light_parallel_jobs,light_job_timeout_seconds,heavy_job_timeout_seconds,pending_job_timeout_seconds,is_remote,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (user_id, name, scgi_url, is_default, timeout, max_parallel, light_parallel, light_timeout, heavy_timeout, pending_timeout, is_remote, now, now),
+    return {
+        "name": name,
+        "scgi_url": scgi_url,
+        "timeout_seconds": _int_setting(data, "timeout_seconds", 5, 1, 300),
+        "max_parallel_jobs": _int_setting(data, "max_parallel_jobs", 5, 1, 64),
+        "light_parallel_jobs": _int_setting(data, "light_parallel_jobs", 4, 1, 64),
+        "light_job_timeout_seconds": _int_setting(data, "light_job_timeout_seconds", 300, 30, 86400),
+        "heavy_job_timeout_seconds": _int_setting(data, "heavy_job_timeout_seconds", 7200, 300, 172800),
+        "pending_job_timeout_seconds": _int_setting(data, "pending_job_timeout_seconds", 900, 60, 86400),
+        "is_remote": 1 if data.get("is_remote") else 0,
+        "is_default": 1 if data.get("is_default") else 0,
+    }
+
+
+def _save_profile_conn(conn, data: dict, user_id: int, now: str | None = None):
+    values = _profile_values(data)
+    now = now or utcnow()
+    if values["is_default"]:
+        conn.execute("UPDATE rtorrent_profiles SET is_default=0 WHERE user_id=?", (user_id,))
+    cur = conn.execute(
+        "INSERT INTO rtorrent_profiles(user_id,name,scgi_url,is_default,timeout_seconds,max_parallel_jobs,light_parallel_jobs,light_job_timeout_seconds,heavy_job_timeout_seconds,pending_job_timeout_seconds,is_remote,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            user_id, values["name"], values["scgi_url"], values["is_default"],
+            values["timeout_seconds"], values["max_parallel_jobs"], values["light_parallel_jobs"],
+            values["light_job_timeout_seconds"], values["heavy_job_timeout_seconds"], values["pending_job_timeout_seconds"],
+            values["is_remote"], now, now,
+        ),
+    )
+    profile_id = int(cur.lastrowid)
+    pref = conn.execute("SELECT active_rtorrent_id FROM user_preferences WHERE user_id=?", (user_id,)).fetchone()
+    if not pref or not pref.get("active_rtorrent_id") or values["is_default"]:
+        conn.execute(
+            "UPDATE user_preferences SET active_rtorrent_id=?, updated_at=? WHERE user_id=?",
+            (profile_id, now, user_id),
         )
-        profile_id = cur.lastrowid
-        pref = conn.execute("SELECT active_rtorrent_id FROM user_preferences WHERE user_id=?", (user_id,)).fetchone()
-        if not pref or not pref.get("active_rtorrent_id") or is_default:
-            conn.execute(
-                "UPDATE user_preferences SET active_rtorrent_id=?, updated_at=? WHERE user_id=?",
-                (profile_id, now, user_id),
-            )
-        return conn.execute("SELECT * FROM rtorrent_profiles WHERE id=?", (profile_id,)).fetchone()
+    return conn.execute("SELECT * FROM rtorrent_profiles WHERE id=?", (profile_id,)).fetchone()
+
+
+def save_profile(data: dict, user_id: int | None = None):
+    user_id = user_id or auth.current_user_id() or default_user_id()
+    with connect() as conn:
+        return _save_profile_conn(conn, data, int(user_id))
 
 
 def update_profile(profile_id: int, data: dict, user_id: int | None = None):
     user_id = user_id or auth.current_user_id() or default_user_id()
+    values = _profile_values(data)
     now = utcnow()
-    name = str(data.get("name") or "rTorrent").strip()
-    scgi_url = str(data.get("scgi_url") or "").strip()
-    timeout = _int_setting(data, "timeout_seconds", 5, 1, 300)
-    max_parallel = _int_setting(data, "max_parallel_jobs", 5, 1, 64)
-    light_parallel = _int_setting(data, "light_parallel_jobs", 4, 1, 64)
-    light_timeout = _int_setting(data, "light_job_timeout_seconds", 300, 30, 86400)
-    heavy_timeout = _int_setting(data, "heavy_job_timeout_seconds", 7200, 300, 172800)
-    pending_timeout = _int_setting(data, "pending_job_timeout_seconds", 900, 60, 86400)
-    is_remote = 1 if data.get("is_remote") else 0
-    is_default = 1 if data.get("is_default") else 0
-    if not scgi_url.startswith("scgi://"):
-        raise ValueError("SCGI URL must start with scgi://")
     with connect() as conn:
-        row = conn.execute("SELECT id FROM rtorrent_profiles WHERE id=?", (profile_id,)).fetchone()
+        row = conn.execute("SELECT id,user_id FROM rtorrent_profiles WHERE id=?", (profile_id,)).fetchone()
         if not row or not auth.can_write_profile(profile_id, user_id):
             raise ValueError("Profil nie istnieje")
-        if is_default:
-            conn.execute("UPDATE rtorrent_profiles SET is_default=0 WHERE user_id=?", (user_id,))
+        owner_user_id = int(row["user_id"])
+        if values["is_default"]:
+            # The default flag belongs to the profile owner, not to the admin currently editing it.
+            conn.execute("UPDATE rtorrent_profiles SET is_default=0 WHERE user_id=?", (owner_user_id,))
         conn.execute(
             "UPDATE rtorrent_profiles SET name=?, scgi_url=?, is_default=?, timeout_seconds=?, max_parallel_jobs=?, light_parallel_jobs=?, light_job_timeout_seconds=?, heavy_job_timeout_seconds=?, pending_job_timeout_seconds=?, is_remote=?, updated_at=? WHERE id=?",
-            (name, scgi_url, is_default, timeout, max_parallel, light_parallel, light_timeout, heavy_timeout, pending_timeout, is_remote, now, profile_id),
+            (
+                values["name"], values["scgi_url"], values["is_default"], values["timeout_seconds"],
+                values["max_parallel_jobs"], values["light_parallel_jobs"], values["light_job_timeout_seconds"],
+                values["heavy_job_timeout_seconds"], values["pending_job_timeout_seconds"], values["is_remote"],
+                now, profile_id,
+            ),
         )
         return conn.execute("SELECT * FROM rtorrent_profiles WHERE id=?", (profile_id,)).fetchone()
 
@@ -305,15 +318,20 @@ def export_profiles(user_id: int | None = None) -> dict:
 
 
 def import_profiles(payload: dict, user_id: int | None = None) -> list[dict]:
-    user_id = user_id or auth.current_user_id() or default_user_id()
+    user_id = int(user_id or auth.current_user_id() or default_user_id())
     rows = payload.get("profiles") if isinstance(payload, dict) else None
     if not isinstance(rows, list):
         raise ValueError("Invalid profiles export")
-    imported = []
-    for item in rows:
-        if not isinstance(item, dict):
-            continue
-        imported.append(dict(save_profile(item, user_id)))
+
+    valid_rows = [item for item in rows if isinstance(item, dict)]
+    # Validate the complete import before the first write so a bad later row cannot leave a partial import.
+    for item in valid_rows:
+        _profile_values(item)
+
+    imported: list[dict] = []
+    with connect() as conn:
+        for item in valid_rows:
+            imported.append(dict(_save_profile_conn(conn, item, user_id)))
     return imported
 
 
@@ -509,7 +527,10 @@ def save_profile_preferences(user_id: int, profile_id: int | None, data: dict) -
         if data.get("table_columns_json") is not None:
             updates["table_columns_json"] = str(data.get("table_columns_json"))
         if data.get("peers_refresh_seconds") is not None:
-            sec = int(data.get("peers_refresh_seconds") or 0)
+            try:
+                sec = int(data.get("peers_refresh_seconds") or 0)
+            except (TypeError, ValueError):
+                sec = 0
             updates["peers_refresh_seconds"] = sec if sec in {0, 10, 15, 30, 60} else 0
         if data.get("port_check_enabled") is not None:
             updates["port_check_enabled"] = 1 if data.get("port_check_enabled") else 0
@@ -654,7 +675,10 @@ def save_preferences(data: dict, user_id: int | None = None, profile_id: int | N
             conn.execute("UPDATE user_preferences SET easter_egg_click_image_url=?, updated_at=? WHERE user_id=?", (effective_easter_click_url, now, user_id))
         if interface_scale is not None:
             # Note: Keep backend validation aligned with the UI so the new 70% minimum persists after saving.
-            scale = int(interface_scale or 80)
+            try:
+                scale = int(interface_scale or 80)
+            except (TypeError, ValueError):
+                scale = 80
             if scale < 70: scale = 70
             if scale > 140: scale = 140
             conn.execute("UPDATE user_preferences SET interface_scale=?, updated_at=? WHERE user_id=?", (scale, now, user_id))

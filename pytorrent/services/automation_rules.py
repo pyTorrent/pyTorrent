@@ -172,12 +172,14 @@ def get_rule(rule_id: int, profile_id: int, user_id: int | None = None) -> dict[
 
 
 def _portable_rule(rule: dict[str, Any]) -> dict[str, Any]:
+    conditions = rule.get('conditions') or []
+    effects = rule.get('effects') or []
     return {
         'name': str(rule.get('name') or 'Automation rule'),
         'enabled': bool(rule.get('enabled', True)),
         'cooldown_minutes': max(0, int(rule.get('cooldown_minutes') or 0)),
-        'conditions': list(rule.get('conditions') or []),
-        'effects': list(rule.get('effects') or []),
+        'conditions': list(conditions) if isinstance(conditions, list) else [],
+        'effects': list(effects) if isinstance(effects, list) else [],
     }
 
 
@@ -191,19 +193,39 @@ def import_rules(profile_id: int, payload: dict[str, Any] | list[Any], user_id: 
     raw_rules = payload if isinstance(payload, list) else payload.get('rules', []) if isinstance(payload, dict) else []
     if not isinstance(raw_rules, list) or not raw_rules:
         raise ValueError('Import file does not contain automation rules')
-    if replace:
-        with connect() as conn:
-            conn.execute('DELETE FROM automation_rules WHERE profile_id=?', (profile_id,))
-            conn.execute('DELETE FROM automation_rule_state WHERE profile_id=?', (profile_id,))
-    imported = []
+
+    # Normalize and validate every rule before the first DELETE/INSERT. This keeps replace imports all-or-nothing.
+    normalized: list[dict[str, Any]] = []
     for raw in raw_rules:
         if not isinstance(raw, dict):
             continue
         rule = _portable_rule(raw)
-        imported.append(save_rule(profile_id, rule, owner_id))
-    if not imported:
+        if not isinstance(rule.get('conditions'), list) or not rule.get('conditions'):
+            raise ValueError('Rule needs at least one condition')
+        if not isinstance(rule.get('effects'), list) or not rule.get('effects'):
+            raise ValueError('Rule needs at least one effect')
+        normalized.append(rule)
+    if not normalized:
         raise ValueError('No valid automation rules found')
-    return imported
+
+    now = utcnow()
+    imported_ids: list[int] = []
+    with connect() as conn:
+        if replace:
+            conn.execute('DELETE FROM automation_rule_state WHERE profile_id=?', (profile_id,))
+            conn.execute('DELETE FROM automation_rules WHERE profile_id=?', (profile_id,))
+        for rule in normalized:
+            cur = conn.execute(
+                'INSERT INTO automation_rules(user_id,profile_id,name,enabled,conditions_json,effects_json,cooldown_minutes,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)',
+                (
+                    owner_id, profile_id, str(rule.get('name') or 'Automation rule').strip() or 'Automation rule',
+                    1 if rule.get('enabled', True) else 0, json.dumps(rule.get('conditions') or []),
+                    json.dumps(rule.get('effects') or []), max(0, int(rule.get('cooldown_minutes') or 0)), now, now,
+                ),
+            )
+            imported_ids.append(int(cur.lastrowid))
+
+    return [get_rule(rule_id, profile_id, owner_id) for rule_id in imported_ids]
 
 
 def save_rule(profile_id: int, data: dict[str, Any], user_id: int | None = None) -> dict[str, Any]:
@@ -248,8 +270,10 @@ def delete_rule(rule_id: int, profile_id: int, user_id: int | None = None) -> No
     if not _can_manage_rule(profile_id, rule, actor_id):
         raise ValueError('No permission to delete this automation rule')
     with connect() as conn:
-        conn.execute('DELETE FROM automation_rules WHERE id=? AND profile_id=?', (rule_id, profile_id))
+        # Child/runtime state is removed first; audit history keeps the rule name but not a dangling id.
         conn.execute('DELETE FROM automation_rule_state WHERE rule_id=? AND profile_id=?', (rule_id, profile_id))
+        conn.execute('UPDATE automation_history SET rule_id=NULL WHERE rule_id=? AND profile_id=?', (rule_id, profile_id))
+        conn.execute('DELETE FROM automation_rules WHERE id=? AND profile_id=?', (rule_id, profile_id))
 
 
 def list_history(profile_id: int, user_id: int | None = None, limit: int = 30) -> list[dict[str, Any]]:

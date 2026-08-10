@@ -42,11 +42,32 @@ def set_socketio(socketio):
 def _emit(name: str, payload: dict):
     if not _socketio:
         return
-    profile_id = payload.get("profile_id")
-    if profile_id:
-        _socketio.emit(name, payload, to=f"profile:{int(profile_id)}")
-    else:
-        _socketio.emit(name, payload)
+    try:
+        profile_id = payload.get("profile_id")
+        if profile_id:
+            _socketio.emit(name, payload, to=f"profile:{int(profile_id)}")
+        else:
+            _socketio.emit(name, payload)
+    except Exception:
+        # Socket notifications are observational only; a transient websocket
+        # failure must never change a durable job state or fail an API action.
+        return
+
+
+def _record_job_event(*args, **kwargs) -> None:
+    try:
+        operation_logs.record_job_event(*args, **kwargs)
+    except Exception:
+        # Operation logs must not become a second failure after the real
+        # mutation has already committed.
+        return
+
+
+def _record_worker_event(*args, **kwargs) -> None:
+    try:
+        operation_logs.record_worker_event(*args, **kwargs)
+    except Exception:
+        return
 
 
 def _bounded_int(value, default: int, minimum: int = 1) -> int:
@@ -260,21 +281,93 @@ def _submit_job(job_id: str, action_name: str | None = None):
     executor.submit(_run, job_id)
 
 
-def enqueue(action_name: str, profile_id: int, payload: dict, user_id: int | None = None, max_attempts: int = 2, force: bool = False) -> str:
-    user_id = user_id or auth.current_user_id() or default_user_id()
-    job_id = uuid.uuid4().hex
-    payload = _prepare_enqueue_payload(action_name, int(profile_id), payload, force)
-    now = utcnow()
-    progress_total = len((payload or {}).get("hashes") or [])
-    with connect() as conn:
+def prepare_jobs(specs: list[dict]) -> list[dict]:
+    """Normalize job rows before any database write so batches can be inserted atomically."""
+    prepared: list[dict] = []
+    for spec in specs or []:
+        action_name = str(spec.get("action_name") or spec.get("action") or "").strip()
+        if not action_name:
+            raise ValueError("Job action is required")
+        profile_id = int(spec.get("profile_id") or 0)
+        if not profile_id:
+            raise ValueError("Job profile is required")
+        user_id = int(spec.get("user_id") or auth.current_user_id() or default_user_id())
+        max_attempts = max(1, int(spec.get("max_attempts") or 2))
+        force = bool(spec.get("force"))
+        payload = _prepare_enqueue_payload(action_name, profile_id, dict(spec.get("payload") or {}), force)
+        now = utcnow()
+        prepared.append({
+            "job_id": uuid.uuid4().hex,
+            "user_id": user_id,
+            "profile_id": profile_id,
+            "action_name": action_name,
+            "payload": payload,
+            "max_attempts": max_attempts,
+            "progress_total": len(payload.get("hashes") or []),
+            "created_at": now,
+        })
+    return prepared
+
+
+def insert_prepared_jobs(conn, prepared: list[dict]) -> None:
+    for job in prepared:
         conn.execute(
             "INSERT INTO jobs(id,user_id,profile_id,action,payload_json,status,attempts,max_attempts,progress_total,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-            (job_id, user_id, profile_id, action_name, json.dumps(payload), "pending", 0, max_attempts, progress_total, now, now),
+            (
+                job["job_id"], job["user_id"], job["profile_id"], job["action_name"],
+                json.dumps(job["payload"]), "pending", 0, job["max_attempts"], job["progress_total"],
+                job["created_at"], job["created_at"],
+            ),
         )
-    operation_logs.record_job_event(profile_id, action_name, "queued", payload, job_id=job_id, user_id=user_id)
-    _emit("job_update", {"id": job_id, "action": action_name, "profile_id": profile_id, "status": "pending"})
-    _submit_job(job_id, action_name)
-    return job_id
+
+
+def dispatch_prepared_jobs(prepared: list[dict]) -> None:
+    """Best-effort post-commit dispatch. A committed pending row stays recoverable by the watchdog."""
+    for job in prepared:
+        _record_job_event(
+            job["profile_id"], job["action_name"], "queued", job["payload"],
+            job_id=job["job_id"], user_id=job["user_id"],
+        )
+        try:
+            _emit("job_update", {
+                "id": job["job_id"], "action": job["action_name"],
+                "profile_id": job["profile_id"], "status": "pending",
+            })
+        except Exception:
+            pass
+        try:
+            _submit_job(job["job_id"], job["action_name"])
+        except Exception as exc:
+            # Keep the job pending. The watchdog can safely resubmit it later.
+            try:
+                with connect() as conn:
+                    conn.execute(
+                        "UPDATE jobs SET error=?, updated_at=? WHERE id=? AND status='pending'",
+                        (f"Initial dispatch failed: {exc}", utcnow(), job["job_id"]),
+                    )
+            except Exception:
+                pass
+
+
+def enqueue_many(specs: list[dict]) -> list[str]:
+    prepared = prepare_jobs(specs)
+    if not prepared:
+        return []
+    with connect() as conn:
+        insert_prepared_jobs(conn, prepared)
+    dispatch_prepared_jobs(prepared)
+    return [str(job["job_id"]) for job in prepared]
+
+
+def enqueue(action_name: str, profile_id: int, payload: dict, user_id: int | None = None, max_attempts: int = 2, force: bool = False) -> str:
+    return enqueue_many([{
+        "action_name": action_name,
+        "profile_id": int(profile_id),
+        "payload": payload,
+        "user_id": user_id,
+        "max_attempts": max_attempts,
+        "force": force,
+    }])[0]
 
 
 def _job_event_meta(payload: dict) -> dict:
@@ -411,7 +504,10 @@ def _mark_running(job_id: str, attempts: int) -> bool:
     now = utcnow()
     with connect() as conn:
         cur = conn.execute(
-            "UPDATE jobs SET status='running', attempts=?, started_at=COALESCE(started_at, ?), updated_at=? WHERE id=? AND status='pending'",
+            """UPDATE jobs
+               SET status='running', attempts=?, started_at=COALESCE(started_at, ?), updated_at=?
+               WHERE id=? AND status='pending'
+                 AND EXISTS (SELECT 1 FROM rtorrent_profiles p WHERE p.id=jobs.profile_id)""",
             (attempts, now, now, job_id),
         )
         return int(cur.rowcount or 0) == 1
@@ -449,7 +545,7 @@ def _schedule_delayed_torrent_refresh(profile: dict, action_name: str) -> None:
 
 def _fail_missing_profile(job_id: str, job: dict) -> None:
     _set_job(job_id, "failed", "rTorrent profile does not exist", finished=True)
-    operation_logs.record_worker_event(
+    _record_worker_event(
         int(job.get("profile_id") or 0),
         str(job.get("action") or ""),
         "failed",
@@ -481,7 +577,7 @@ def _load_running_payload(job_id: str, job: dict) -> dict:
 
 
 def _emit_job_started(job_id: str, profile: dict, job: dict, payload: dict, attempts: int, event_meta: dict) -> None:
-    operation_logs.record_job_event(profile["id"], job["action"], "started", payload, job_id=job_id, user_id=int(job.get("user_id") or 0))
+    _record_job_event(profile["id"], job["action"], "started", payload, job_id=job_id, user_id=int(job.get("user_id") or 0))
     _emit("operation_started", {
         "job_id": job_id,
         "action": job["action"],
@@ -507,7 +603,7 @@ def _emit_destination_profile_refresh(job: dict, payload: dict, action_name: str
 
 def _finish_running_job(job_id: str, profile: dict, job: dict, payload: dict, result: dict | None, event_meta: dict) -> None:
     _set_job(job_id, "done", result=result, finished=True)
-    operation_logs.record_job_event(profile["id"], job["action"], "done", payload, result=result or {}, job_id=job_id, user_id=int(job.get("user_id") or 0))
+    _record_job_event(profile["id"], job["action"], "done", payload, result=result or {}, job_id=job_id, user_id=int(job.get("user_id") or 0))
     _emit("operation_finished", {
         "job_id": job_id,
         "action": job["action"],
@@ -536,14 +632,27 @@ def _handle_job_exception(job_id: str, job: dict, payload: dict, exc: Exception)
     status = "pending" if attempts < max_attempts else "failed"
     _set_job(job_id, status, str(exc), finished=(status == "failed"))
     if status == "failed":
-        operation_logs.record_job_event(int(job.get("profile_id") or 0), job.get("action"), "failed", payload, error=str(exc), job_id=job_id, user_id=int(job.get("user_id") or 0))
+        if str(job.get("action") or "") == "set_limits":
+            try:
+                from . import profile_speed_limits
+                profile_speed_limits.restore_limits_if_current(
+                    int(job.get("profile_id") or 0),
+                    payload.get("requested_limits"),
+                    payload.get("previous_limits"),
+                )
+            except Exception:
+                pass
+        _record_job_event(int(job.get("profile_id") or 0), job.get("action"), "failed", payload, error=str(exc), job_id=job_id, user_id=int(job.get("user_id") or 0))
     else:
         # Note: Retried attempts are logged explicitly so transient failures are not lost between final states.
-        operation_logs.record_job_event(int(job.get("profile_id") or 0), job.get("action"), "retry", payload, error=str(exc), job_id=job_id, user_id=int(job.get("user_id") or 0))
+        _record_job_event(int(job.get("profile_id") or 0), job.get("action"), "retry", payload, error=str(exc), job_id=job_id, user_id=int(job.get("user_id") or 0))
     _emit("operation_failed", {"job_id": job_id, "action": job.get("action"), "profile_id": job.get("profile_id"), "hashes": payload.get("hashes") or [], "error": str(exc), **_job_event_meta(payload)})
     _emit("job_update", {"id": job_id, "profile_id": job.get("profile_id"), "status": status, "error": str(exc), "attempts": attempts})
     if status == "pending":
-        _submit_job(job_id, job.get("action"))
+        try:
+            _submit_job(job_id, job.get("action"))
+        except Exception:
+            pass
 
 
 def _run(job_id: str):
@@ -625,7 +734,7 @@ def _timeout_running_jobs() -> None:
             continue
         message = f"Watchdog timeout after {_job_timeout_seconds(profile, row)} seconds"
         _set_job(row["id"], "failed", message, finished=True)
-        operation_logs.record_worker_event(int(row.get("profile_id") or 0), str(row.get("action") or ""), "timeout", message, job_id=row["id"], user_id=int(row.get("user_id") or 0), error=message)
+        _record_worker_event(int(row.get("profile_id") or 0), str(row.get("action") or ""), "timeout", message, job_id=row["id"], user_id=int(row.get("user_id") or 0), error=message)
         _emit("operation_failed", {"job_id": row["id"], "action": row.get("action"), "profile_id": row.get("profile_id"), "hashes": [], "error": message, "source": "watchdog"})
         _emit("job_update", {"id": row["id"], "profile_id": row.get("profile_id"), "status": "failed", "error": message})
 
@@ -652,7 +761,7 @@ def _resubmit_interrupted_running_jobs() -> None:
                 ("Resuming interrupted job from last checkpoint", utcnow(), row["id"]),
             )
         if int(cur.rowcount or 0):
-            operation_logs.record_worker_event(int(row.get("profile_id") or 0), str(row.get("action") or ""), "resubmitted", "Interrupted job resubmitted from checkpoint", job_id=row["id"], user_id=int(row.get("user_id") or 0))
+            _record_worker_event(int(row.get("profile_id") or 0), str(row.get("action") or ""), "resubmitted", "Interrupted job resubmitted from checkpoint", job_id=row["id"], user_id=int(row.get("user_id") or 0))
             _emit("job_update", {"id": row["id"], "profile_id": row.get("profile_id"), "status": "pending", "resumed": True})
             _submit_job(row["id"], row.get("action"))
 
@@ -674,7 +783,7 @@ def _resubmit_stale_pending_jobs() -> None:
             continue
         with connect() as conn:
             conn.execute("UPDATE jobs SET error=?, updated_at=? WHERE id=? AND status='pending'", ("Watchdog resubmitted stale pending job", utcnow(), row["id"]))
-        operation_logs.record_worker_event(int(row.get("profile_id") or 0), str(row.get("action") or ""), "resubmitted", "Stale pending job resubmitted by watchdog", job_id=row["id"], user_id=int(row.get("user_id") or 0))
+        _record_worker_event(int(row.get("profile_id") or 0), str(row.get("action") or ""), "resubmitted", "Stale pending job resubmitted by watchdog", job_id=row["id"], user_id=int(row.get("user_id") or 0))
         _emit("job_update", {"id": row["id"], "profile_id": row.get("profile_id"), "status": "pending", "watchdog": True})
         _submit_job(row["id"], row.get("action"))
 
@@ -797,7 +906,7 @@ def cancel_job(job_id: str) -> bool:
         return False
     _set_job(job_id, "cancelled", finished=True)
     payload = _job_payload(row)
-    operation_logs.record_job_event(int(row.get("profile_id") or 0), row.get("action"), "cancelled", payload, error="Cancelled by user", job_id=job_id, user_id=int(row.get("user_id") or 0))
+    _record_job_event(int(row.get("profile_id") or 0), row.get("action"), "cancelled", payload, error="Cancelled by user", job_id=job_id, user_id=int(row.get("user_id") or 0))
     _emit("job_update", {"id": job_id, "profile_id": row.get("profile_id"), "status": "cancelled"})
     return True
 
@@ -834,7 +943,7 @@ def force_job(job_id: str) -> bool:
     payload['priority_job'] = True
     with connect() as conn:
         conn.execute("UPDATE jobs SET payload_json=?, updated_at=? WHERE id=?", (json.dumps(payload), utcnow(), job_id))
-    operation_logs.record_job_event(int(row.get('profile_id') or 0), row.get('action'), 'forced', payload, job_id=job_id, user_id=int(row.get('user_id') or 0))
+    _record_job_event(int(row.get('profile_id') or 0), row.get('action'), 'forced', payload, job_id=job_id, user_id=int(row.get('user_id') or 0))
     _emit('job_update', {'id': job_id, 'profile_id': row.get('profile_id'), 'status': 'pending', 'forced': True})
     _submit_job(job_id, row.get('action'))
     return True
@@ -846,7 +955,7 @@ def retry_job(job_id: str) -> bool:
     with connect() as conn:
         conn.execute("UPDATE jobs SET status='pending', error='', finished_at=NULL, state_json=NULL, progress_current=0, heartbeat_at=NULL, updated_at=? WHERE id=?", (utcnow(), job_id))
     payload = _job_payload(row)
-    operation_logs.record_job_event(int(row.get("profile_id") or 0), row.get("action"), "retry", payload, job_id=job_id, user_id=int(row.get("user_id") or 0))
+    _record_job_event(int(row.get("profile_id") or 0), row.get("action"), "retry", payload, job_id=job_id, user_id=int(row.get("user_id") or 0))
     _emit("job_update", {"id": job_id, "profile_id": row.get("profile_id"), "status": "pending"})
     _submit_job(job_id, row.get("action"))
     return True

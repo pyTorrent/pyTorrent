@@ -50,6 +50,7 @@ def rss_feed_delete(feed_id: int):
     if not profile:
         return jsonify({"ok": False, "error": "No profile"}), 400
     with connect() as conn:
+        conn.execute("UPDATE rss_history SET feed_id=NULL WHERE feed_id=? AND profile_id=?", (feed_id, int(profile["id"])))
         conn.execute("DELETE FROM rss_feeds WHERE id=? AND profile_id=?", (feed_id, int(profile["id"])))
     return rss_list()
 
@@ -99,6 +100,7 @@ def rss_rule_delete(rule_id: int):
     if not profile:
         return jsonify({"ok": False, "error": "No profile"}), 400
     with connect() as conn:
+        conn.execute("UPDATE rss_history SET rule_id=NULL WHERE rule_id=? AND profile_id=?", (rule_id, int(profile["id"])))
         conn.execute("DELETE FROM rss_rules WHERE id=? AND profile_id=?", (rule_id, int(profile["id"])))
     return rss_list()
 

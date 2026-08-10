@@ -250,9 +250,10 @@ def ratio_groups_delete(group_id: int):
     if not auth.can_write_profile(int(profile["id"]), default_user_id()):
         return jsonify({"ok": False, "error": "No write access to profile"}), 403
     with connect() as conn:
-        # Note: Deleting a ratio group removes only the group definition and its assignment links; history stays as an audit trail.
-        deleted = conn.execute("DELETE FROM ratio_groups WHERE id=? AND profile_id=?", (int(group_id), int(profile["id"]))).rowcount
+        # Note: Assignments are runtime links; history stays as an audit trail without a dangling group id.
         conn.execute("DELETE FROM ratio_assignments WHERE group_id=? AND profile_id=?", (int(group_id), int(profile["id"])))
+        conn.execute("UPDATE ratio_history SET group_id=NULL WHERE group_id=? AND profile_id=?", (int(group_id), int(profile["id"])))
+        deleted = conn.execute("DELETE FROM ratio_groups WHERE id=? AND profile_id=?", (int(group_id), int(profile["id"]))).rowcount
     if not deleted:
         return jsonify({"ok": False, "error": "Ratio group not found"}), 404
     return ratio_groups_list()
