@@ -46,7 +46,7 @@
           <button id="profilePickerBtn" class="btn btn-xs btn-outline-primary nav-btn profile-picker-btn"
             data-bs-toggle="modal" data-bs-target="#profilePickerModal" title="Change rTorrent">
             <i class="fa-solid fa-server"></i><span id="activeProfileName">{{ active_profile.name if active_profile else
-              'Add rTorrent' }}</span>
+              ('Select rTorrent' if profiles else 'Add rTorrent') }}</span>
           </button>
           <button class="btn btn-xs btn-outline-primary nav-btn" data-bs-toggle="modal"
             data-bs-target="#trafficModal"><i class="fa-solid fa-chart-column"></i><span> History</span></button>

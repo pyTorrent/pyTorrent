@@ -89,9 +89,9 @@ def request_profile(require_write: bool = False):
     if profile_id:
         profile = preferences.get_profile(int(profile_id), user_id)
     elif not _requires_explicit_profile(require_write):
+        # Note: Read APIs use the same active-profile resolver as page render and Socket.IO;
+        # never fall through to a hard-coded profile while startup selection is unresolved.
         profile = preferences.active_profile(user_id)
-        if not profile and auth.can_access_profile(1, user_id):
-            profile = preferences.get_profile(1, user_id)
     if not profile and profile_id:
         abort(404)
     if not profile:

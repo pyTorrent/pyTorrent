@@ -33,7 +33,8 @@ class AddLocationRadioTests(unittest.TestCase):
     def test_radio_restores_persisted_remember_last_state(self) -> None:
         # Note: The radio must reflect the saved state instead of flashing or resetting to unchecked.
         self.assertIn('id="rememberAddPathDefaultRadio"', self.index)
-        self.assertIn("prefs.download_remember_last_enabled and prefs.download_location_mode == 'remember_last'", self.index)
+        normalized_index = re.sub(r"\s+", " ", self.index).replace(" == ", "==")
+        self.assertIn("prefs and prefs.download_remember_last_enabled and prefs.download_location_mode=='remember_last'", normalized_index)
         expected = "checked=downloadLocationMode==='remember_last' && !!downloadRememberLastEnabled"
         self.assertIn(expected, self.path_tools)
         self.assertIn(expected, self.preferences)
