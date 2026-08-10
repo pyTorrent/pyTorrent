@@ -120,9 +120,16 @@ export async function startApp(){
 }
 
 if(typeof window !== 'undefined' && !window.PYTORRENT_DISABLE_AUTOSTART){
-  startApp().catch((error) => {
-    console.error('pyTorrent frontend failed to start', error);
+  // Note: A missing server bootstrap config is fatal; do not continue with defaults that can fake a missing profile or reset the loader.
+  if(!window.PYTORRENT || typeof window.PYTORRENT !== 'object'){
+    console.error('pyTorrent bootstrap configuration is missing');
     const loaderText = document.getElementById('initialLoaderText');
-    if(loaderText) loaderText.textContent = 'Frontend failed to start. Reload the page or clear browser cache.';
-  });
+    if(loaderText) loaderText.textContent = 'Frontend bootstrap configuration is missing. Reload the page or clear browser cache.';
+  }else{
+    startApp().catch((error) => {
+      console.error('pyTorrent frontend failed to start', error);
+      const loaderText = document.getElementById('initialLoaderText');
+      if(loaderText) loaderText.textContent = 'Frontend failed to start. Reload the page or clear browser cache.';
+    });
+  }
 }

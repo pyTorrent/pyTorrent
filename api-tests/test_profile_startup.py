@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regression tests for deterministic profile resolution during application startup."""
+"""Regression tests for the original pyTorrent startup behavior."""
 from __future__ import annotations
 
 import json
@@ -10,8 +10,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 JS_DIR = ROOT / "pytorrent" / "static" / "js"
 PREFERENCES = ROOT / "pytorrent" / "services" / "preferences.py"
-SHARED = ROOT / "pytorrent" / "routes" / "_shared.py"
 INDEX = ROOT / "pytorrent" / "templates" / "index.html"
+APP = JS_DIR / "app.js"
 
 
 def source_chunk(filename: str) -> str:
@@ -30,46 +30,46 @@ class ProfileStartupTests(unittest.TestCase):
         cls.selection = source_chunk("profileSelection.js")
         cls.snapshot = source_chunk("initialSnapshot.js")
         cls.preferences = PREFERENCES.read_text(encoding="utf-8")
-        cls.shared = SHARED.read_text(encoding="utf-8")
         cls.index = INDEX.read_text(encoding="utf-8")
+        cls.app = APP.read_text(encoding="utf-8")
 
-    def test_bootstrap_does_not_render_false_no_profile_state(self) -> None:
-        # Note: The neutral loader remains visible until profile resolution has completed.
-        self.assertNotIn("if(!hasActiveProfile) renderNoProfileState()", self.bootstrap)
-        self.assertIn("profileSetupCheckPromise = null", self.runtime)
+    def test_server_bootstrap_jinja_is_not_corrupted(self) -> None:
+        # Note: Spaced Jinja delimiters leave window.PYTORRENT undefined and break startup preferences.
+        bootstrap_line = next(line for line in self.index.splitlines() if "window.PYTORRENT" in line)
+        self.assertNotIn("authProvider: { {", bootstrap_line)
+        self.assertNotIn("activeProfile: { {", bootstrap_line)
+        self.assertNotIn("easterEggEnabled: { {", bootstrap_line)
+        self.assertIn("authProvider: {{ auth_provider | tojson }}", bootstrap_line)
+        self.assertIn("activeProfile: {{ active_profile.id if active_profile else 'null' }}", bootstrap_line)
+        self.assertIn("easterEggEnabled: {{ 1 if prefs and prefs.easter_egg_enabled else 0 }}", bootstrap_line)
+        self.assertIn("notificationHistoryEnabled: {{ 1 if prefs and prefs.notification_history_enabled else 0 }}", bootstrap_line)
 
-    def test_no_profile_ui_is_only_rendered_after_resolved_empty_list(self) -> None:
-        # Note: A failed or pending profile request must never be interpreted as an empty installation.
-        self.assertIn("return {state:profiles.length?'select':'empty',profiles}", self.selection)
-        empty_branch = re.search(
-            r"if\(resolved\.state==='select'\).*?return;\n\s*}\n\s*setConnectionBadgeState\('reconnecting','setup required'\);(.*?)\n\s*}\s*catch",
-            self.selection,
-            flags=re.S,
-        )
-        self.assertIsNotNone(empty_branch)
-        self.assertIn("renderNoProfileState()", empty_branch.group(1))
-        catch_block = re.search(r"catch\(e\)\{(.*?)\n\s*}\n\s*}\n", self.selection, flags=re.S)
-        self.assertIsNotNone(catch_block)
-        self.assertNotIn("renderNoProfileState()", catch_block.group(1))
+    def test_missing_bootstrap_config_cannot_start_partial_ui(self) -> None:
+        # Note: If server bootstrap data is missing, fail closed instead of running with false default profile/preferences.
+        self.assertIn("if(!window.PYTORRENT || typeof window.PYTORRENT !== 'object')", self.app)
+        self.assertIn("pyTorrent bootstrap configuration is missing", self.app)
 
-    def test_single_bypass_profile_is_unambiguous(self) -> None:
-        # Note: One accessible profile starts normally; only multiple bypass profiles require a picker.
-        self.assertIn("if auth.auth_bypassed_request() and len(profiles) > 1:", self.preferences)
-        self.assertNotIn("if auth.auth_bypassed_request() and profiles:\n            return None", self.preferences)
+    def test_original_bootstrap_no_profile_order_is_restored(self) -> None:
+        # Note: Keep the supplied known-good startup order instead of introducing a second profile-resolution state machine.
+        self.assertIn("if(!hasActiveProfile) renderNoProfileState()", self.bootstrap)
+        self.assertNotIn("profileSetupCheckPromise", self.runtime)
+        self.assertNotIn("resolveStartupProfile", self.selection)
+        self.assertNotIn("syncResolvedActiveProfile", self.selection)
 
-    def test_read_api_has_no_hard_coded_profile_one_fallback(self) -> None:
-        # Note: HTTP reads and Socket.IO now use the same active-profile resolver.
-        self.assertNotIn("auth.can_access_profile(1, user_id)", self.shared)
-        self.assertNotIn("preferences.get_profile(1, user_id)", self.shared)
-        self.assertIn("profile = preferences.active_profile(user_id)", self.shared)
+    def test_original_first_run_profile_flow_is_restored(self) -> None:
+        self.assertIn("async function showFirstRunSetup()", self.selection)
+        self.assertIn("window.PYTORRENT.activeProfile=Number(j.active.id)", self.selection)
+        self.assertIn("socket.on('profile_required',()=>showFirstRunSetup())", self.snapshot)
+        self.assertNotIn("showFirstRunSetup(true)", self.snapshot)
 
-    def test_socket_profile_required_resynchronizes_profile_room(self) -> None:
-        # Note: If Socket.IO reports a missing profile while HTTP already resolved one, the client explicitly rejoins it.
-        self.assertIn("socket.on('profile_required',()=>showFirstRunSetup(true))", self.snapshot)
-        self.assertIn("socket.emit('select_profile',{profile_id:Number(activeProfileId)})", self.selection)
+    def test_original_bypass_profile_resolution_is_restored(self) -> None:
+        self.assertIn("if auth.auth_bypassed_request() and profiles:", self.preferences)
+        self.assertNotIn("len(profiles) > 1", self.preferences)
 
-    def test_topbar_does_not_claim_add_when_profiles_exist(self) -> None:
-        self.assertIn("('Select rTorrent' if profiles else 'Add rTorrent')", self.index)
+    def test_easter_egg_bootstrap_remains_server_driven_until_runtime(self) -> None:
+        # Note: The loading image is rendered from saved preferences before app.js starts.
+        self.assertIn("prefs.easter_egg_enabled and prefs.easter_egg_loading_image_url", self.index)
+        self.assertIn("applyInitialLoaderEasterEgg()", source_chunk("sharedUi.js"))
 
 
 if __name__ == "__main__":

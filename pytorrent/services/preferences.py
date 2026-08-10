@@ -192,9 +192,9 @@ def active_profile(user_id: int | None = None):
             if row:
                 return row
         profiles = list_profiles(user_id)
-        # Note: A single accessible profile is unambiguous and can be reused during startup;
-        # trusted auth-bypass sessions still require an explicit choice when multiple profiles exist.
-        if auth.auth_bypassed_request() and len(profiles) > 1:
+        # Note: Trusted auth-bypass access must choose a profile explicitly on first entry,
+        # instead of silently reusing the first configured profile.
+        if auth.auth_bypassed_request() and profiles:
             return None
         return profiles[0] if profiles else None
 
