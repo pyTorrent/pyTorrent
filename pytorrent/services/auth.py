@@ -19,6 +19,7 @@ from ..config import (
     METRICS_PATH,
 )
 from ..db import connect, default_user_id, utcnow
+from .deletion import purge_user
 
 PUBLIC_ENDPOINTS = {"main.login", "main.logout", "api.auth_login", "api.auth_me", "static"}
 RTORRENT_WRITE_PREFIXES = (
@@ -510,7 +511,7 @@ def save_user(data: dict[str, Any], user_id: int | None = None) -> dict[str, Any
         return conn.execute("SELECT id, username, email, display_name, external_auth_provider, external_subject, role, is_active, created_at, updated_at FROM users WHERE id=?", (user_id,)).fetchone()
 
 
-def delete_user(user_id: int) -> None:
+def delete_user(user_id: int) -> dict[str, object]:
     require_admin()
     uid = int(user_id or 0)
     if uid == current_user_id():
@@ -525,9 +526,7 @@ def delete_user(user_id: int) -> None:
         if str(row.get("username") or "").lower() in {"default", "admin"}:
             # Note: Protect bootstrap accounts by name as well as by id.
             raise ValueError("Cannot delete built-in user")
-        conn.execute("DELETE FROM user_profile_permissions WHERE user_id=?", (uid,))
-        conn.execute("UPDATE api_tokens SET revoked_at=COALESCE(revoked_at, ?), updated_at=? WHERE user_id=?", (utcnow(), utcnow(), uid))
-        conn.execute("DELETE FROM users WHERE id=?", (uid,))
+        return purge_user(conn, uid)
 
 
 def _public_user(row: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -613,13 +612,16 @@ def revoke_api_token(user_id: int, token_id: int) -> None:
         abort(403)
     now = utcnow()
     with connect() as conn:
-        # Note: Report missing/already revoked tokens instead of showing a false success in the UI.
-        cur = conn.execute(
-            "UPDATE api_tokens SET revoked_at=COALESCE(revoked_at, ?), updated_at=? WHERE id=? AND user_id=? AND revoked_at IS NULL",
+        row = conn.execute("SELECT revoked_at FROM api_tokens WHERE id=? AND user_id=?", (tid, uid)).fetchone()
+        if not row:
+            raise ValueError("API token not found")
+        if row.get("revoked_at"):
+            # Note: DELETE is idempotent; repeated clicks/retries must not turn a completed revoke into an application error.
+            return
+        conn.execute(
+            "UPDATE api_tokens SET revoked_at=?, updated_at=? WHERE id=? AND user_id=?",
             (now, now, tid, uid),
         )
-        if cur.rowcount <= 0:
-            raise ValueError("Active API token not found")
 
 
 def authenticate_api_token(token: str) -> dict[str, Any] | None:

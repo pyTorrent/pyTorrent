@@ -2,6 +2,7 @@ from __future__ import annotations
 from ._shared import *
 from ..services.rtorrent.diagnostics import profile_diagnostics
 from ..services import auth
+from ..services.deletion import DeletionError
 from ..utils import human_size
 
 @bp.get("/profiles")
@@ -46,8 +47,13 @@ def profiles_update(profile_id: int):
 
 @bp.delete("/profiles/<int:profile_id>")
 def profiles_delete(profile_id: int):
-    preferences.delete_profile(profile_id)
-    return ok({"profiles": preferences.list_profiles(), "active": preferences.active_profile()})
+    try:
+        deleted = preferences.delete_profile(profile_id)
+        return ok({"deleted": deleted, "profiles": preferences.list_profiles(), "active": preferences.active_profile()})
+    except DeletionError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 409
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 404
 
 
 

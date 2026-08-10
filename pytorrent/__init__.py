@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sqlite3
 from flask import Flask, jsonify, render_template, request, url_for
 from flask_socketio import SocketIO
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -41,6 +42,32 @@ def register_error_pages(app: Flask) -> None:
             message="The requested pyTorrent view does not exist or is not available.",
             icon="fa-compass-drafting",
         ), 404
+
+    @app.errorhandler(sqlite3.IntegrityError)
+    def database_integrity_error(error):
+        # Note: Constraint failures on destructive API operations are conflicts, not application crashes.
+        if _wants_json_response():
+            return jsonify({"ok": False, "error": "Database constraint conflict; no partial delete was committed."}), 409
+        return render_template(
+            "error.html",
+            code=409,
+            title="Database conflict",
+            message="The requested change conflicts with dependent data and was not committed.",
+            icon="fa-link-slash",
+        ), 409
+
+    @app.errorhandler(sqlite3.OperationalError)
+    def database_operational_error(error):
+        # Note: Locked/unavailable SQLite errors should produce a recoverable API response instead of a raw 500 page.
+        if _wants_json_response():
+            return jsonify({"ok": False, "error": "Database is temporarily unavailable. Please retry the operation."}), 503
+        return render_template(
+            "error.html",
+            code=503,
+            title="Database unavailable",
+            message="The database could not complete the operation. Please retry.",
+            icon="fa-database",
+        ), 503
 
     @app.errorhandler(500)
     def server_error(error):

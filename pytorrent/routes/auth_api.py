@@ -1,6 +1,8 @@
 from __future__ import annotations
 from flask import abort, jsonify, request
 from ..services.auth import current_user, list_users, save_user, delete_user, login_user, logout_user, enabled as auth_enabled, provider as auth_provider, uses_external_provider, external_auth_summary, list_api_tokens, create_api_token, revoke_api_token
+from ..services.deletion import DeletionError
+from werkzeug.exceptions import HTTPException
 
 
 def _ok(payload=None):
@@ -65,8 +67,11 @@ def register_auth_routes(bp):
         if not auth_enabled():
             abort(404)
         try:
-            delete_user(user_id)
-            return _ok()
+            return _ok({"deleted": delete_user(user_id)})
+        except HTTPException:
+            raise
+        except DeletionError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 409
         except Exception as exc:
             return jsonify({"ok": False, "error": str(exc)}), 400
     @bp.get("/auth/users/<int:user_id>/tokens")
@@ -92,6 +97,8 @@ def register_auth_routes(bp):
         try:
             revoke_api_token(user_id, token_id)
             return _ok({"tokens": list_api_tokens(user_id)})
+        except HTTPException:
+            raise
         except Exception as exc:
             return jsonify({"ok": False, "error": str(exc)}), 400
 

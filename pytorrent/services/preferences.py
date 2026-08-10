@@ -3,6 +3,7 @@ import json
 from ..db import connect, utcnow, default_user_id
 from . import auth
 from .frontend_assets import BOOTSTRAP_THEME_LABELS
+from .deletion import purge_profile
 
 BOOTSTRAP_THEMES = BOOTSTRAP_THEME_LABELS
 
@@ -263,12 +264,20 @@ def delete_profile(profile_id: int, user_id: int | None = None):
     user_id = user_id or auth.current_user_id() or default_user_id()
     auth.require_profile_write(profile_id)
     with connect() as conn:
-        conn.execute("DELETE FROM rtorrent_profiles WHERE id=?", (profile_id,))
-        active = active_profile(user_id)
-        conn.execute(
-            "UPDATE user_preferences SET active_rtorrent_id=?, updated_at=? WHERE user_id=?",
-            (active["id"] if active else None, utcnow(), user_id),
-        )
+        result = purge_profile(conn, int(profile_id))
+
+    # Note: Database cleanup is atomic. Runtime caches are best-effort and must never turn a successful DB delete into a 500.
+    try:
+        from .torrent_cache import torrent_cache
+        from .torrent_summary import invalidate_summary
+        from .rtorrent.system import clear_profile_runtime_caches
+
+        torrent_cache.clear_profile(int(profile_id))
+        invalidate_summary(int(profile_id))
+        clear_profile_runtime_caches(int(profile_id))
+    except Exception:
+        pass
+    return result
 
 
 def activate_profile(profile_id: int, user_id: int | None = None):

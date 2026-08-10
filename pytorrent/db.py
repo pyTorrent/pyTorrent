@@ -60,6 +60,10 @@ def connect():
     try:
         yield conn
         conn.commit()
+    except Exception:
+        # Note: Every failed database operation is rolled back explicitly so destructive requests cannot leave partial state.
+        conn.rollback()
+        raise
     finally:
         conn.close()
 
