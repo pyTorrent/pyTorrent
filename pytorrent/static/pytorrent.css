@@ -40,6 +40,7 @@ html[data-ui-framework="pytorrent"] {
   --pt-radius: 0.58rem;
   --pt-radius-lg: 0.8rem;
   --pt-control-height: 2.2rem;
+  --pt-menu-bg: rgb(var(--pt-surface-rgb));
   --pt-motion-fast: 80ms;
   --pt-motion-base: 105ms;
 
@@ -1569,15 +1570,16 @@ html[data-ui-framework="pytorrent"] .btn {
   --bs-btn-disabled-color: var(--pt-text-subtle);
   --bs-btn-disabled-bg: transparent;
   --bs-btn-disabled-border-color: var(--pt-border);
-  --bs-btn-padding-y: 0.42rem;
-  --bs-btn-padding-x: 0.72rem;
-  --bs-btn-font-size: 0.875rem;
+  /* Note: PyTorrent controls are intentionally denser than Bootstrap while keeping the same interaction targets. */
+  --bs-btn-padding-y: 0.34rem;
+  --bs-btn-padding-x: 0.62rem;
+  --bs-btn-font-size: 0.84rem;
   --bs-btn-border-radius: var(--pt-radius-sm);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.36rem;
-  min-height: 2rem;
+  min-height: 1.76rem;
   padding: var(--bs-btn-padding-y) var(--bs-btn-padding-x);
   color: var(--bs-btn-color);
   font-size: var(--bs-btn-font-size);
@@ -1736,11 +1738,16 @@ html[data-ui-framework="pytorrent"] .btn-link {
 
 html[data-ui-framework="pytorrent"] .btn-sm,
 html[data-ui-framework="pytorrent"] .btn-group-sm > .btn {
-  --bs-btn-padding-y: 0.3rem;
-  --bs-btn-padding-x: 0.58rem;
-  --bs-btn-font-size: 0.82rem;
-  --bs-btn-border-radius: 0.38rem;
-  min-height: 1.82rem;
+  --bs-btn-padding-y: 0.24rem;
+  --bs-btn-padding-x: 0.5rem;
+  --bs-btn-font-size: 0.78rem;
+  --bs-btn-border-radius: 0.36rem;
+  min-height: 1.58rem;
+}
+
+/* Note: Shared application CSS gives topbar buttons a fixed height; keep PyTorrent's compact density there too. */
+html[data-ui-framework="pytorrent"] .topbar .btn {
+  min-height: 25px;
 }
 
 html[data-ui-framework="pytorrent"] .btn-group {
@@ -2155,21 +2162,29 @@ html[data-ui-framework="pytorrent"] .dropdown-menu {
   color: var(--pt-text);
   text-align: left;
   list-style: none;
-  background-color: var(--pt-surface-raised);
-  background-image: none;
+  /* Note: Menus use a dedicated opaque surface and never inherit translucent shell effects. */
+  background: var(--pt-menu-bg) !important;
+  background-image: none !important;
   border: 1px solid var(--pt-border);
   border-radius: var(--pt-radius);
   box-shadow: var(--pt-shadow-md);
-  opacity: 1;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  opacity: 1 !important;
+  filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  mix-blend-mode: normal;
+  isolation: isolate;
 }
 
-/* Note: Notification history sits inside a translucent shell, so its menu owns a fully opaque stacking surface. */
+/* Note: Notification history owns the same opaque menu surface across its complete scrollable area. */
 html[data-ui-framework="pytorrent"] .notification-history-menu,
 html[data-ui-framework="pytorrent"] .notification-history-header,
-html[data-ui-framework="pytorrent"] .notification-history-list {
-  background-color: var(--pt-surface-raised);
+html[data-ui-framework="pytorrent"] .notification-history-list,
+html[data-ui-framework="pytorrent"] .notification-history-item {
+  background-color: var(--pt-menu-bg) !important;
+  opacity: 1 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 html[data-ui-framework="pytorrent"] .dropdown-menu.show {
