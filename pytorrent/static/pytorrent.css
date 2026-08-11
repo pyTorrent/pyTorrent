@@ -1,0 +1,2663 @@
+/*
+ * PyTorrent UI Framework - Beta
+ *
+ * Note: This stylesheet is a standalone CSS foundation for the pyTorrent UI.
+ * It intentionally supports the existing Bootstrap-compatible class names so
+ * the application can migrate away from Bootstrap CSS without rewriting its
+ * markup or behavior in one step.
+ */
+
+html[data-ui-framework="pytorrent"] {
+  color-scheme: light;
+  --pt-page: #f3f5f8;
+  --pt-page-rgb: 243, 245, 248;
+  --pt-surface: #ffffff;
+  --pt-surface-rgb: 255, 255, 255;
+  --pt-surface-soft: #f7f8fa;
+  --pt-surface-soft-rgb: 247, 248, 250;
+  --pt-surface-raised: #ffffff;
+  --pt-text: #172033;
+  --pt-text-muted: #687386;
+  --pt-text-subtle: #8792a3;
+  --pt-border: #dfe4ea;
+  --pt-border-strong: #cbd3dd;
+  --pt-primary: #496fe6;
+  --pt-primary-rgb: 73, 111, 230;
+  --pt-primary-strong: #365dcc;
+  --pt-primary-soft: #edf1ff;
+  --pt-success: #278a64;
+  --pt-success-rgb: 39, 138, 100;
+  --pt-warning: #ad7418;
+  --pt-warning-rgb: 173, 116, 24;
+  --pt-danger: #c34b58;
+  --pt-danger-rgb: 195, 75, 88;
+  --pt-info: #397aa8;
+  --pt-info-rgb: 57, 122, 168;
+  --pt-focus: rgba(73, 111, 230, 0.24);
+  --pt-shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05), 0 4px 12px rgba(16, 24, 40, 0.04);
+  --pt-shadow-md: 0 12px 34px rgba(16, 24, 40, 0.12);
+  --pt-radius-sm: 0.42rem;
+  --pt-radius: 0.58rem;
+  --pt-radius-lg: 0.8rem;
+  --pt-control-height: 2.2rem;
+  --pt-motion-fast: 80ms;
+  --pt-motion-base: 105ms;
+
+  /* Bootstrap variable aliases keep shared application CSS framework-neutral. */
+  --bs-body-bg: var(--pt-page);
+  --bs-body-bg-rgb: var(--pt-page-rgb);
+  --bs-body-color: var(--pt-text);
+  --bs-body-color-rgb: 23, 32, 51;
+  --bs-secondary-color: var(--pt-text-muted);
+  --bs-tertiary-color: var(--pt-text-subtle);
+  --bs-secondary-bg: var(--pt-surface);
+  --bs-secondary-bg-rgb: var(--pt-surface-rgb);
+  --bs-tertiary-bg: var(--pt-surface-soft);
+  --bs-tertiary-bg-rgb: var(--pt-surface-soft-rgb);
+  --bs-border-color: var(--pt-border);
+  --bs-border-color-translucent: rgba(23, 32, 51, 0.12);
+  --bs-primary: var(--pt-primary);
+  --bs-primary-rgb: var(--pt-primary-rgb);
+  --bs-primary-text-emphasis: color-mix(in srgb, var(--pt-primary) 72%, #111827);
+  --bs-primary-bg-subtle: var(--pt-primary-soft);
+  --bs-secondary: var(--pt-text-muted);
+  --bs-secondary-rgb: 104, 115, 134;
+  --bs-success: var(--pt-success);
+  --bs-success-rgb: var(--pt-success-rgb);
+  --bs-success-text-emphasis: color-mix(in srgb, var(--pt-success) 76%, #0f172a);
+  --bs-warning: var(--pt-warning);
+  --bs-warning-rgb: var(--pt-warning-rgb);
+  --bs-warning-text-emphasis: color-mix(in srgb, var(--pt-warning) 76%, #0f172a);
+  --bs-danger: var(--pt-danger);
+  --bs-danger-rgb: var(--pt-danger-rgb);
+  --bs-danger-text-emphasis: color-mix(in srgb, var(--pt-danger) 76%, #0f172a);
+  --bs-info: var(--pt-info);
+  --bs-info-rgb: var(--pt-info-rgb);
+  --bs-white: #ffffff;
+  --bs-font-monospace: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+
+  --pytorrent-page-bg: var(--pt-page);
+  --pytorrent-shell-shadow: var(--pt-shadow-md);
+  --pytorrent-topbar-bg: rgba(var(--pt-surface-rgb), 0.94);
+  --pytorrent-sidebar-bg: rgba(var(--pt-surface-soft-rgb), 0.96);
+  --pytorrent-statusbar-bg: rgba(var(--pt-surface-soft-rgb), 0.96);
+  --pytorrent-surface-bg: rgba(var(--pt-surface-rgb), 0.78);
+  --pytorrent-surface-radius: var(--pt-radius-lg);
+  --pytorrent-panel-border: var(--pt-border);
+  --pytorrent-table-header-bg: var(--pt-surface-soft);
+  --pytorrent-backdrop-filter: blur(18px) saturate(1.08);
+}
+
+html[data-ui-framework="pytorrent"][data-bs-theme="dark"] {
+  color-scheme: dark;
+  --pt-page: #0b0e13;
+  --pt-page-rgb: 11, 14, 19;
+  --pt-surface: #11161d;
+  --pt-surface-rgb: 17, 22, 29;
+  --pt-surface-soft: #161c24;
+  --pt-surface-soft-rgb: 22, 28, 36;
+  --pt-surface-raised: #19212b;
+  --pt-text: #e7edf5;
+  --pt-text-muted: #9aa6b6;
+  --pt-text-subtle: #778394;
+  --pt-border: #27313d;
+  --pt-border-strong: #344150;
+  --pt-primary: #7895f5;
+  --pt-primary-rgb: 120, 149, 245;
+  --pt-primary-strong: #91a9ff;
+  --pt-primary-soft: #182344;
+  --pt-success: #55b58b;
+  --pt-success-rgb: 85, 181, 139;
+  --pt-warning: #d3a24e;
+  --pt-warning-rgb: 211, 162, 78;
+  --pt-danger: #dc6c78;
+  --pt-danger-rgb: 220, 108, 120;
+  --pt-info: #67a6d3;
+  --pt-info-rgb: 103, 166, 211;
+  --pt-focus: rgba(120, 149, 245, 0.28);
+  --pt-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.22), 0 6px 16px rgba(0, 0, 0, 0.12);
+  --pt-shadow-md: 0 18px 46px rgba(0, 0, 0, 0.34);
+
+  --bs-body-bg: var(--pt-page);
+  --bs-body-bg-rgb: var(--pt-page-rgb);
+  --bs-body-color: var(--pt-text);
+  --bs-body-color-rgb: 231, 237, 245;
+  --bs-secondary-color: var(--pt-text-muted);
+  --bs-tertiary-color: var(--pt-text-subtle);
+  --bs-secondary-bg: var(--pt-surface);
+  --bs-secondary-bg-rgb: var(--pt-surface-rgb);
+  --bs-tertiary-bg: var(--pt-surface-soft);
+  --bs-tertiary-bg-rgb: var(--pt-surface-soft-rgb);
+  --bs-border-color: var(--pt-border);
+  --bs-border-color-translucent: rgba(231, 237, 245, 0.12);
+  --bs-primary-text-emphasis: color-mix(in srgb, var(--pt-primary) 72%, #ffffff);
+  --bs-primary-bg-subtle: var(--pt-primary-soft);
+  --bs-secondary: var(--pt-text-muted);
+  --bs-secondary-rgb: 154, 166, 182;
+  --bs-success-text-emphasis: color-mix(in srgb, var(--pt-success) 72%, #ffffff);
+  --bs-warning-text-emphasis: color-mix(in srgb, var(--pt-warning) 72%, #ffffff);
+  --bs-danger-text-emphasis: color-mix(in srgb, var(--pt-danger) 72%, #ffffff);
+  --pytorrent-topbar-bg: rgba(var(--pt-surface-rgb), 0.94);
+  --pytorrent-sidebar-bg: rgba(var(--pt-surface-soft-rgb), 0.96);
+  --pytorrent-statusbar-bg: rgba(var(--pt-surface-soft-rgb), 0.96);
+  --pytorrent-surface-bg: rgba(var(--pt-surface-rgb), 0.8);
+  --pytorrent-table-header-bg: var(--pt-surface-soft);
+}
+
+
+/* PyTorrent theme palette bridge ------------------------------------------------
+ * Note: The Bootstrap theme selector remains shared by both frameworks. PyTorrent
+ * reads the selected skin name and maps its palette into PyTorrent tokens without
+ * loading Bootstrap CSS or copying Bootstrap component geometry.
+ */
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-adaptive"]:not([data-bs-theme="dark"]) {
+  --pt-page: #f6f7fb;
+  --pt-page-rgb: 246,247,251;
+  --pt-surface: #ffffff;
+  --pt-surface-rgb: 255,255,255;
+  --pt-surface-soft: #eef1f7;
+  --pt-surface-soft-rgb: 238, 241, 247;
+  --pt-surface-raised: #ffffff;
+  --pt-text: #1f2937;
+  --pt-text-muted: #667085;
+  --pt-text-subtle: color-mix(in srgb, #667085 78%, transparent);
+  --pt-border: #d9deea;
+  --pt-border-strong: color-mix(in srgb, #d9deea 76%, #1f2937);
+  --pt-primary: #6750a4;
+  --pt-primary-rgb: 103,80,164;
+  --pt-primary-strong: #4b2f8f;
+  --pt-primary-soft: #ece7ff;
+  --pt-focus: rgba(103,80,164, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-adaptive"][data-bs-theme="dark"] {
+  --pt-page: #080b12;
+  --pt-page-rgb: 8,11,18;
+  --pt-surface: #101624;
+  --pt-surface-rgb: 16,22,36;
+  --pt-surface-soft: #151d2e;
+  --pt-surface-soft-rgb: 21, 29, 46;
+  --pt-surface-raised: #101624;
+  --pt-text: #dce3f0;
+  --pt-text-muted: #97a4ba;
+  --pt-text-subtle: color-mix(in srgb, #97a4ba 78%, transparent);
+  --pt-border: #273247;
+  --pt-border-strong: color-mix(in srgb, #273247 76%, #dce3f0);
+  --pt-primary: #8f7cff;
+  --pt-primary-rgb: 143,124,255;
+  --pt-primary-strong: #c6bdff;
+  --pt-primary-soft: #191735;
+  --pt-focus: rgba(143,124,255, 0.28);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-ocean"]:not([data-bs-theme="dark"]) {
+  --pt-page: #f2fbfa;
+  --pt-page-rgb: 242,251,250;
+  --pt-surface: #ffffff;
+  --pt-surface-rgb: 255,255,255;
+  --pt-surface-soft: #dff5f2;
+  --pt-surface-soft-rgb: 223, 245, 242;
+  --pt-surface-raised: #ffffff;
+  --pt-text: #102a2a;
+  --pt-text-muted: #54706f;
+  --pt-text-subtle: color-mix(in srgb, #54706f 78%, transparent);
+  --pt-border: #bfe4df;
+  --pt-border-strong: color-mix(in srgb, #bfe4df 76%, #102a2a);
+  --pt-primary: #0f766e;
+  --pt-primary-rgb: 15,118,110;
+  --pt-primary-strong: #095c55;
+  --pt-primary-soft: #d6f4ef;
+  --pt-focus: rgba(15,118,110, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-ocean"][data-bs-theme="dark"] {
+  --pt-page: #031316;
+  --pt-page-rgb: 3,19,22;
+  --pt-surface: #082326;
+  --pt-surface-rgb: 8,35,38;
+  --pt-surface-soft: #0d3034;
+  --pt-surface-soft-rgb: 13, 48, 52;
+  --pt-surface-raised: #082326;
+  --pt-text: #d5f4f1;
+  --pt-text-muted: #8ab6b2;
+  --pt-text-subtle: color-mix(in srgb, #8ab6b2 78%, transparent);
+  --pt-border: #17494e;
+  --pt-border-strong: color-mix(in srgb, #17494e 76%, #d5f4f1);
+  --pt-primary: #2dd4bf;
+  --pt-primary-rgb: 45,212,191;
+  --pt-primary-strong: #99f6e4;
+  --pt-primary-soft: #063a3c;
+  --pt-focus: rgba(45,212,191, 0.28);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-graphite"]:not([data-bs-theme="dark"]) {
+  --pt-page: #f5f6f8;
+  --pt-page-rgb: 245,246,248;
+  --pt-surface: #ffffff;
+  --pt-surface-rgb: 255,255,255;
+  --pt-surface-soft: #eceff3;
+  --pt-surface-soft-rgb: 236, 239, 243;
+  --pt-surface-raised: #ffffff;
+  --pt-text: #18202f;
+  --pt-text-muted: #667085;
+  --pt-text-subtle: color-mix(in srgb, #667085 78%, transparent);
+  --pt-border: #d7dce3;
+  --pt-border-strong: color-mix(in srgb, #d7dce3 76%, #18202f);
+  --pt-primary: #334155;
+  --pt-primary-rgb: 51,65,85;
+  --pt-primary-strong: #1f2937;
+  --pt-primary-soft: #e4e8ef;
+  --pt-focus: rgba(51,65,85, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-graphite"][data-bs-theme="dark"] {
+  --pt-page: #07090d;
+  --pt-page-rgb: 7,9,13;
+  --pt-surface: #11151c;
+  --pt-surface-rgb: 17,21,28;
+  --pt-surface-soft: #171c25;
+  --pt-surface-soft-rgb: 23, 28, 37;
+  --pt-surface-raised: #11151c;
+  --pt-text: #d7dde7;
+  --pt-text-muted: #99a3b3;
+  --pt-text-subtle: color-mix(in srgb, #99a3b3 78%, transparent);
+  --pt-border: #2b3442;
+  --pt-border-strong: color-mix(in srgb, #2b3442 76%, #d7dde7);
+  --pt-primary: #94a3b8;
+  --pt-primary-rgb: 148,163,184;
+  --pt-primary-strong: #e2e8f0;
+  --pt-primary-soft: #1d2531;
+  --pt-focus: rgba(148,163,184, 0.28);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-forest"]:not([data-bs-theme="dark"]) {
+  --pt-page: #f4faf2;
+  --pt-page-rgb: 244,250,242;
+  --pt-surface: #ffffff;
+  --pt-surface-rgb: 255,255,255;
+  --pt-surface-soft: #e7f4e4;
+  --pt-surface-soft-rgb: 231, 244, 228;
+  --pt-surface-raised: #ffffff;
+  --pt-text: #172417;
+  --pt-text-muted: #61735e;
+  --pt-text-subtle: color-mix(in srgb, #61735e 78%, transparent);
+  --pt-border: #cce4c7;
+  --pt-border-strong: color-mix(in srgb, #cce4c7 76%, #172417);
+  --pt-primary: #2f7d32;
+  --pt-primary-rgb: 47,125,50;
+  --pt-primary-strong: #256329;
+  --pt-primary-soft: #dcf2d7;
+  --pt-focus: rgba(47,125,50, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-forest"][data-bs-theme="dark"] {
+  --pt-page: #071109;
+  --pt-page-rgb: 7,17,9;
+  --pt-surface: #0f1f12;
+  --pt-surface-rgb: 15,31,18;
+  --pt-surface-soft: #152b18;
+  --pt-surface-soft-rgb: 21, 43, 24;
+  --pt-surface-raised: #0f1f12;
+  --pt-text: #d9f1dc;
+  --pt-text-muted: #95b79a;
+  --pt-text-subtle: color-mix(in srgb, #95b79a 78%, transparent);
+  --pt-border: #24472a;
+  --pt-border-strong: color-mix(in srgb, #24472a 76%, #d9f1dc);
+  --pt-primary: #4ade80;
+  --pt-primary-rgb: 74,222,128;
+  --pt-primary-strong: #bbf7d0;
+  --pt-primary-soft: #13381a;
+  --pt-focus: rgba(74,222,128, 0.28);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-amber"]:not([data-bs-theme="dark"]) {
+  --pt-page: #fff8ed;
+  --pt-page-rgb: 255,248,237;
+  --pt-surface: #ffffff;
+  --pt-surface-rgb: 255,255,255;
+  --pt-surface-soft: #ffefd6;
+  --pt-surface-soft-rgb: 255, 239, 214;
+  --pt-surface-raised: #ffffff;
+  --pt-text: #2c1d0b;
+  --pt-text-muted: #7a6750;
+  --pt-text-subtle: color-mix(in srgb, #7a6750 78%, transparent);
+  --pt-border: #f3d7aa;
+  --pt-border-strong: color-mix(in srgb, #f3d7aa 76%, #2c1d0b);
+  --pt-primary: #b45309;
+  --pt-primary-rgb: 180,83,9;
+  --pt-primary-strong: #92400e;
+  --pt-primary-soft: #ffecd0;
+  --pt-focus: rgba(180,83,9, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-amber"][data-bs-theme="dark"] {
+  --pt-page: #140d05;
+  --pt-page-rgb: 20,13,5;
+  --pt-surface: #211607;
+  --pt-surface-rgb: 33,22,7;
+  --pt-surface-soft: #2b1d0b;
+  --pt-surface-soft-rgb: 43, 29, 11;
+  --pt-surface-raised: #211607;
+  --pt-text: #f5e9d6;
+  --pt-text-muted: #c3a780;
+  --pt-text-subtle: color-mix(in srgb, #c3a780 78%, transparent);
+  --pt-border: #4c3515;
+  --pt-border-strong: color-mix(in srgb, #4c3515 76%, #f5e9d6);
+  --pt-primary: #f59e0b;
+  --pt-primary-rgb: 245,158,11;
+  --pt-primary-strong: #fde68a;
+  --pt-primary-soft: #3a2609;
+  --pt-focus: rgba(245,158,11, 0.28);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-nord"]:not([data-bs-theme="dark"]) {
+  --pt-page: #f4f7fb;
+  --pt-page-rgb: 244,247,251;
+  --pt-surface: #ffffff;
+  --pt-surface-rgb: 255,255,255;
+  --pt-surface-soft: #e7edf5;
+  --pt-surface-soft-rgb: 231, 237, 245;
+  --pt-surface-raised: #ffffff;
+  --pt-text: #182334;
+  --pt-text-muted: #607089;
+  --pt-text-subtle: color-mix(in srgb, #607089 78%, transparent);
+  --pt-border: #d0d9e8;
+  --pt-border-strong: color-mix(in srgb, #d0d9e8 76%, #182334);
+  --pt-primary: #4c6a92;
+  --pt-primary-rgb: 76,106,146;
+  --pt-primary-strong: #365174;
+  --pt-primary-soft: #dfe8f4;
+  --pt-focus: rgba(76,106,146, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-nord"][data-bs-theme="dark"] {
+  --pt-page: #0b111a;
+  --pt-page-rgb: 11,17,26;
+  --pt-surface: #111927;
+  --pt-surface-rgb: 17,25,39;
+  --pt-surface-soft: #172233;
+  --pt-surface-soft-rgb: 23, 34, 51;
+  --pt-surface-raised: #111927;
+  --pt-text: #d8dee9;
+  --pt-text-muted: #9aa8bc;
+  --pt-text-subtle: color-mix(in srgb, #9aa8bc 78%, transparent);
+  --pt-border: #2e3a4d;
+  --pt-border-strong: color-mix(in srgb, #2e3a4d 76%, #d8dee9);
+  --pt-primary: #88c0d0;
+  --pt-primary-rgb: 136,192,208;
+  --pt-primary-strong: #b6e3ee;
+  --pt-primary-soft: #132b3a;
+  --pt-focus: rgba(136,192,208, 0.28);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-crimson"]:not([data-bs-theme="dark"]) {
+  --pt-page: #fff5f7;
+  --pt-page-rgb: 255,245,247;
+  --pt-surface: #ffffff;
+  --pt-surface-rgb: 255,255,255;
+  --pt-surface-soft: #ffe4ea;
+  --pt-surface-soft-rgb: 255, 228, 234;
+  --pt-surface-raised: #ffffff;
+  --pt-text: #2b1118;
+  --pt-text-muted: #76545d;
+  --pt-text-subtle: color-mix(in srgb, #76545d 78%, transparent);
+  --pt-border: #f5c6d1;
+  --pt-border-strong: color-mix(in srgb, #f5c6d1 76%, #2b1118);
+  --pt-primary: #be123c;
+  --pt-primary-rgb: 190,18,60;
+  --pt-primary-strong: #9f1239;
+  --pt-primary-soft: #ffe1e9;
+  --pt-focus: rgba(190,18,60, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-crimson"][data-bs-theme="dark"] {
+  --pt-page: #13070a;
+  --pt-page-rgb: 19,7,10;
+  --pt-surface: #211014;
+  --pt-surface-rgb: 33,16,20;
+  --pt-surface-soft: #2b151b;
+  --pt-surface-soft-rgb: 43, 21, 27;
+  --pt-surface-raised: #211014;
+  --pt-text: #f7dce2;
+  --pt-text-muted: #c096a1;
+  --pt-text-subtle: color-mix(in srgb, #c096a1 78%, transparent);
+  --pt-border: #4b2430;
+  --pt-border-strong: color-mix(in srgb, #4b2430 76%, #f7dce2);
+  --pt-primary: #fb7185;
+  --pt-primary-rgb: 251,113,133;
+  --pt-primary-strong: #fecdd3;
+  --pt-primary-soft: #3b111b;
+  --pt-focus: rgba(251,113,133, 0.28);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-sky"]:not([data-bs-theme="dark"]) {
+  --pt-page: #f2f9ff;
+  --pt-page-rgb: 242,249,255;
+  --pt-surface: #ffffff;
+  --pt-surface-rgb: 255,255,255;
+  --pt-surface-soft: #dff1ff;
+  --pt-surface-soft-rgb: 223, 241, 255;
+  --pt-surface-raised: #ffffff;
+  --pt-text: #102033;
+  --pt-text-muted: #567185;
+  --pt-text-subtle: color-mix(in srgb, #567185 78%, transparent);
+  --pt-border: #bddff5;
+  --pt-border-strong: color-mix(in srgb, #bddff5 76%, #102033);
+  --pt-primary: #0284c7;
+  --pt-primary-rgb: 2,132,199;
+  --pt-primary-strong: #0369a1;
+  --pt-primary-soft: #d7efff;
+  --pt-focus: rgba(2,132,199, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-sky"][data-bs-theme="dark"] {
+  --pt-page: #06111a;
+  --pt-page-rgb: 6,17,26;
+  --pt-surface: #0d1c29;
+  --pt-surface-rgb: 13,28,41;
+  --pt-surface-soft: #12283a;
+  --pt-surface-soft-rgb: 18, 40, 58;
+  --pt-surface-raised: #0d1c29;
+  --pt-text: #d9ecf8;
+  --pt-text-muted: #91b4ca;
+  --pt-text-subtle: color-mix(in srgb, #91b4ca 78%, transparent);
+  --pt-border: #21435b;
+  --pt-border-strong: color-mix(in srgb, #21435b 76%, #d9ecf8);
+  --pt-primary: #38bdf8;
+  --pt-primary-rgb: 56,189,248;
+  --pt-primary-strong: #bae6fd;
+  --pt-primary-soft: #0b334d;
+  --pt-focus: rgba(56,189,248, 0.28);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-aurora"]:not([data-bs-theme="dark"]) {
+  --pt-page: #f5f7ff;
+  --pt-page-rgb: 245,247,255;
+  --pt-surface: #ffffff;
+  --pt-surface-rgb: 255,255,255;
+  --pt-surface-soft: #edf0fb;
+  --pt-surface-soft-rgb: 237, 240, 251;
+  --pt-surface-raised: #ffffff;
+  --pt-text: #182033;
+  --pt-text-muted: #65708a;
+  --pt-text-subtle: color-mix(in srgb, #65708a 78%, transparent);
+  --pt-border: #d8dcef;
+  --pt-border-strong: color-mix(in srgb, #d8dcef 76%, #182033);
+  --pt-primary: #6d5dfc;
+  --pt-primary-rgb: 109,93,252;
+  --pt-primary-strong: #4435c7;
+  --pt-primary-soft: #ebe8ff;
+  --pt-focus: rgba(109,93,252, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-aurora"][data-bs-theme="dark"] {
+  --pt-page: #070a12;
+  --pt-page-rgb: 7,10,18;
+  --pt-surface: #101522;
+  --pt-surface-rgb: 16,21,34;
+  --pt-surface-soft: #171d2d;
+  --pt-surface-soft-rgb: 23, 29, 45;
+  --pt-surface-raised: #101522;
+  --pt-text: #e1e6f3;
+  --pt-text-muted: #97a2b8;
+  --pt-text-subtle: color-mix(in srgb, #97a2b8 78%, transparent);
+  --pt-border: #2b3449;
+  --pt-border-strong: color-mix(in srgb, #2b3449 76%, #e1e6f3);
+  --pt-primary: #9b8cff;
+  --pt-primary-rgb: 155,140,255;
+  --pt-primary-strong: #d2cbff;
+  --pt-primary-soft: #211d46;
+  --pt-focus: rgba(155,140,255, 0.28);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-obsidian"]:not([data-bs-theme="dark"]) {
+  --pt-page: #f3f5f6;
+  --pt-page-rgb: 243,245,246;
+  --pt-surface: #fbfcfc;
+  --pt-surface-rgb: 251,252,252;
+  --pt-surface-soft: #e8ecee;
+  --pt-surface-soft-rgb: 232, 236, 238;
+  --pt-surface-raised: #fbfcfc;
+  --pt-text: #171c21;
+  --pt-text-muted: #626d73;
+  --pt-text-subtle: color-mix(in srgb, #626d73 78%, transparent);
+  --pt-border: #cfd6da;
+  --pt-border-strong: color-mix(in srgb, #cfd6da 76%, #171c21);
+  --pt-primary: #0f766e;
+  --pt-primary-rgb: 15,118,110;
+  --pt-primary-strong: #0b5c56;
+  --pt-primary-soft: #dcefeb;
+  --pt-focus: rgba(15,118,110, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-obsidian"][data-bs-theme="dark"] {
+  --pt-page: #07090b;
+  --pt-page-rgb: 7,9,11;
+  --pt-surface: #101417;
+  --pt-surface-rgb: 16,20,23;
+  --pt-surface-soft: #171c20;
+  --pt-surface-soft-rgb: 23, 28, 32;
+  --pt-surface-raised: #101417;
+  --pt-text: #d8dde0;
+  --pt-text-muted: #909ba1;
+  --pt-text-subtle: color-mix(in srgb, #909ba1 78%, transparent);
+  --pt-border: #2a3237;
+  --pt-border-strong: color-mix(in srgb, #2a3237 76%, #d8dde0);
+  --pt-primary: #35c9b5;
+  --pt-primary-rgb: 53,201,181;
+  --pt-primary-strong: #9beade;
+  --pt-primary-soft: #12332f;
+  --pt-focus: rgba(53,201,181, 0.28);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-sakura"]:not([data-bs-theme="dark"]) {
+  --pt-page: #fff8fa;
+  --pt-page-rgb: 255,248,250;
+  --pt-surface: #fffdfd;
+  --pt-surface-rgb: 255,253,253;
+  --pt-surface-soft: #faedf2;
+  --pt-surface-soft-rgb: 250, 237, 242;
+  --pt-surface-raised: #fffdfd;
+  --pt-text: #2f1d26;
+  --pt-text-muted: #80636f;
+  --pt-text-subtle: color-mix(in srgb, #80636f 78%, transparent);
+  --pt-border: #ead2dc;
+  --pt-border-strong: color-mix(in srgb, #ead2dc 76%, #2f1d26);
+  --pt-primary: #b54773;
+  --pt-primary-rgb: 181,71,115;
+  --pt-primary-strong: #7e2f50;
+  --pt-primary-soft: #f7e0e9;
+  --pt-focus: rgba(181,71,115, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-sakura"][data-bs-theme="dark"] {
+  --pt-page: #130b10;
+  --pt-page-rgb: 19,11,16;
+  --pt-surface: #21131a;
+  --pt-surface-rgb: 33,19,26;
+  --pt-surface-soft: #2b1821;
+  --pt-surface-soft-rgb: 43, 24, 33;
+  --pt-surface-raised: #21131a;
+  --pt-text: #f0dfe7;
+  --pt-text-muted: #bea1ad;
+  --pt-text-subtle: color-mix(in srgb, #bea1ad 78%, transparent);
+  --pt-border: #4a2937;
+  --pt-border-strong: color-mix(in srgb, #4a2937 76%, #f0dfe7);
+  --pt-primary: #f08bb2;
+  --pt-primary-rgb: 240,139,178;
+  --pt-primary-strong: #ffd0e1;
+  --pt-primary-soft: #431c2d;
+  --pt-focus: rgba(240,139,178, 0.28);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-cobalt"]:not([data-bs-theme="dark"]) {
+  --pt-page: #f3f7fc;
+  --pt-page-rgb: 243,247,252;
+  --pt-surface: #ffffff;
+  --pt-surface-rgb: 255,255,255;
+  --pt-surface-soft: #e6eef9;
+  --pt-surface-soft-rgb: 230, 238, 249;
+  --pt-surface-raised: #ffffff;
+  --pt-text: #152238;
+  --pt-text-muted: #61728c;
+  --pt-text-subtle: color-mix(in srgb, #61728c 78%, transparent);
+  --pt-border: #cbd8ea;
+  --pt-border-strong: color-mix(in srgb, #cbd8ea 76%, #152238);
+  --pt-primary: #2563eb;
+  --pt-primary-rgb: 37,99,235;
+  --pt-primary-strong: #173e91;
+  --pt-primary-soft: #dfeaff;
+  --pt-focus: rgba(37,99,235, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-cobalt"][data-bs-theme="dark"] {
+  --pt-page: #07101d;
+  --pt-page-rgb: 7,16,29;
+  --pt-surface: #0e1a2b;
+  --pt-surface-rgb: 14,26,43;
+  --pt-surface-soft: #15243a;
+  --pt-surface-soft-rgb: 21, 36, 58;
+  --pt-surface-raised: #0e1a2b;
+  --pt-text: #dce8f7;
+  --pt-text-muted: #94a9c4;
+  --pt-text-subtle: color-mix(in srgb, #94a9c4 78%, transparent);
+  --pt-border: #293d59;
+  --pt-border-strong: color-mix(in srgb, #293d59 76%, #dce8f7);
+  --pt-primary: #60a5fa;
+  --pt-primary-rgb: 96,165,250;
+  --pt-primary-strong: #c3ddff;
+  --pt-primary-soft: #122d54;
+  --pt-focus: rgba(96,165,250, 0.28);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-sandstone"]:not([data-bs-theme="dark"]) {
+  --pt-page: #f8f4ec;
+  --pt-page-rgb: 248,244,236;
+  --pt-surface: #fffdf8;
+  --pt-surface-rgb: 255,253,248;
+  --pt-surface-soft: #eee6d9;
+  --pt-surface-soft-rgb: 238, 230, 217;
+  --pt-surface-raised: #fffdf8;
+  --pt-text: #30281f;
+  --pt-text-muted: #75685a;
+  --pt-text-subtle: color-mix(in srgb, #75685a 78%, transparent);
+  --pt-border: #dcd0bf;
+  --pt-border-strong: color-mix(in srgb, #dcd0bf 76%, #30281f);
+  --pt-primary: #b35b36;
+  --pt-primary-rgb: 179,91,54;
+  --pt-primary-strong: #7c3b24;
+  --pt-primary-soft: #f3dfd3;
+  --pt-focus: rgba(179,91,54, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-sandstone"][data-bs-theme="dark"] {
+  --pt-page: #15110d;
+  --pt-page-rgb: 21,17,13;
+  --pt-surface: #211a14;
+  --pt-surface-rgb: 33,26,20;
+  --pt-surface-soft: #2a2119;
+  --pt-surface-soft-rgb: 42, 33, 25;
+  --pt-surface-raised: #211a14;
+  --pt-text: #eadfd3;
+  --pt-text-muted: #b4a393;
+  --pt-text-subtle: color-mix(in srgb, #b4a393 78%, transparent);
+  --pt-border: #46382d;
+  --pt-border-strong: color-mix(in srgb, #46382d 76%, #eadfd3);
+  --pt-primary: #e48d64;
+  --pt-primary-rgb: 228,141,100;
+  --pt-primary-strong: #ffd0b7;
+  --pt-primary-soft: #43261a;
+  --pt-focus: rgba(228,141,100, 0.28);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-mint-glass"]:not([data-bs-theme="dark"]) {
+  --pt-page: #f1fbf8;
+  --pt-page-rgb: 241,251,248;
+  --pt-surface: #fbfffd;
+  --pt-surface-rgb: 251,255,253;
+  --pt-surface-soft: #def4ed;
+  --pt-surface-soft-rgb: 222, 244, 237;
+  --pt-surface-raised: #fbfffd;
+  --pt-text: #13312a;
+  --pt-text-muted: #58766e;
+  --pt-text-subtle: color-mix(in srgb, #58766e 78%, transparent);
+  --pt-border: #bfe2d8;
+  --pt-border-strong: color-mix(in srgb, #bfe2d8 76%, #13312a);
+  --pt-primary: #0f9f82;
+  --pt-primary-rgb: 15,159,130;
+  --pt-primary-strong: #086b59;
+  --pt-primary-soft: #d3f3e9;
+  --pt-focus: rgba(15,159,130, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-mint-glass"][data-bs-theme="dark"] {
+  --pt-page: #061310;
+  --pt-page-rgb: 6,19,16;
+  --pt-surface: #0d201b;
+  --pt-surface-rgb: 13,32,27;
+  --pt-surface-soft: #132c25;
+  --pt-surface-soft-rgb: 19, 44, 37;
+  --pt-surface-raised: #0d201b;
+  --pt-text: #d8f0ea;
+  --pt-text-muted: #91b8ad;
+  --pt-text-subtle: color-mix(in srgb, #91b8ad 78%, transparent);
+  --pt-border: #254b42;
+  --pt-border-strong: color-mix(in srgb, #254b42 76%, #d8f0ea);
+  --pt-primary: #3dd6b7;
+  --pt-primary-rgb: 61,214,183;
+  --pt-primary-strong: #b3f7e9;
+  --pt-primary-soft: #0e3a31;
+  --pt-focus: rgba(61,214,183, 0.28);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-heritage"]:not([data-bs-theme="dark"]) {
+  --pt-page: #f3f3f3;
+  --pt-page-rgb: 243,243,243;
+  --pt-surface: #fff;
+  --pt-surface-rgb: 255,255,255;
+  --pt-surface-soft: #f5f5f5;
+  --pt-surface-soft-rgb: 245, 245, 245;
+  --pt-surface-raised: #fff;
+  --pt-text: #333;
+  --pt-text-muted: #666;
+  --pt-text-subtle: color-mix(in srgb, #666 78%, transparent);
+  --pt-border: #ccc;
+  --pt-border-strong: color-mix(in srgb, #ccc 76%, #333);
+  --pt-primary: #337ab7;
+  --pt-primary-rgb: 51,122,183;
+  --pt-primary-strong: #24557d;
+  --pt-primary-soft: #e8f2fb;
+  --pt-focus: rgba(51,122,183, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-heritage"][data-bs-theme="dark"] {
+  --pt-page: #1d2227;
+  --pt-page-rgb: 29,34,39;
+  --pt-surface: #2a3036;
+  --pt-surface-rgb: 42,48,54;
+  --pt-surface-soft: #23292f;
+  --pt-surface-soft-rgb: 35, 41, 47;
+  --pt-surface-raised: #2a3036;
+  --pt-text: #e8e8e8;
+  --pt-text-muted: #b8c0c8;
+  --pt-text-subtle: color-mix(in srgb, #b8c0c8 78%, transparent);
+  --pt-border: #48515a;
+  --pt-border-strong: color-mix(in srgb, #48515a 76%, #e8e8e8);
+  --pt-primary: #5aa2d8;
+  --pt-primary-rgb: 90,162,216;
+  --pt-primary-strong: #a7d5f5;
+  --pt-primary-soft: #243d50;
+  --pt-focus: rgba(90,162,216, 0.28);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-slate-classic"]:not([data-bs-theme="dark"]) {
+  --pt-page: #eceff1;
+  --pt-page-rgb: 236,239,241;
+  --pt-surface: #fafafa;
+  --pt-surface-rgb: 250,250,250;
+  --pt-surface-soft: #e3e7ea;
+  --pt-surface-soft-rgb: 227, 231, 234;
+  --pt-surface-raised: #fafafa;
+  --pt-text: #2f353a;
+  --pt-text-muted: #68737d;
+  --pt-text-subtle: color-mix(in srgb, #68737d 78%, transparent);
+  --pt-border: #b9c0c6;
+  --pt-border-strong: color-mix(in srgb, #b9c0c6 76%, #2f353a);
+  --pt-primary: #4f6f8f;
+  --pt-primary-rgb: 79,111,143;
+  --pt-primary-strong: #39536c;
+  --pt-primary-soft: #e3ebf2;
+  --pt-focus: rgba(79,111,143, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-slate-classic"][data-bs-theme="dark"] {
+  --pt-page: #20262b;
+  --pt-page-rgb: 32,38,43;
+  --pt-surface: #2d343a;
+  --pt-surface-rgb: 45,52,58;
+  --pt-surface-soft: #262d32;
+  --pt-surface-soft-rgb: 38, 45, 50;
+  --pt-surface-raised: #2d343a;
+  --pt-text: #e0e5e8;
+  --pt-text-muted: #aeb8bf;
+  --pt-text-subtle: color-mix(in srgb, #aeb8bf 78%, transparent);
+  --pt-border: #4c565f;
+  --pt-border-strong: color-mix(in srgb, #4c565f 76%, #e0e5e8);
+  --pt-primary: #7fa8cd;
+  --pt-primary-rgb: 127,168,205;
+  --pt-primary-strong: #c1dcf3;
+  --pt-primary-soft: #2d455a;
+  --pt-focus: rgba(127,168,205, 0.28);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-paper"]:not([data-bs-theme="dark"]) {
+  --pt-page: #f3efe7;
+  --pt-page-rgb: 243,239,231;
+  --pt-surface: #fffdf8;
+  --pt-surface-rgb: 255,253,248;
+  --pt-surface-soft: #ece6dc;
+  --pt-surface-soft-rgb: 236, 230, 220;
+  --pt-surface-raised: #fffdf8;
+  --pt-text: #2d2b28;
+  --pt-text-muted: #756e65;
+  --pt-text-subtle: color-mix(in srgb, #756e65 78%, transparent);
+  --pt-border: #d6cec1;
+  --pt-border-strong: color-mix(in srgb, #d6cec1 76%, #2d2b28);
+  --pt-primary: #315c8c;
+  --pt-primary-rgb: 49,92,140;
+  --pt-primary-strong: #27496e;
+  --pt-primary-soft: #e7edf4;
+  --pt-focus: rgba(49,92,140, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-paper"][data-bs-theme="dark"] {
+  --pt-page: #1c1b19;
+  --pt-page-rgb: 28,27,25;
+  --pt-surface: #292724;
+  --pt-surface-rgb: 41,39,36;
+  --pt-surface-soft: #23211f;
+  --pt-surface-soft-rgb: 35, 33, 31;
+  --pt-surface-raised: #292724;
+  --pt-text: #ece8df;
+  --pt-text-muted: #b9b0a4;
+  --pt-text-subtle: color-mix(in srgb, #b9b0a4 78%, transparent);
+  --pt-border: #49443e;
+  --pt-border-strong: color-mix(in srgb, #49443e 76%, #ece8df);
+  --pt-primary: #8fb7e3;
+  --pt-primary-rgb: 143,183,227;
+  --pt-primary-strong: #c8def5;
+  --pt-primary-soft: #27384b;
+  --pt-focus: rgba(143,183,227, 0.28);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-violet"]:not([data-bs-theme="dark"]) {
+  --pt-page: #f7f6fb;
+  --pt-page-rgb: 247,246,251;
+  --pt-surface: #fff;
+  --pt-surface-rgb: 255,255,255;
+  --pt-surface-soft: #efedf6;
+  --pt-surface-soft-rgb: 239, 237, 246;
+  --pt-surface-raised: #fff;
+  --pt-text: #282532;
+  --pt-text-muted: #736d80;
+  --pt-text-subtle: color-mix(in srgb, #736d80 78%, transparent);
+  --pt-border: #ddd8ea;
+  --pt-border-strong: color-mix(in srgb, #ddd8ea 76%, #282532);
+  --pt-primary: #7654d8;
+  --pt-primary-rgb: 118,84,216;
+  --pt-primary-strong: #5437ad;
+  --pt-primary-soft: #eee9ff;
+  --pt-focus: rgba(118,84,216, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-violet"][data-bs-theme="dark"] {
+  --pt-page: #111016;
+  --pt-page-rgb: 17,16,22;
+  --pt-surface: #1c1a24;
+  --pt-surface-rgb: 28,26,36;
+  --pt-surface-soft: #25222f;
+  --pt-surface-soft-rgb: 37, 34, 47;
+  --pt-surface-raised: #1c1a24;
+  --pt-text: #e8e5ef;
+  --pt-text-muted: #aaa4b7;
+  --pt-text-subtle: color-mix(in srgb, #aaa4b7 78%, transparent);
+  --pt-border: #3d384a;
+  --pt-border-strong: color-mix(in srgb, #3d384a 76%, #e8e5ef);
+  --pt-primary: #a68cf0;
+  --pt-primary-rgb: 166,140,240;
+  --pt-primary-strong: #d6caff;
+  --pt-primary-soft: #30264d;
+  --pt-focus: rgba(166,140,240, 0.28);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-ember"]:not([data-bs-theme="dark"]) {
+  --pt-page: #faf6f1;
+  --pt-page-rgb: 250,246,241;
+  --pt-surface: #fff;
+  --pt-surface-rgb: 255,255,255;
+  --pt-surface-soft: #f2e9df;
+  --pt-surface-soft-rgb: 242, 233, 223;
+  --pt-surface-raised: #fff;
+  --pt-text: #332a24;
+  --pt-text-muted: #78695d;
+  --pt-text-subtle: color-mix(in srgb, #78695d 78%, transparent);
+  --pt-border: #e0d2c5;
+  --pt-border-strong: color-mix(in srgb, #e0d2c5 76%, #332a24);
+  --pt-primary: #b75b2a;
+  --pt-primary-rgb: 183,91,42;
+  --pt-primary-strong: #873f1d;
+  --pt-primary-soft: #fae9dd;
+  --pt-focus: rgba(183,91,42, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-ember"][data-bs-theme="dark"] {
+  --pt-page: #171210;
+  --pt-page-rgb: 23,18,16;
+  --pt-surface: #241d1a;
+  --pt-surface-rgb: 36,29,26;
+  --pt-surface-soft: #2d2420;
+  --pt-surface-soft-rgb: 45, 36, 32;
+  --pt-surface-raised: #241d1a;
+  --pt-text: #eee4de;
+  --pt-text-muted: #b9aaa2;
+  --pt-text-subtle: color-mix(in srgb, #b9aaa2 78%, transparent);
+  --pt-border: #4c3b34;
+  --pt-border-strong: color-mix(in srgb, #4c3b34 76%, #eee4de);
+  --pt-primary: #df8654;
+  --pt-primary-rgb: 223,134,84;
+  --pt-primary-strong: #f4b28d;
+  --pt-primary-soft: #47291d;
+  --pt-focus: rgba(223,134,84, 0.28);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-harbor"]:not([data-bs-theme="dark"]) {
+  --pt-page: #f2f7f7;
+  --pt-page-rgb: 242,247,247;
+  --pt-surface: #fff;
+  --pt-surface-rgb: 255,255,255;
+  --pt-surface-soft: #e5efef;
+  --pt-surface-soft-rgb: 229, 239, 239;
+  --pt-surface-raised: #fff;
+  --pt-text: #243334;
+  --pt-text-muted: #637879;
+  --pt-text-subtle: color-mix(in srgb, #637879 78%, transparent);
+  --pt-border: #cbdcdb;
+  --pt-border-strong: color-mix(in srgb, #cbdcdb 76%, #243334);
+  --pt-primary: #167a78;
+  --pt-primary-rgb: 22,122,120;
+  --pt-primary-strong: #0f5c5a;
+  --pt-primary-soft: #daf0ef;
+  --pt-focus: rgba(22,122,120, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-harbor"][data-bs-theme="dark"] {
+  --pt-page: #0d1719;
+  --pt-page-rgb: 13,23,25;
+  --pt-surface: #162326;
+  --pt-surface-rgb: 22,35,38;
+  --pt-surface-soft: #1d2d30;
+  --pt-surface-soft-rgb: 29, 45, 48;
+  --pt-surface-raised: #162326;
+  --pt-text: #deebeb;
+  --pt-text-muted: #9bb0b2;
+  --pt-text-subtle: color-mix(in srgb, #9bb0b2 78%, transparent);
+  --pt-border: #30484c;
+  --pt-border-strong: color-mix(in srgb, #30484c 76%, #deebeb);
+  --pt-primary: #4eb8b2;
+  --pt-primary-rgb: 78,184,178;
+  --pt-primary-strong: #a5e1dd;
+  --pt-primary-soft: #173d3c;
+  --pt-focus: rgba(78,184,178, 0.28);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-bootstrap22"]:not([data-bs-theme="dark"]) {
+  --pt-page: #f5f5f5;
+  --pt-page-rgb: 245, 245, 245;
+  --pt-surface: #eeeeee;
+  --pt-surface-rgb: 238, 238, 238;
+  --pt-surface-soft: #ffffff;
+  --pt-surface-soft-rgb: 255, 255, 255;
+  --pt-surface-raised: #eeeeee;
+  --pt-text: #333333;
+  --pt-text-muted: #555555;
+  --pt-text-subtle: color-mix(in srgb, #555555 78%, transparent);
+  --pt-border: #c8c8c8;
+  --pt-border-strong: color-mix(in srgb, #c8c8c8 76%, #333333);
+  --pt-primary: #006dcc;
+  --pt-primary-rgb: 0, 109, 204;
+  --pt-primary-strong: color-mix(in srgb, #006dcc 76%, #0f172a);
+  --pt-primary-soft: color-mix(in srgb, #006dcc 14%, #eeeeee);
+  --pt-focus: rgba(0, 109, 204, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-bootstrap22"][data-bs-theme="dark"] {
+  --pt-page: #1f252b;
+  --pt-page-rgb: 31, 37, 43;
+  --pt-surface: #2f363d;
+  --pt-surface-rgb: 47, 54, 61;
+  --pt-surface-soft: #252b31;
+  --pt-surface-soft-rgb: 37, 43, 49;
+  --pt-surface-raised: #2f363d;
+  --pt-text: #e6e6e6;
+  --pt-text-muted: #c7d0d8;
+  --pt-text-subtle: color-mix(in srgb, #c7d0d8 78%, transparent);
+  --pt-border: #4a535c;
+  --pt-border-strong: color-mix(in srgb, #4a535c 76%, #e6e6e6);
+  --pt-primary: #4aa3df;
+  --pt-primary-rgb: 74, 163, 223;
+  --pt-primary-strong: color-mix(in srgb, #4aa3df 72%, #ffffff);
+  --pt-primary-soft: color-mix(in srgb, #4aa3df 14%, #2f363d);
+  --pt-focus: rgba(74, 163, 223, 0.28);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-bootstrap22-inverse"]:not([data-bs-theme="dark"]) {
+  --pt-page: #eceff1;
+  --pt-page-rgb: 236, 239, 241;
+  --pt-surface: #d9dee2;
+  --pt-surface-rgb: 217, 222, 226;
+  --pt-surface-soft: #ffffff;
+  --pt-surface-soft-rgb: 255, 255, 255;
+  --pt-surface-raised: #d9dee2;
+  --pt-text: #2f2f2f;
+  --pt-text-muted: #4d5963;
+  --pt-text-subtle: color-mix(in srgb, #4d5963 78%, transparent);
+  --pt-border: #b8c0c7;
+  --pt-border-strong: color-mix(in srgb, #b8c0c7 76%, #2f2f2f);
+  --pt-primary: #2f96b4;
+  --pt-primary-rgb: 47, 150, 180;
+  --pt-primary-strong: color-mix(in srgb, #2f96b4 76%, #0f172a);
+  --pt-primary-soft: color-mix(in srgb, #2f96b4 14%, #d9dee2);
+  --pt-focus: rgba(47, 150, 180, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-bootstrap22-inverse"][data-bs-theme="dark"] {
+  --pt-page: #161a1d;
+  --pt-page-rgb: 22, 26, 29;
+  --pt-surface: #252b30;
+  --pt-surface-rgb: 37, 43, 48;
+  --pt-surface-soft: #20262a;
+  --pt-surface-soft-rgb: 32, 38, 42;
+  --pt-surface-raised: #252b30;
+  --pt-text: #e7ecef;
+  --pt-text-muted: #c9d3da;
+  --pt-text-subtle: color-mix(in srgb, #c9d3da 78%, transparent);
+  --pt-border: #48535c;
+  --pt-border-strong: color-mix(in srgb, #48535c 76%, #e7ecef);
+  --pt-primary: #49afcd;
+  --pt-primary-rgb: 73, 175, 205;
+  --pt-primary-strong: color-mix(in srgb, #49afcd 72%, #ffffff);
+  --pt-primary-soft: color-mix(in srgb, #49afcd 14%, #252b30);
+  --pt-focus: rgba(73, 175, 205, 0.28);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-bootstrap3"]:not([data-bs-theme="dark"]) {
+  --pt-page: #f8f8f8;
+  --pt-page-rgb: 248, 248, 248;
+  --pt-surface: #eeeeee;
+  --pt-surface-rgb: 238, 238, 238;
+  --pt-surface-soft: #ffffff;
+  --pt-surface-soft-rgb: 255, 255, 255;
+  --pt-surface-raised: #eeeeee;
+  --pt-text: #333333;
+  --pt-text-muted: #555555;
+  --pt-text-subtle: color-mix(in srgb, #555555 78%, transparent);
+  --pt-border: #dddddd;
+  --pt-border-strong: color-mix(in srgb, #dddddd 76%, #333333);
+  --pt-primary: #337ab7;
+  --pt-primary-rgb: 51, 122, 183;
+  --pt-primary-strong: color-mix(in srgb, #337ab7 76%, #0f172a);
+  --pt-primary-soft: color-mix(in srgb, #337ab7 14%, #eeeeee);
+  --pt-focus: rgba(51, 122, 183, 0.22);
+  --pt-success: #5cb85c;
+  --pt-success-rgb: 92, 184, 92;
+  --pt-warning: #f0ad4e;
+  --pt-warning-rgb: 240, 173, 78;
+  --pt-danger: #d9534f;
+  --pt-danger-rgb: 217, 83, 79;
+  --pt-info: #5bc0de;
+  --pt-info-rgb: 91, 192, 222;
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-bootstrap3"][data-bs-theme="dark"] {
+  --pt-page: #1f252b;
+  --pt-page-rgb: 31, 37, 43;
+  --pt-surface: #2b333b;
+  --pt-surface-rgb: 43, 51, 59;
+  --pt-surface-soft: #252c33;
+  --pt-surface-soft-rgb: 37, 44, 51;
+  --pt-surface-raised: #2b333b;
+  --pt-text: #e7edf2;
+  --pt-text-muted: #bac4cd;
+  --pt-text-subtle: color-mix(in srgb, #bac4cd 78%, transparent);
+  --pt-border: #46515b;
+  --pt-border-strong: color-mix(in srgb, #46515b 76%, #e7edf2);
+  --pt-primary: #5dade2;
+  --pt-primary-rgb: 93, 173, 226;
+  --pt-primary-strong: color-mix(in srgb, #5dade2 72%, #ffffff);
+  --pt-primary-soft: color-mix(in srgb, #5dade2 14%, #2b333b);
+  --pt-focus: rgba(93, 173, 226, 0.28);
+  --pt-success: #70c770;
+  --pt-success-rgb: 112, 199, 112;
+  --pt-warning: #f4bd65;
+  --pt-warning-rgb: 244, 189, 101;
+  --pt-danger: #e26b67;
+  --pt-danger-rgb: 226, 107, 103;
+  --pt-info: #73cde6;
+  --pt-info-rgb: 115, 205, 230;
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-bootstrap3-inverse"]:not([data-bs-theme="dark"]) {
+  --pt-page: #eceff2;
+  --pt-page-rgb: 236, 239, 242;
+  --pt-surface: #dfe4e8;
+  --pt-surface-rgb: 223, 228, 232;
+  --pt-surface-soft: #ffffff;
+  --pt-surface-soft-rgb: 255, 255, 255;
+  --pt-surface-raised: #dfe4e8;
+  --pt-text: #2d3338;
+  --pt-text-muted: #4c5963;
+  --pt-text-subtle: color-mix(in srgb, #4c5963 78%, transparent);
+  --pt-border: #c5cdd4;
+  --pt-border-strong: color-mix(in srgb, #c5cdd4 76%, #2d3338);
+  --pt-primary: #428bca;
+  --pt-primary-rgb: 66, 139, 202;
+  --pt-primary-strong: color-mix(in srgb, #428bca 76%, #0f172a);
+  --pt-primary-soft: color-mix(in srgb, #428bca 14%, #dfe4e8);
+  --pt-focus: rgba(66, 139, 202, 0.22);
+  --pt-success: #5cb85c;
+  --pt-success-rgb: 92, 184, 92;
+  --pt-warning: #f0ad4e;
+  --pt-warning-rgb: 240, 173, 78;
+  --pt-danger: #d9534f;
+  --pt-danger-rgb: 217, 83, 79;
+  --pt-info: #5bc0de;
+  --pt-info-rgb: 91, 192, 222;
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="pytorrent-bootstrap3-inverse"][data-bs-theme="dark"] {
+  --pt-page: #151a1f;
+  --pt-page-rgb: 21, 26, 31;
+  --pt-surface: #232b33;
+  --pt-surface-rgb: 35, 43, 51;
+  --pt-surface-soft: #1d242b;
+  --pt-surface-soft-rgb: 29, 36, 43;
+  --pt-surface-raised: #232b33;
+  --pt-text: #edf2f6;
+  --pt-text-muted: #c3ccd4;
+  --pt-text-subtle: color-mix(in srgb, #c3ccd4 78%, transparent);
+  --pt-border: #3f4b56;
+  --pt-border-strong: color-mix(in srgb, #3f4b56 76%, #edf2f6);
+  --pt-primary: #6fb4eb;
+  --pt-primary-rgb: 111, 180, 235;
+  --pt-primary-strong: color-mix(in srgb, #6fb4eb 72%, #ffffff);
+  --pt-primary-soft: color-mix(in srgb, #6fb4eb 14%, #232b33);
+  --pt-focus: rgba(111, 180, 235, 0.28);
+  --pt-success: #7dd37d;
+  --pt-success-rgb: 125, 211, 125;
+  --pt-warning: #f6c572;
+  --pt-warning-rgb: 246, 197, 114;
+  --pt-danger: #ec7773;
+  --pt-danger-rgb: 236, 119, 115;
+  --pt-info: #83d8ee;
+  --pt-info-rgb: 131, 216, 238;
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="flatly"] {
+  --pt-page: color-mix(in srgb, #2c3e50 3%, #f3f5f8);
+  --pt-page-rgb: 243, 245, 248;
+  --pt-surface: #ffffff;
+  --pt-surface-rgb: 255, 255, 255;
+  --pt-surface-soft: color-mix(in srgb, #2c3e50 5%, #f7f8fa);
+  --pt-surface-soft-rgb: 247, 248, 250;
+  --pt-surface-raised: #ffffff;
+  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
+  --pt-border: color-mix(in srgb, #2c3e50 12%, #dfe4ea);
+  --pt-primary: #2c3e50;
+  --pt-primary-strong: color-mix(in srgb, #2c3e50 78%, #111827);
+  --pt-primary-rgb: 44, 62, 80;
+  --pt-primary-soft: color-mix(in srgb, #2c3e50 12%, var(--pt-surface));
+  --pt-focus: rgba(44, 62, 80, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="flatly"][data-bs-theme="dark"] {
+  --pt-page: color-mix(in srgb, var(--pt-primary) 4%, #0b0e13);
+  --pt-page-rgb: 11, 14, 19;
+  --pt-surface: color-mix(in srgb, var(--pt-primary) 5%, #11161d);
+  --pt-surface-rgb: 17, 22, 29;
+  --pt-surface-soft: color-mix(in srgb, var(--pt-primary) 6%, #161c24);
+  --pt-surface-soft-rgb: 22, 28, 36;
+  --pt-surface-raised: color-mix(in srgb, var(--pt-primary) 7%, #19212b);
+  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
+  --pt-border: color-mix(in srgb, var(--pt-primary) 12%, #27313d);
+  --pt-primary: color-mix(in srgb, #2c3e50 72%, #ffffff);
+  --pt-primary-strong: color-mix(in srgb, var(--pt-primary) 78%, #ffffff);
+  --pt-primary-rgb: 44, 62, 80;
+  --pt-primary-soft: color-mix(in srgb, #2c3e50 18%, var(--pt-surface));
+  --pt-focus: rgba(44, 62, 80, 0.28);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="litera"] {
+  --pt-page: color-mix(in srgb, #4582ec 3%, #f3f5f8);
+  --pt-page-rgb: 243, 245, 248;
+  --pt-surface: #ffffff;
+  --pt-surface-rgb: 255, 255, 255;
+  --pt-surface-soft: color-mix(in srgb, #4582ec 5%, #f7f8fa);
+  --pt-surface-soft-rgb: 247, 248, 250;
+  --pt-surface-raised: #ffffff;
+  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
+  --pt-border: color-mix(in srgb, #4582ec 12%, #dfe4ea);
+  --pt-primary: #4582ec;
+  --pt-primary-strong: color-mix(in srgb, #4582ec 78%, #111827);
+  --pt-primary-rgb: 69, 130, 236;
+  --pt-primary-soft: color-mix(in srgb, #4582ec 12%, var(--pt-surface));
+  --pt-focus: rgba(69, 130, 236, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="litera"][data-bs-theme="dark"] {
+  --pt-page: color-mix(in srgb, var(--pt-primary) 4%, #0b0e13);
+  --pt-page-rgb: 11, 14, 19;
+  --pt-surface: color-mix(in srgb, var(--pt-primary) 5%, #11161d);
+  --pt-surface-rgb: 17, 22, 29;
+  --pt-surface-soft: color-mix(in srgb, var(--pt-primary) 6%, #161c24);
+  --pt-surface-soft-rgb: 22, 28, 36;
+  --pt-surface-raised: color-mix(in srgb, var(--pt-primary) 7%, #19212b);
+  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
+  --pt-border: color-mix(in srgb, var(--pt-primary) 12%, #27313d);
+  --pt-primary: color-mix(in srgb, #4582ec 72%, #ffffff);
+  --pt-primary-strong: color-mix(in srgb, var(--pt-primary) 78%, #ffffff);
+  --pt-primary-rgb: 69, 130, 236;
+  --pt-primary-soft: color-mix(in srgb, #4582ec 18%, var(--pt-surface));
+  --pt-focus: rgba(69, 130, 236, 0.28);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="lumen"] {
+  --pt-page: color-mix(in srgb, #158cba 3%, #f3f5f8);
+  --pt-page-rgb: 243, 245, 248;
+  --pt-surface: #ffffff;
+  --pt-surface-rgb: 255, 255, 255;
+  --pt-surface-soft: color-mix(in srgb, #158cba 5%, #f7f8fa);
+  --pt-surface-soft-rgb: 247, 248, 250;
+  --pt-surface-raised: #ffffff;
+  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
+  --pt-border: color-mix(in srgb, #158cba 12%, #dfe4ea);
+  --pt-primary: #158cba;
+  --pt-primary-strong: color-mix(in srgb, #158cba 78%, #111827);
+  --pt-primary-rgb: 21, 140, 186;
+  --pt-primary-soft: color-mix(in srgb, #158cba 12%, var(--pt-surface));
+  --pt-focus: rgba(21, 140, 186, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="lumen"][data-bs-theme="dark"] {
+  --pt-page: color-mix(in srgb, var(--pt-primary) 4%, #0b0e13);
+  --pt-page-rgb: 11, 14, 19;
+  --pt-surface: color-mix(in srgb, var(--pt-primary) 5%, #11161d);
+  --pt-surface-rgb: 17, 22, 29;
+  --pt-surface-soft: color-mix(in srgb, var(--pt-primary) 6%, #161c24);
+  --pt-surface-soft-rgb: 22, 28, 36;
+  --pt-surface-raised: color-mix(in srgb, var(--pt-primary) 7%, #19212b);
+  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
+  --pt-border: color-mix(in srgb, var(--pt-primary) 12%, #27313d);
+  --pt-primary: color-mix(in srgb, #158cba 72%, #ffffff);
+  --pt-primary-strong: color-mix(in srgb, var(--pt-primary) 78%, #ffffff);
+  --pt-primary-rgb: 21, 140, 186;
+  --pt-primary-soft: color-mix(in srgb, #158cba 18%, var(--pt-surface));
+  --pt-focus: rgba(21, 140, 186, 0.28);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="minty"] {
+  --pt-page: color-mix(in srgb, #78c2ad 3%, #f3f5f8);
+  --pt-page-rgb: 243, 245, 248;
+  --pt-surface: #ffffff;
+  --pt-surface-rgb: 255, 255, 255;
+  --pt-surface-soft: color-mix(in srgb, #78c2ad 5%, #f7f8fa);
+  --pt-surface-soft-rgb: 247, 248, 250;
+  --pt-surface-raised: #ffffff;
+  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
+  --pt-border: color-mix(in srgb, #78c2ad 12%, #dfe4ea);
+  --pt-primary: #78c2ad;
+  --pt-primary-strong: color-mix(in srgb, #78c2ad 78%, #111827);
+  --pt-primary-rgb: 120, 194, 173;
+  --pt-primary-soft: color-mix(in srgb, #78c2ad 12%, var(--pt-surface));
+  --pt-focus: rgba(120, 194, 173, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="minty"][data-bs-theme="dark"] {
+  --pt-page: color-mix(in srgb, var(--pt-primary) 4%, #0b0e13);
+  --pt-page-rgb: 11, 14, 19;
+  --pt-surface: color-mix(in srgb, var(--pt-primary) 5%, #11161d);
+  --pt-surface-rgb: 17, 22, 29;
+  --pt-surface-soft: color-mix(in srgb, var(--pt-primary) 6%, #161c24);
+  --pt-surface-soft-rgb: 22, 28, 36;
+  --pt-surface-raised: color-mix(in srgb, var(--pt-primary) 7%, #19212b);
+  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
+  --pt-border: color-mix(in srgb, var(--pt-primary) 12%, #27313d);
+  --pt-primary: color-mix(in srgb, #78c2ad 72%, #ffffff);
+  --pt-primary-strong: color-mix(in srgb, var(--pt-primary) 78%, #ffffff);
+  --pt-primary-rgb: 120, 194, 173;
+  --pt-primary-soft: color-mix(in srgb, #78c2ad 18%, var(--pt-surface));
+  --pt-focus: rgba(120, 194, 173, 0.28);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="sketchy"] {
+  --pt-page: color-mix(in srgb, #333333 3%, #f3f5f8);
+  --pt-page-rgb: 243, 245, 248;
+  --pt-surface: #ffffff;
+  --pt-surface-rgb: 255, 255, 255;
+  --pt-surface-soft: color-mix(in srgb, #333333 5%, #f7f8fa);
+  --pt-surface-soft-rgb: 247, 248, 250;
+  --pt-surface-raised: #ffffff;
+  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
+  --pt-border: color-mix(in srgb, #333333 12%, #dfe4ea);
+  --pt-primary: #333333;
+  --pt-primary-strong: color-mix(in srgb, #333333 78%, #111827);
+  --pt-primary-rgb: 51, 51, 51;
+  --pt-primary-soft: color-mix(in srgb, #333333 12%, var(--pt-surface));
+  --pt-focus: rgba(51, 51, 51, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="sketchy"][data-bs-theme="dark"] {
+  --pt-page: color-mix(in srgb, var(--pt-primary) 4%, #0b0e13);
+  --pt-page-rgb: 11, 14, 19;
+  --pt-surface: color-mix(in srgb, var(--pt-primary) 5%, #11161d);
+  --pt-surface-rgb: 17, 22, 29;
+  --pt-surface-soft: color-mix(in srgb, var(--pt-primary) 6%, #161c24);
+  --pt-surface-soft-rgb: 22, 28, 36;
+  --pt-surface-raised: color-mix(in srgb, var(--pt-primary) 7%, #19212b);
+  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
+  --pt-border: color-mix(in srgb, var(--pt-primary) 12%, #27313d);
+  --pt-primary: color-mix(in srgb, #333333 72%, #ffffff);
+  --pt-primary-strong: color-mix(in srgb, var(--pt-primary) 78%, #ffffff);
+  --pt-primary-rgb: 51, 51, 51;
+  --pt-primary-soft: color-mix(in srgb, #333333 18%, var(--pt-surface));
+  --pt-focus: rgba(51, 51, 51, 0.28);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="spacelab"] {
+  --pt-page: color-mix(in srgb, #446e9b 3%, #f3f5f8);
+  --pt-page-rgb: 243, 245, 248;
+  --pt-surface: #ffffff;
+  --pt-surface-rgb: 255, 255, 255;
+  --pt-surface-soft: color-mix(in srgb, #446e9b 5%, #f7f8fa);
+  --pt-surface-soft-rgb: 247, 248, 250;
+  --pt-surface-raised: #ffffff;
+  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
+  --pt-border: color-mix(in srgb, #446e9b 12%, #dfe4ea);
+  --pt-primary: #446e9b;
+  --pt-primary-strong: color-mix(in srgb, #446e9b 78%, #111827);
+  --pt-primary-rgb: 68, 110, 155;
+  --pt-primary-soft: color-mix(in srgb, #446e9b 12%, var(--pt-surface));
+  --pt-focus: rgba(68, 110, 155, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="spacelab"][data-bs-theme="dark"] {
+  --pt-page: color-mix(in srgb, var(--pt-primary) 4%, #0b0e13);
+  --pt-page-rgb: 11, 14, 19;
+  --pt-surface: color-mix(in srgb, var(--pt-primary) 5%, #11161d);
+  --pt-surface-rgb: 17, 22, 29;
+  --pt-surface-soft: color-mix(in srgb, var(--pt-primary) 6%, #161c24);
+  --pt-surface-soft-rgb: 22, 28, 36;
+  --pt-surface-raised: color-mix(in srgb, var(--pt-primary) 7%, #19212b);
+  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
+  --pt-border: color-mix(in srgb, var(--pt-primary) 12%, #27313d);
+  --pt-primary: color-mix(in srgb, #446e9b 72%, #ffffff);
+  --pt-primary-strong: color-mix(in srgb, var(--pt-primary) 78%, #ffffff);
+  --pt-primary-rgb: 68, 110, 155;
+  --pt-primary-soft: color-mix(in srgb, #446e9b 18%, var(--pt-surface));
+  --pt-focus: rgba(68, 110, 155, 0.28);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="united"] {
+  --pt-page: color-mix(in srgb, #e95420 3%, #f3f5f8);
+  --pt-page-rgb: 243, 245, 248;
+  --pt-surface: #ffffff;
+  --pt-surface-rgb: 255, 255, 255;
+  --pt-surface-soft: color-mix(in srgb, #e95420 5%, #f7f8fa);
+  --pt-surface-soft-rgb: 247, 248, 250;
+  --pt-surface-raised: #ffffff;
+  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
+  --pt-border: color-mix(in srgb, #e95420 12%, #dfe4ea);
+  --pt-primary: #e95420;
+  --pt-primary-strong: color-mix(in srgb, #e95420 78%, #111827);
+  --pt-primary-rgb: 233, 84, 32;
+  --pt-primary-soft: color-mix(in srgb, #e95420 12%, var(--pt-surface));
+  --pt-focus: rgba(233, 84, 32, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="united"][data-bs-theme="dark"] {
+  --pt-page: color-mix(in srgb, var(--pt-primary) 4%, #0b0e13);
+  --pt-page-rgb: 11, 14, 19;
+  --pt-surface: color-mix(in srgb, var(--pt-primary) 5%, #11161d);
+  --pt-surface-rgb: 17, 22, 29;
+  --pt-surface-soft: color-mix(in srgb, var(--pt-primary) 6%, #161c24);
+  --pt-surface-soft-rgb: 22, 28, 36;
+  --pt-surface-raised: color-mix(in srgb, var(--pt-primary) 7%, #19212b);
+  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
+  --pt-border: color-mix(in srgb, var(--pt-primary) 12%, #27313d);
+  --pt-primary: color-mix(in srgb, #e95420 72%, #ffffff);
+  --pt-primary-strong: color-mix(in srgb, var(--pt-primary) 78%, #ffffff);
+  --pt-primary-rgb: 233, 84, 32;
+  --pt-primary-soft: color-mix(in srgb, #e95420 18%, var(--pt-surface));
+  --pt-focus: rgba(233, 84, 32, 0.28);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="zephyr"] {
+  --pt-page: color-mix(in srgb, #3459e6 3%, #f3f5f8);
+  --pt-page-rgb: 243, 245, 248;
+  --pt-surface: #ffffff;
+  --pt-surface-rgb: 255, 255, 255;
+  --pt-surface-soft: color-mix(in srgb, #3459e6 5%, #f7f8fa);
+  --pt-surface-soft-rgb: 247, 248, 250;
+  --pt-surface-raised: #ffffff;
+  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
+  --pt-border: color-mix(in srgb, #3459e6 12%, #dfe4ea);
+  --pt-primary: #3459e6;
+  --pt-primary-strong: color-mix(in srgb, #3459e6 78%, #111827);
+  --pt-primary-rgb: 52, 89, 230;
+  --pt-primary-soft: color-mix(in srgb, #3459e6 12%, var(--pt-surface));
+  --pt-focus: rgba(52, 89, 230, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="zephyr"][data-bs-theme="dark"] {
+  --pt-page: color-mix(in srgb, var(--pt-primary) 4%, #0b0e13);
+  --pt-page-rgb: 11, 14, 19;
+  --pt-surface: color-mix(in srgb, var(--pt-primary) 5%, #11161d);
+  --pt-surface-rgb: 17, 22, 29;
+  --pt-surface-soft: color-mix(in srgb, var(--pt-primary) 6%, #161c24);
+  --pt-surface-soft-rgb: 22, 28, 36;
+  --pt-surface-raised: color-mix(in srgb, var(--pt-primary) 7%, #19212b);
+  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
+  --pt-border: color-mix(in srgb, var(--pt-primary) 12%, #27313d);
+  --pt-primary: color-mix(in srgb, #3459e6 72%, #ffffff);
+  --pt-primary-strong: color-mix(in srgb, var(--pt-primary) 78%, #ffffff);
+  --pt-primary-rgb: 52, 89, 230;
+  --pt-primary-soft: color-mix(in srgb, #3459e6 18%, var(--pt-surface));
+  --pt-focus: rgba(52, 89, 230, 0.28);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="dx-blazing-berry"] {
+  --pt-page: color-mix(in srgb, #c2185b 3%, #f3f5f8);
+  --pt-page-rgb: 243, 245, 248;
+  --pt-surface: #ffffff;
+  --pt-surface-rgb: 255, 255, 255;
+  --pt-surface-soft: color-mix(in srgb, #c2185b 5%, #f7f8fa);
+  --pt-surface-soft-rgb: 247, 248, 250;
+  --pt-surface-raised: #ffffff;
+  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
+  --pt-border: color-mix(in srgb, #c2185b 12%, #dfe4ea);
+  --pt-primary: #c2185b;
+  --pt-primary-strong: color-mix(in srgb, #c2185b 78%, #111827);
+  --pt-primary-rgb: 194, 24, 91;
+  --pt-primary-soft: color-mix(in srgb, #c2185b 12%, var(--pt-surface));
+  --pt-focus: rgba(194, 24, 91, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="dx-blazing-berry"][data-bs-theme="dark"] {
+  --pt-page: color-mix(in srgb, var(--pt-primary) 4%, #0b0e13);
+  --pt-page-rgb: 11, 14, 19;
+  --pt-surface: color-mix(in srgb, var(--pt-primary) 5%, #11161d);
+  --pt-surface-rgb: 17, 22, 29;
+  --pt-surface-soft: color-mix(in srgb, var(--pt-primary) 6%, #161c24);
+  --pt-surface-soft-rgb: 22, 28, 36;
+  --pt-surface-raised: color-mix(in srgb, var(--pt-primary) 7%, #19212b);
+  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
+  --pt-border: color-mix(in srgb, var(--pt-primary) 12%, #27313d);
+  --pt-primary: color-mix(in srgb, #c2185b 72%, #ffffff);
+  --pt-primary-strong: color-mix(in srgb, var(--pt-primary) 78%, #ffffff);
+  --pt-primary-rgb: 194, 24, 91;
+  --pt-primary-soft: color-mix(in srgb, #c2185b 18%, var(--pt-surface));
+  --pt-focus: rgba(194, 24, 91, 0.28);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="dx-office-white"] {
+  --pt-page: color-mix(in srgb, #337ab7 3%, #f3f5f8);
+  --pt-page-rgb: 243, 245, 248;
+  --pt-surface: #ffffff;
+  --pt-surface-rgb: 255, 255, 255;
+  --pt-surface-soft: color-mix(in srgb, #337ab7 5%, #f7f8fa);
+  --pt-surface-soft-rgb: 247, 248, 250;
+  --pt-surface-raised: #ffffff;
+  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
+  --pt-border: color-mix(in srgb, #337ab7 12%, #dfe4ea);
+  --pt-primary: #337ab7;
+  --pt-primary-strong: color-mix(in srgb, #337ab7 78%, #111827);
+  --pt-primary-rgb: 51, 122, 183;
+  --pt-primary-soft: color-mix(in srgb, #337ab7 12%, var(--pt-surface));
+  --pt-focus: rgba(51, 122, 183, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="dx-office-white"][data-bs-theme="dark"] {
+  --pt-page: color-mix(in srgb, var(--pt-primary) 4%, #0b0e13);
+  --pt-page-rgb: 11, 14, 19;
+  --pt-surface: color-mix(in srgb, var(--pt-primary) 5%, #11161d);
+  --pt-surface-rgb: 17, 22, 29;
+  --pt-surface-soft: color-mix(in srgb, var(--pt-primary) 6%, #161c24);
+  --pt-surface-soft-rgb: 22, 28, 36;
+  --pt-surface-raised: color-mix(in srgb, var(--pt-primary) 7%, #19212b);
+  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
+  --pt-border: color-mix(in srgb, var(--pt-primary) 12%, #27313d);
+  --pt-primary: color-mix(in srgb, #337ab7 72%, #ffffff);
+  --pt-primary-strong: color-mix(in srgb, var(--pt-primary) 78%, #ffffff);
+  --pt-primary-rgb: 51, 122, 183;
+  --pt-primary-soft: color-mix(in srgb, #337ab7 18%, var(--pt-surface));
+  --pt-focus: rgba(51, 122, 183, 0.28);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="dx-purple"] {
+  --pt-page: color-mix(in srgb, #6f42c1 3%, #f3f5f8);
+  --pt-page-rgb: 243, 245, 248;
+  --pt-surface: #ffffff;
+  --pt-surface-rgb: 255, 255, 255;
+  --pt-surface-soft: color-mix(in srgb, #6f42c1 5%, #f7f8fa);
+  --pt-surface-soft-rgb: 247, 248, 250;
+  --pt-surface-raised: #ffffff;
+  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
+  --pt-border: color-mix(in srgb, #6f42c1 12%, #dfe4ea);
+  --pt-primary: #6f42c1;
+  --pt-primary-strong: color-mix(in srgb, #6f42c1 78%, #111827);
+  --pt-primary-rgb: 111, 66, 193;
+  --pt-primary-soft: color-mix(in srgb, #6f42c1 12%, var(--pt-surface));
+  --pt-focus: rgba(111, 66, 193, 0.22);
+}
+
+html[data-ui-framework="pytorrent"][data-bootstrap-skin="dx-purple"][data-bs-theme="dark"] {
+  --pt-page: color-mix(in srgb, var(--pt-primary) 4%, #0b0e13);
+  --pt-page-rgb: 11, 14, 19;
+  --pt-surface: color-mix(in srgb, var(--pt-primary) 5%, #11161d);
+  --pt-surface-rgb: 17, 22, 29;
+  --pt-surface-soft: color-mix(in srgb, var(--pt-primary) 6%, #161c24);
+  --pt-surface-soft-rgb: 22, 28, 36;
+  --pt-surface-raised: color-mix(in srgb, var(--pt-primary) 7%, #19212b);
+  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
+  --pt-border: color-mix(in srgb, var(--pt-primary) 12%, #27313d);
+  --pt-primary: color-mix(in srgb, #6f42c1 72%, #ffffff);
+  --pt-primary-strong: color-mix(in srgb, var(--pt-primary) 78%, #ffffff);
+  --pt-primary-rgb: 111, 66, 193;
+  --pt-primary-soft: color-mix(in srgb, #6f42c1 18%, var(--pt-surface));
+  --pt-focus: rgba(111, 66, 193, 0.28);
+}
+
+html[data-ui-framework="pytorrent"],
+html[data-ui-framework="pytorrent"] *,
+html[data-ui-framework="pytorrent"] *::before,
+html[data-ui-framework="pytorrent"] *::after {
+  box-sizing: border-box;
+}
+
+html[data-ui-framework="pytorrent"] body {
+  margin: 0;
+  color: var(--bs-body-color);
+  background: var(--bs-body-bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+html[data-ui-framework="pytorrent"] button,
+html[data-ui-framework="pytorrent"] input,
+html[data-ui-framework="pytorrent"] select,
+html[data-ui-framework="pytorrent"] textarea {
+  font: inherit;
+}
+
+html[data-ui-framework="pytorrent"] a {
+  color: var(--bs-primary);
+  text-decoration: none;
+}
+
+html[data-ui-framework="pytorrent"] a:hover {
+  color: var(--bs-primary-text-emphasis);
+}
+
+html[data-ui-framework="pytorrent"] hr {
+  margin: 1rem 0;
+  color: inherit;
+  border: 0;
+  border-top: 1px solid var(--bs-border-color);
+  opacity: 1;
+}
+
+/* Buttons */
+html[data-ui-framework="pytorrent"] .btn {
+  --bs-btn-color: var(--pt-text);
+  --bs-btn-bg: transparent;
+  --bs-btn-border-color: var(--pt-border-strong);
+  --bs-btn-hover-color: var(--pt-text);
+  --bs-btn-hover-bg: var(--pt-surface-soft);
+  --bs-btn-hover-border-color: var(--pt-border-strong);
+  --bs-btn-active-color: var(--pt-text);
+  --bs-btn-active-bg: var(--pt-surface-soft);
+  --bs-btn-active-border-color: var(--pt-border-strong);
+  --bs-btn-disabled-color: var(--pt-text-subtle);
+  --bs-btn-disabled-bg: transparent;
+  --bs-btn-disabled-border-color: var(--pt-border);
+  --bs-btn-padding-y: 0.42rem;
+  --bs-btn-padding-x: 0.72rem;
+  --bs-btn-font-size: 0.875rem;
+  --bs-btn-border-radius: var(--pt-radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.36rem;
+  min-height: 2rem;
+  padding: var(--bs-btn-padding-y) var(--bs-btn-padding-x);
+  color: var(--bs-btn-color);
+  font-size: var(--bs-btn-font-size);
+  font-weight: 620;
+  line-height: 1.15;
+  text-align: center;
+  vertical-align: middle;
+  cursor: pointer;
+  user-select: none;
+  border: 1px solid var(--bs-btn-border-color);
+  border-radius: var(--bs-btn-border-radius);
+  background: var(--bs-btn-bg);
+  box-shadow: none;
+  transition: background-color var(--pt-motion-base) ease, border-color var(--pt-motion-base) ease, color var(--pt-motion-base) ease, box-shadow var(--pt-motion-base) ease, transform var(--pt-motion-fast) ease;
+}
+
+html[data-ui-framework="pytorrent"] .btn:hover:not(:disabled):not(.disabled) {
+  color: var(--bs-btn-hover-color);
+  background: var(--bs-btn-hover-bg);
+  border-color: var(--bs-btn-hover-border-color);
+}
+
+html[data-ui-framework="pytorrent"] .btn:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 0.18rem var(--pt-focus);
+}
+
+html[data-ui-framework="pytorrent"] .btn:active:not(:disabled):not(.disabled),
+html[data-ui-framework="pytorrent"] .btn.active {
+  color: var(--bs-btn-active-color);
+  background: var(--bs-btn-active-bg);
+  border-color: var(--bs-btn-active-border-color);
+  transform: translateY(1px);
+}
+
+html[data-ui-framework="pytorrent"] .btn:disabled,
+html[data-ui-framework="pytorrent"] .btn.disabled {
+  color: var(--bs-btn-disabled-color);
+  background: var(--bs-btn-disabled-bg);
+  border-color: var(--bs-btn-disabled-border-color);
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+html[data-ui-framework="pytorrent"] .btn-primary {
+  --bs-btn-color: #ffffff;
+  --bs-btn-bg: var(--pt-primary);
+  --bs-btn-border-color: var(--pt-primary);
+  --bs-btn-hover-color: #ffffff;
+  --bs-btn-hover-bg: var(--pt-primary-strong);
+  --bs-btn-hover-border-color: var(--pt-primary-strong);
+  --bs-btn-active-color: #ffffff;
+  --bs-btn-active-bg: var(--pt-primary-strong);
+  --bs-btn-active-border-color: var(--pt-primary-strong);
+}
+
+html[data-ui-framework="pytorrent"][data-bs-theme="dark"] .btn-primary {
+  --bs-btn-color: #0b1020;
+  --bs-btn-hover-color: #0b1020;
+  --bs-btn-active-color: #0b1020;
+}
+
+html[data-ui-framework="pytorrent"] .btn-danger {
+  --bs-btn-color: #ffffff;
+  --bs-btn-bg: var(--pt-danger);
+  --bs-btn-border-color: var(--pt-danger);
+  --bs-btn-hover-color: #ffffff;
+  --bs-btn-hover-bg: color-mix(in srgb, var(--pt-danger) 86%, black);
+  --bs-btn-hover-border-color: color-mix(in srgb, var(--pt-danger) 86%, black);
+  --bs-btn-active-color: #ffffff;
+  --bs-btn-active-bg: color-mix(in srgb, var(--pt-danger) 80%, black);
+  --bs-btn-active-border-color: color-mix(in srgb, var(--pt-danger) 80%, black);
+}
+
+html[data-ui-framework="pytorrent"] .btn-outline-primary,
+html[data-ui-framework="pytorrent"] .btn-outline-secondary,
+html[data-ui-framework="pytorrent"] .btn-outline-success,
+html[data-ui-framework="pytorrent"] .btn-outline-warning,
+html[data-ui-framework="pytorrent"] .btn-outline-danger,
+html[data-ui-framework="pytorrent"] .btn-outline-info {
+  --bs-btn-bg: transparent;
+  --bs-btn-active-bg: transparent;
+}
+
+html[data-ui-framework="pytorrent"] .btn-outline-primary {
+  --bs-btn-color: var(--bs-primary);
+  --bs-btn-border-color: rgba(var(--bs-primary-rgb), 0.42);
+  --bs-btn-hover-color: var(--bs-primary-text-emphasis);
+  --bs-btn-hover-bg: rgba(var(--bs-primary-rgb), 0.1);
+  --bs-btn-hover-border-color: rgba(var(--bs-primary-rgb), 0.62);
+  --bs-btn-active-color: var(--bs-primary-text-emphasis);
+  --bs-btn-active-border-color: rgba(var(--bs-primary-rgb), 0.72);
+}
+
+html[data-ui-framework="pytorrent"] .btn-outline-secondary {
+  --bs-btn-color: var(--pt-text-muted);
+  --bs-btn-border-color: var(--pt-border-strong);
+  --bs-btn-hover-color: var(--pt-text);
+  --bs-btn-hover-bg: var(--pt-surface-soft);
+  --bs-btn-hover-border-color: var(--pt-border-strong);
+  --bs-btn-active-color: var(--pt-text);
+  --bs-btn-active-border-color: var(--pt-border-strong);
+}
+
+html[data-ui-framework="pytorrent"] .btn-outline-success {
+  --bs-btn-color: var(--bs-success);
+  --bs-btn-border-color: rgba(var(--bs-success-rgb), 0.42);
+  --bs-btn-hover-color: var(--bs-success-text-emphasis);
+  --bs-btn-hover-bg: rgba(var(--bs-success-rgb), 0.1);
+  --bs-btn-hover-border-color: rgba(var(--bs-success-rgb), 0.62);
+  --bs-btn-active-color: var(--bs-success-text-emphasis);
+  --bs-btn-active-border-color: rgba(var(--bs-success-rgb), 0.72);
+}
+
+html[data-ui-framework="pytorrent"] .btn-outline-warning {
+  --bs-btn-color: var(--bs-warning-text-emphasis);
+  --bs-btn-border-color: rgba(var(--bs-warning-rgb), 0.42);
+  --bs-btn-hover-color: var(--bs-warning-text-emphasis);
+  --bs-btn-hover-bg: rgba(var(--bs-warning-rgb), 0.1);
+  --bs-btn-hover-border-color: rgba(var(--bs-warning-rgb), 0.62);
+  --bs-btn-active-color: var(--bs-warning-text-emphasis);
+  --bs-btn-active-border-color: rgba(var(--bs-warning-rgb), 0.72);
+}
+
+html[data-ui-framework="pytorrent"] .btn-outline-danger {
+  --bs-btn-color: var(--bs-danger-text-emphasis);
+  --bs-btn-border-color: rgba(var(--bs-danger-rgb), 0.38);
+  --bs-btn-hover-color: var(--bs-danger-text-emphasis);
+  --bs-btn-hover-bg: rgba(var(--bs-danger-rgb), 0.09);
+  --bs-btn-hover-border-color: rgba(var(--bs-danger-rgb), 0.6);
+  --bs-btn-active-color: var(--bs-danger-text-emphasis);
+  --bs-btn-active-border-color: rgba(var(--bs-danger-rgb), 0.72);
+}
+
+html[data-ui-framework="pytorrent"] .btn-outline-info {
+  --bs-btn-color: var(--bs-info);
+  --bs-btn-border-color: rgba(var(--bs-info-rgb), 0.42);
+  --bs-btn-hover-color: var(--bs-info);
+  --bs-btn-hover-bg: rgba(var(--bs-info-rgb), 0.1);
+  --bs-btn-hover-border-color: rgba(var(--bs-info-rgb), 0.62);
+  --bs-btn-active-color: var(--bs-info);
+  --bs-btn-active-border-color: rgba(var(--bs-info-rgb), 0.72);
+}
+
+html[data-ui-framework="pytorrent"] .btn-link {
+  --bs-btn-color: var(--bs-primary);
+  --bs-btn-bg: transparent;
+  --bs-btn-border-color: transparent;
+  --bs-btn-hover-color: var(--bs-primary-text-emphasis);
+  --bs-btn-hover-bg: rgba(var(--bs-primary-rgb), 0.08);
+  --bs-btn-hover-border-color: transparent;
+  --bs-btn-active-color: var(--bs-primary-text-emphasis);
+  --bs-btn-active-bg: rgba(var(--bs-primary-rgb), 0.12);
+  --bs-btn-active-border-color: transparent;
+}
+
+html[data-ui-framework="pytorrent"] .btn-sm,
+html[data-ui-framework="pytorrent"] .btn-group-sm > .btn {
+  --bs-btn-padding-y: 0.3rem;
+  --bs-btn-padding-x: 0.58rem;
+  --bs-btn-font-size: 0.82rem;
+  --bs-btn-border-radius: 0.38rem;
+  min-height: 1.82rem;
+}
+
+html[data-ui-framework="pytorrent"] .btn-group {
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+html[data-ui-framework="pytorrent"] .btn-group > .btn:not(:first-child) {
+  margin-left: -1px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+html[data-ui-framework="pytorrent"] .btn-group > .btn:not(:last-child) {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+html[data-ui-framework="pytorrent"] .btn-close {
+  position: relative;
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0.46rem;
+  background: transparent;
+  color: var(--pt-text-muted);
+  cursor: pointer;
+}
+
+html[data-ui-framework="pytorrent"] .btn-close::before,
+html[data-ui-framework="pytorrent"] .btn-close::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0.85rem;
+  height: 1.5px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+html[data-ui-framework="pytorrent"] .btn-close::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+html[data-ui-framework="pytorrent"] .btn-close::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+html[data-ui-framework="pytorrent"] .btn-close:hover {
+  color: var(--pt-text);
+  background: var(--pt-surface-soft);
+}
+
+/* Forms */
+html[data-ui-framework="pytorrent"] .form-label {
+  display: inline-block;
+  margin-bottom: 0.38rem;
+  color: var(--pt-text-muted);
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+
+html[data-ui-framework="pytorrent"] .form-control,
+html[data-ui-framework="pytorrent"] .form-select {
+  display: block;
+  width: 100%;
+  min-height: var(--pt-control-height);
+  padding: 0.44rem 0.62rem;
+  color: var(--pt-text);
+  font-size: 0.875rem;
+  font-weight: 450;
+  line-height: 1.35;
+  background-color: var(--pt-surface);
+  background-clip: padding-box;
+  border: 1px solid var(--pt-border-strong);
+  border-radius: var(--pt-radius-sm);
+  outline: 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+  transition: border-color var(--pt-motion-base) ease, box-shadow var(--pt-motion-base) ease, background-color var(--pt-motion-base) ease;
+}
+
+html[data-ui-framework="pytorrent"] .form-control:hover:not(:disabled),
+html[data-ui-framework="pytorrent"] .form-select:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--pt-border-strong) 65%, var(--pt-primary));
+}
+
+html[data-ui-framework="pytorrent"] .form-control:focus,
+html[data-ui-framework="pytorrent"] .form-select:focus {
+  border-color: var(--pt-primary);
+  box-shadow: 0 0 0 0.18rem var(--pt-focus);
+}
+
+html[data-ui-framework="pytorrent"] .form-control:disabled,
+html[data-ui-framework="pytorrent"] .form-select:disabled {
+  color: var(--pt-text-subtle);
+  background: var(--pt-surface-soft);
+  border-color: var(--pt-border);
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+html[data-ui-framework="pytorrent"] .form-control::placeholder {
+  color: var(--pt-text-subtle);
+  opacity: 0.82;
+}
+
+html[data-ui-framework="pytorrent"] .form-select {
+  appearance: none;
+  padding-right: 2rem;
+  background-image: linear-gradient(45deg, transparent 50%, var(--pt-text-muted) 50%), linear-gradient(135deg, var(--pt-text-muted) 50%, transparent 50%);
+  background-position: calc(100% - 0.88rem) 50%, calc(100% - 0.62rem) 50%;
+  background-size: 0.3rem 0.3rem, 0.3rem 0.3rem;
+  background-repeat: no-repeat;
+}
+
+html[data-ui-framework="pytorrent"] .form-control-sm,
+html[data-ui-framework="pytorrent"] .form-select-sm,
+html[data-ui-framework="pytorrent"] .input-group-sm > .form-control,
+html[data-ui-framework="pytorrent"] .input-group-sm > .form-select,
+html[data-ui-framework="pytorrent"] .input-group-sm > .input-group-text {
+  min-height: 1.86rem;
+  padding-top: 0.3rem;
+  padding-bottom: 0.3rem;
+  font-size: 0.82rem;
+  border-radius: 0.38rem;
+}
+
+html[data-ui-framework="pytorrent"] textarea.form-control {
+  min-height: 4rem;
+  resize: vertical;
+}
+
+html[data-ui-framework="pytorrent"] .form-text,
+html[data-ui-framework="pytorrent"] .form-field > small {
+  margin-top: 0.25rem;
+  color: var(--pt-text-muted);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+html[data-ui-framework="pytorrent"] .input-group {
+  position: relative;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  width: 100%;
+}
+
+html[data-ui-framework="pytorrent"] .input-group > .form-control,
+html[data-ui-framework="pytorrent"] .input-group > .form-select {
+  position: relative;
+  flex: 1 1 auto;
+  width: 1%;
+  min-width: 0;
+}
+
+html[data-ui-framework="pytorrent"] .input-group > :not(:first-child) {
+  margin-left: -1px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+html[data-ui-framework="pytorrent"] .input-group > :not(:last-child) {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+html[data-ui-framework="pytorrent"] .input-group-text {
+  display: flex;
+  align-items: center;
+  padding: 0.44rem 0.62rem;
+  color: var(--pt-text-muted);
+  background: var(--pt-surface-soft);
+  border: 1px solid var(--pt-border-strong);
+  border-radius: var(--pt-radius-sm);
+}
+
+html[data-ui-framework="pytorrent"] .form-check {
+  display: block;
+  min-height: 1.4rem;
+}
+
+html[data-ui-framework="pytorrent"] .form-check-input {
+  appearance: none;
+  width: 1.05rem;
+  height: 1.05rem;
+  margin: 0.12rem 0.42rem 0 0;
+  vertical-align: top;
+  background: var(--pt-surface);
+  border: 1px solid var(--pt-border-strong);
+  border-radius: 0.3rem;
+  cursor: pointer;
+  transition: background-color var(--pt-motion-base) ease, border-color var(--pt-motion-base) ease, box-shadow var(--pt-motion-base) ease;
+}
+
+html[data-ui-framework="pytorrent"] .form-check-input[type="radio"] {
+  border-radius: 50%;
+}
+
+html[data-ui-framework="pytorrent"] .form-check-input:checked {
+  background-color: var(--pt-primary);
+  border-color: var(--pt-primary);
+  box-shadow: inset 0 0 0 0.24rem var(--pt-primary);
+}
+
+html[data-ui-framework="pytorrent"] .form-check:not(.form-switch) .form-check-input[type="checkbox"]:checked {
+  background-image: linear-gradient(135deg, transparent 0 43%, #ffffff 43% 50%, transparent 50%), linear-gradient(45deg, transparent 0 54%, #ffffff 54% 62%, transparent 62%);
+}
+
+html[data-ui-framework="pytorrent"] .form-check-input[type="radio"]:checked {
+  box-shadow: inset 0 0 0 0.28rem var(--pt-primary), inset 0 0 0 0.43rem var(--pt-surface);
+}
+
+html[data-ui-framework="pytorrent"] .form-check-input:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 0.18rem var(--pt-focus);
+}
+
+html[data-ui-framework="pytorrent"] .form-check-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+html[data-ui-framework="pytorrent"] .form-check-label {
+  color: var(--pt-text);
+  cursor: pointer;
+}
+
+html[data-ui-framework="pytorrent"] .form-switch {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.46rem;
+}
+
+html[data-ui-framework="pytorrent"] .form-switch .form-check-input {
+  position: relative;
+  flex: 0 0 auto;
+  width: 2rem;
+  height: 1.1rem;
+  margin-right: 0;
+  border-radius: 999px;
+  background: var(--pt-border-strong);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+html[data-ui-framework="pytorrent"] .form-switch .form-check-input::after {
+  content: "";
+  position: absolute;
+  top: 0.13rem;
+  left: 0.14rem;
+  width: 0.72rem;
+  height: 0.72rem;
+  border-radius: 50%;
+  background: var(--pt-surface-raised);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  transition: transform var(--pt-motion-base) ease;
+}
+
+html[data-ui-framework="pytorrent"] .form-switch .form-check-input:checked {
+  background: var(--pt-primary);
+}
+
+html[data-ui-framework="pytorrent"] .form-switch .form-check-input:checked::after {
+  transform: translateX(0.86rem);
+}
+
+html[data-ui-framework="pytorrent"] .form-range {
+  width: 100%;
+  height: 1.4rem;
+  padding: 0;
+  appearance: none;
+  background: transparent;
+}
+
+html[data-ui-framework="pytorrent"] .form-range::-webkit-slider-runnable-track {
+  height: 0.28rem;
+  border-radius: 999px;
+  background: var(--pt-border-strong);
+}
+
+html[data-ui-framework="pytorrent"] .form-range::-webkit-slider-thumb {
+  width: 0.95rem;
+  height: 0.95rem;
+  margin-top: -0.34rem;
+  appearance: none;
+  border: 2px solid var(--pt-surface);
+  border-radius: 50%;
+  background: var(--pt-primary);
+  box-shadow: 0 0 0 1px rgba(var(--bs-primary-rgb), 0.3);
+}
+
+html[data-ui-framework="pytorrent"] .form-range::-moz-range-track {
+  height: 0.28rem;
+  border-radius: 999px;
+  background: var(--pt-border-strong);
+}
+
+html[data-ui-framework="pytorrent"] .form-range::-moz-range-thumb {
+  width: 0.95rem;
+  height: 0.95rem;
+  border: 2px solid var(--pt-surface);
+  border-radius: 50%;
+  background: var(--pt-primary);
+}
+
+/* Navigation */
+html[data-ui-framework="pytorrent"] .nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.18rem;
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+html[data-ui-framework="pytorrent"] .nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.42rem 0.65rem;
+  color: var(--pt-text-muted);
+  font-weight: 600;
+  line-height: 1.2;
+  border: 1px solid transparent;
+  border-radius: var(--pt-radius-sm);
+  background: transparent;
+  cursor: pointer;
+  transition: color var(--pt-motion-base) ease, background-color var(--pt-motion-base) ease, border-color var(--pt-motion-base) ease;
+}
+
+html[data-ui-framework="pytorrent"] .nav-link:hover {
+  color: var(--pt-text);
+  background: var(--pt-surface-soft);
+}
+
+html[data-ui-framework="pytorrent"] .nav-link:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 0.18rem var(--pt-focus);
+}
+
+html[data-ui-framework="pytorrent"] .nav-link.active,
+html[data-ui-framework="pytorrent"] .nav-pills .nav-link.active {
+  color: var(--pt-primary-strong);
+  background: var(--pt-primary-soft);
+  border-color: rgba(var(--bs-primary-rgb), 0.16);
+}
+
+html[data-ui-framework="pytorrent"][data-bs-theme="dark"] .nav-link.active,
+html[data-ui-framework="pytorrent"][data-bs-theme="dark"] .nav-pills .nav-link.active {
+  color: #c5d0ff;
+}
+
+html[data-ui-framework="pytorrent"] .nav-tabs {
+  gap: 0.2rem;
+  border-bottom: 1px solid var(--pt-border);
+}
+
+html[data-ui-framework="pytorrent"] .nav-tabs .nav-link {
+  margin-bottom: -1px;
+  border-radius: var(--pt-radius-sm) var(--pt-radius-sm) 0 0;
+}
+
+html[data-ui-framework="pytorrent"] .nav-tabs .nav-link.active {
+  color: var(--pt-text);
+  background: var(--pt-surface);
+  border-color: var(--pt-border) var(--pt-border) var(--pt-surface);
+}
+
+html[data-ui-framework="pytorrent"] .tab-content > .tab-pane {
+  display: none;
+}
+
+html[data-ui-framework="pytorrent"] .tab-content > .active {
+  display: block;
+}
+
+html[data-ui-framework="pytorrent"] .fade {
+  transition: opacity var(--pt-motion-base) ease;
+}
+
+html[data-ui-framework="pytorrent"] .fade:not(.show) {
+  opacity: 0;
+}
+
+/* Dropdowns */
+html[data-ui-framework="pytorrent"] .dropdown {
+  position: relative;
+}
+
+html[data-ui-framework="pytorrent"] .dropdown-toggle::after {
+  display: inline-block;
+  margin-left: 0.26rem;
+  vertical-align: 0.14em;
+  content: "";
+  border-top: 0.28em solid;
+  border-right: 0.24em solid transparent;
+  border-bottom: 0;
+  border-left: 0.24em solid transparent;
+  opacity: 0.58;
+}
+
+html[data-ui-framework="pytorrent"] .dropdown-menu {
+  position: absolute;
+  z-index: 1050;
+  display: none;
+  min-width: 11rem;
+  margin: 0.34rem 0 0;
+  padding: 0.36rem;
+  color: var(--pt-text);
+  text-align: left;
+  list-style: none;
+  background-color: var(--pt-surface-raised);
+  background-image: none;
+  border: 1px solid var(--pt-border);
+  border-radius: var(--pt-radius);
+  box-shadow: var(--pt-shadow-md);
+  opacity: 1;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Note: Notification history sits inside a translucent shell, so its menu owns a fully opaque stacking surface. */
+html[data-ui-framework="pytorrent"] .notification-history-menu,
+html[data-ui-framework="pytorrent"] .notification-history-header,
+html[data-ui-framework="pytorrent"] .notification-history-list {
+  background-color: var(--pt-surface-raised);
+}
+
+html[data-ui-framework="pytorrent"] .dropdown-menu.show {
+  display: block;
+}
+
+html[data-ui-framework="pytorrent"] .dropdown-menu-end {
+  right: 0;
+  left: auto;
+}
+
+html[data-ui-framework="pytorrent"] .dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 0.46rem;
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  clear: both;
+  color: var(--pt-text);
+  font-size: 0.84rem;
+  font-weight: 500;
+  text-align: inherit;
+  white-space: nowrap;
+  background: transparent;
+  border: 0;
+  border-radius: 0.42rem;
+  cursor: pointer;
+}
+
+html[data-ui-framework="pytorrent"] .dropdown-item:hover,
+html[data-ui-framework="pytorrent"] .dropdown-item:focus {
+  color: var(--pt-text);
+  background: var(--pt-surface-soft);
+  outline: 0;
+}
+
+html[data-ui-framework="pytorrent"] .dropdown-item.active,
+html[data-ui-framework="pytorrent"] .dropdown-item:active {
+  color: var(--pt-primary-strong);
+  background: var(--pt-primary-soft);
+}
+
+html[data-ui-framework="pytorrent"] .dropdown-divider {
+  height: 0;
+  margin: 0.32rem 0;
+  overflow: hidden;
+  border-top: 1px solid var(--pt-border);
+}
+
+/* Tooltips */
+html[data-ui-framework="pytorrent"] .tooltip {
+  position: absolute;
+  z-index: 1080;
+  display: block;
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  pointer-events: none;
+  opacity: 0;
+}
+
+html[data-ui-framework="pytorrent"] .tooltip.show {
+  opacity: 1;
+}
+
+html[data-ui-framework="pytorrent"] .tooltip-inner {
+  max-width: 260px;
+  padding: 0.38rem 0.5rem;
+  color: #f7f9fc;
+  text-align: center;
+  background: #202733;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.42rem;
+  box-shadow: var(--pt-shadow-sm);
+}
+
+html[data-ui-framework="pytorrent"] .tooltip-arrow {
+  position: absolute;
+  display: block;
+  width: 0.7rem;
+  height: 0.35rem;
+}
+
+html[data-ui-framework="pytorrent"] .tooltip-arrow::before {
+  position: absolute;
+  content: "";
+  border-color: transparent;
+  border-style: solid;
+}
+
+html[data-ui-framework="pytorrent"] .bs-tooltip-top .tooltip-arrow,
+html[data-ui-framework="pytorrent"] .tooltip[data-popper-placement^="top"] .tooltip-arrow {
+  bottom: -0.34rem;
+}
+
+html[data-ui-framework="pytorrent"] .bs-tooltip-top .tooltip-arrow::before,
+html[data-ui-framework="pytorrent"] .tooltip[data-popper-placement^="top"] .tooltip-arrow::before {
+  border-width: 0.35rem 0.35rem 0;
+  border-top-color: #202733;
+}
+
+html[data-ui-framework="pytorrent"] .bs-tooltip-bottom .tooltip-arrow,
+html[data-ui-framework="pytorrent"] .tooltip[data-popper-placement^="bottom"] .tooltip-arrow {
+  top: -0.34rem;
+}
+
+html[data-ui-framework="pytorrent"] .bs-tooltip-bottom .tooltip-arrow::before,
+html[data-ui-framework="pytorrent"] .tooltip[data-popper-placement^="bottom"] .tooltip-arrow::before {
+  border-width: 0 0.35rem 0.35rem;
+  border-bottom-color: #202733;
+}
+
+html[data-ui-framework="pytorrent"] .bs-tooltip-start .tooltip-arrow,
+html[data-ui-framework="pytorrent"] .tooltip[data-popper-placement^="left"] .tooltip-arrow {
+  right: -0.34rem;
+  width: 0.35rem;
+  height: 0.7rem;
+}
+
+html[data-ui-framework="pytorrent"] .bs-tooltip-start .tooltip-arrow::before,
+html[data-ui-framework="pytorrent"] .tooltip[data-popper-placement^="left"] .tooltip-arrow::before {
+  border-width: 0.35rem 0 0.35rem 0.35rem;
+  border-left-color: #202733;
+}
+
+html[data-ui-framework="pytorrent"] .bs-tooltip-end .tooltip-arrow,
+html[data-ui-framework="pytorrent"] .tooltip[data-popper-placement^="right"] .tooltip-arrow {
+  left: -0.34rem;
+  width: 0.35rem;
+  height: 0.7rem;
+}
+
+html[data-ui-framework="pytorrent"] .bs-tooltip-end .tooltip-arrow::before,
+html[data-ui-framework="pytorrent"] .tooltip[data-popper-placement^="right"] .tooltip-arrow::before {
+  border-width: 0.35rem 0.35rem 0.35rem 0;
+  border-right-color: #202733;
+}
+
+/* Modals */
+html[data-ui-framework="pytorrent"] .modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1055;
+  display: none;
+  width: 100%;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  outline: 0;
+}
+
+html[data-ui-framework="pytorrent"] .modal.show {
+  display: block;
+}
+
+html[data-ui-framework="pytorrent"] .modal-dialog {
+  position: relative;
+  width: auto;
+  max-width: 520px;
+  margin: 1.2rem auto;
+  pointer-events: none;
+  transform: translateY(6px) scale(0.992);
+  transition: transform var(--pt-motion-base) ease;
+}
+
+html[data-ui-framework="pytorrent"] .modal.show .modal-dialog {
+  transform: none;
+}
+
+html[data-ui-framework="pytorrent"] .modal-dialog-centered {
+  display: flex;
+  align-items: center;
+  min-height: calc(100% - 2.4rem);
+}
+
+html[data-ui-framework="pytorrent"] .modal-dialog-scrollable {
+  max-height: calc(100% - 2.4rem);
+}
+
+/* Note: A scrollable dialog keeps natural content height and receives a viewport cap only when content grows. */
+html[data-ui-framework="pytorrent"] .modal-dialog-scrollable .modal-content {
+  max-height: calc(100dvh - 2.4rem);
+  overflow: hidden;
+}
+
+html[data-ui-framework="pytorrent"] .modal-dialog-scrollable .modal-body {
+  overflow-y: auto;
+}
+
+html[data-ui-framework="pytorrent"] .modal-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  color: var(--pt-text);
+  pointer-events: auto;
+  background: var(--pt-surface-raised);
+  border: 1px solid var(--pt-border);
+  border-radius: var(--pt-radius-lg);
+  box-shadow: var(--pt-shadow-md);
+  outline: 0;
+}
+
+html[data-ui-framework="pytorrent"] .modal-header,
+html[data-ui-framework="pytorrent"] .modal-footer {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  padding: 0.85rem 1rem;
+}
+
+html[data-ui-framework="pytorrent"] .modal-header {
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--pt-border);
+}
+
+html[data-ui-framework="pytorrent"] .modal-footer {
+  justify-content: flex-end;
+  gap: 0.48rem;
+  border-top: 1px solid var(--pt-border);
+}
+
+html[data-ui-framework="pytorrent"] .modal-title {
+  margin: 0;
+  color: var(--pt-text);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+html[data-ui-framework="pytorrent"] .modal-body {
+  position: relative;
+  flex: 1 1 auto;
+  padding: 1rem;
+}
+
+html[data-ui-framework="pytorrent"] .modal-lg {
+  max-width: 800px;
+}
+
+html[data-ui-framework="pytorrent"] .modal-xl {
+  max-width: 1140px;
+}
+
+html[data-ui-framework="pytorrent"] .modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1050;
+  width: 100vw;
+  height: 100vh;
+  background: #02050a;
+}
+
+html[data-ui-framework="pytorrent"] .modal-backdrop.fade {
+  opacity: 0;
+}
+
+html[data-ui-framework="pytorrent"] .modal-backdrop.show {
+  opacity: 0.56;
+}
+
+html[data-ui-framework="pytorrent"] body.modal-open {
+  overflow: hidden;
+}
+
+/* Tables */
+html[data-ui-framework="pytorrent"] .table {
+  width: 100%;
+  margin-bottom: 1rem;
+  color: var(--pt-text);
+  vertical-align: top;
+  border-color: var(--pt-border);
+  border-collapse: collapse;
+}
+
+html[data-ui-framework="pytorrent"] .table > :not(caption) > * > * {
+  padding: 0.48rem 0.56rem;
+  color: inherit;
+  background: transparent;
+  border-bottom: 1px solid var(--pt-border);
+}
+
+html[data-ui-framework="pytorrent"] .table > thead {
+  color: var(--pt-text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+html[data-ui-framework="pytorrent"] .table-hover > tbody > tr:hover > * {
+  background: rgba(var(--bs-primary-rgb), 0.055);
+}
+
+html[data-ui-framework="pytorrent"] .table-sm > :not(caption) > * > * {
+  padding: 0.32rem 0.42rem;
+}
+
+html[data-ui-framework="pytorrent"] .table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+html[data-ui-framework="pytorrent"] .align-middle {
+  vertical-align: middle !important;
+}
+
+/* Status components */
+html[data-ui-framework="pytorrent"] .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+  padding: 0.24em 0.48em;
+  font-size: 0.72em;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  vertical-align: baseline;
+  border-radius: 999px;
+}
+
+html[data-ui-framework="pytorrent"] .text-bg-primary { color: #fff !important; background: var(--pt-primary) !important; }
+html[data-ui-framework="pytorrent"] .text-bg-secondary { color: var(--pt-text) !important; background: var(--pt-surface-soft) !important; border: 1px solid var(--pt-border); }
+html[data-ui-framework="pytorrent"] .text-bg-success { color: #fff !important; background: var(--pt-success) !important; }
+html[data-ui-framework="pytorrent"] .text-bg-danger { color: #fff !important; background: var(--pt-danger) !important; }
+html[data-ui-framework="pytorrent"] .text-bg-warning { color: #241a08 !important; background: color-mix(in srgb, var(--pt-warning) 75%, white) !important; }
+html[data-ui-framework="pytorrent"] .text-bg-info { color: #fff !important; background: var(--pt-info) !important; }
+html[data-ui-framework="pytorrent"] .text-bg-dark { color: #fff !important; background: #202733 !important; }
+html[data-ui-framework="pytorrent"] .text-bg-light { color: #172033 !important; background: #f2f4f7 !important; }
+
+html[data-ui-framework="pytorrent"] .alert {
+  position: relative;
+  padding: 0.72rem 0.82rem;
+  margin-bottom: 0.8rem;
+  color: var(--pt-text);
+  background: var(--pt-surface-soft);
+  border: 1px solid var(--pt-border);
+  border-radius: var(--pt-radius);
+}
+
+html[data-ui-framework="pytorrent"] .alert-secondary { background: var(--pt-surface-soft); }
+html[data-ui-framework="pytorrent"] .alert-info { background: rgba(var(--bs-info-rgb), 0.09); border-color: rgba(var(--bs-info-rgb), 0.28); }
+html[data-ui-framework="pytorrent"] .alert-warning { background: rgba(var(--bs-warning-rgb), 0.1); border-color: rgba(var(--bs-warning-rgb), 0.3); }
+html[data-ui-framework="pytorrent"] .alert-danger { background: rgba(var(--bs-danger-rgb), 0.09); border-color: rgba(var(--bs-danger-rgb), 0.3); }
+
+html[data-ui-framework="pytorrent"] .progress {
+  display: flex;
+  height: 0.5rem;
+  overflow: hidden;
+  background: var(--pt-surface-soft);
+  border-radius: 999px;
+}
+
+html[data-ui-framework="pytorrent"] .progress-bar {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+  color: #ffffff;
+  text-align: center;
+  white-space: nowrap;
+  background: var(--pt-primary);
+  transition: width var(--pt-motion-base) ease;
+}
+
+html[data-ui-framework="pytorrent"] .spinner-border {
+  display: inline-block;
+  width: 1.45rem;
+  height: 1.45rem;
+  vertical-align: -0.125em;
+  border: 0.18em solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: pytorrent-spinner 0.7s linear infinite;
+}
+
+html[data-ui-framework="pytorrent"] .spinner-border-sm {
+  width: 0.95rem;
+  height: 0.95rem;
+  border-width: 0.13em;
+}
+
+html[data-ui-framework="pytorrent"] .spinner-border-xs {
+  width: 0.78rem;
+  height: 0.78rem;
+  border-width: 0.11em;
+}
+
+@keyframes pytorrent-spinner {
+  to { transform: rotate(360deg); }
+}
+
+/* Grid and utility compatibility */
+html[data-ui-framework="pytorrent"] .row {
+  display: flex;
+  flex-wrap: wrap;
+  margin-right: -0.5rem;
+  margin-left: -0.5rem;
+}
+
+html[data-ui-framework="pytorrent"] .row > * {
+  flex-shrink: 0;
+  width: 100%;
+  max-width: 100%;
+  padding-right: 0.5rem;
+  padding-left: 0.5rem;
+}
+
+@media (min-width: 768px) {
+  html[data-ui-framework="pytorrent"] .col-md-6 {
+    flex: 0 0 auto;
+    width: 50%;
+  }
+}
+
+html[data-ui-framework="pytorrent"] .d-none { display: none !important; }
+html[data-ui-framework="pytorrent"] .d-flex { display: flex !important; }
+html[data-ui-framework="pytorrent"] .flex-wrap { flex-wrap: wrap !important; }
+html[data-ui-framework="pytorrent"] .align-items-center { align-items: center !important; }
+html[data-ui-framework="pytorrent"] .justify-content-between { justify-content: space-between !important; }
+html[data-ui-framework="pytorrent"] .gap-2 { gap: 0.5rem !important; }
+html[data-ui-framework="pytorrent"] .w-100 { width: 100% !important; }
+html[data-ui-framework="pytorrent"] .ms-auto { margin-left: auto !important; }
+html[data-ui-framework="pytorrent"] .me-auto { margin-right: auto !important; }
+html[data-ui-framework="pytorrent"] .ms-1 { margin-left: 0.25rem !important; }
+html[data-ui-framework="pytorrent"] .ms-2 { margin-left: 0.5rem !important; }
+html[data-ui-framework="pytorrent"] .me-1 { margin-right: 0.25rem !important; }
+html[data-ui-framework="pytorrent"] .me-2 { margin-right: 0.5rem !important; }
+html[data-ui-framework="pytorrent"] .mt-2 { margin-top: 0.5rem !important; }
+html[data-ui-framework="pytorrent"] .mt-3 { margin-top: 1rem !important; }
+html[data-ui-framework="pytorrent"] .mb-0 { margin-bottom: 0 !important; }
+html[data-ui-framework="pytorrent"] .mb-1 { margin-bottom: 0.25rem !important; }
+html[data-ui-framework="pytorrent"] .mb-2 { margin-bottom: 0.5rem !important; }
+html[data-ui-framework="pytorrent"] .mb-3 { margin-bottom: 1rem !important; }
+html[data-ui-framework="pytorrent"] .p-3 { padding: 1rem !important; }
+html[data-ui-framework="pytorrent"] .px-2 { padding-right: 0.5rem !important; padding-left: 0.5rem !important; }
+html[data-ui-framework="pytorrent"] .py-2 { padding-top: 0.5rem !important; padding-bottom: 0.5rem !important; }
+html[data-ui-framework="pytorrent"] .border-top { border-top: 1px solid var(--pt-border) !important; }
+html[data-ui-framework="pytorrent"] .border-bottom { border-bottom: 1px solid var(--pt-border) !important; }
+html[data-ui-framework="pytorrent"] .border-end { border-right: 1px solid var(--pt-border) !important; }
+html[data-ui-framework="pytorrent"] .shadow { box-shadow: var(--pt-shadow-sm) !important; }
+html[data-ui-framework="pytorrent"] .small,
+html[data-ui-framework="pytorrent"] small { font-size: 0.82em; }
+html[data-ui-framework="pytorrent"] .fw-bold { font-weight: 700 !important; }
+html[data-ui-framework="pytorrent"] .text-muted,
+html[data-ui-framework="pytorrent"] .text-secondary { color: var(--pt-text-muted) !important; }
+html[data-ui-framework="pytorrent"] .text-primary { color: var(--bs-primary) !important; }
+html[data-ui-framework="pytorrent"] .text-success { color: var(--bs-success) !important; }
+html[data-ui-framework="pytorrent"] .text-warning { color: var(--bs-warning-text-emphasis) !important; }
+html[data-ui-framework="pytorrent"] .text-danger { color: var(--bs-danger-text-emphasis) !important; }
+html[data-ui-framework="pytorrent"] .text-info { color: var(--bs-info) !important; }
+html[data-ui-framework="pytorrent"] .text-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html[data-ui-framework="pytorrent"] .visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+@media (max-width: 575.98px) {
+  html[data-ui-framework="pytorrent"] .modal-dialog {
+    margin: 0.65rem;
+  }
+
+  html[data-ui-framework="pytorrent"] .modal-fullscreen-sm-down {
+    width: 100vw;
+    max-width: none;
+    height: 100%;
+    margin: 0;
+  }
+
+  html[data-ui-framework="pytorrent"] .modal-fullscreen-sm-down .modal-content {
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-ui-framework="pytorrent"] *,
+  html[data-ui-framework="pytorrent"] *::before,
+  html[data-ui-framework="pytorrent"] *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

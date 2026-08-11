@@ -1465,6 +1465,14 @@
             ],
             "type": "string"
           },
+          "ui_framework": {
+            "description": "CSS framework used by the main interface. Bootstrap is the default; PyTorrent is an opt-in beta.",
+            "enum": [
+              "bootstrap",
+              "pytorrent"
+            ],
+            "type": "string"
+          },
           "default_download_path": {
             "description": "User-level default download path. Empty value falls back to the active rTorrent profile default.",
             "type": "string"

@@ -24,9 +24,12 @@
   --app-scrollbar-thumb: var(--bs-border-color);
   --app-scrollbar-thumb-hover: var(--bs-secondary-color);
   --app-scrollbar-thumb-active: var(--bs-primary);
+  --app-motion-fast: 100ms;
+  --app-motion-base: 140ms;
+  --app-motion-slow: 160ms;
 }
 
-html[data-bs-theme="dark"]:not([data-bootstrap-skin^="pytorrent-"]) {
+html:not([data-ui-framework="pytorrent"])[data-bs-theme="dark"]:not([data-bootstrap-skin^="pytorrent-"]) {
   --bs-body-bg: #05070a;
   --bs-body-bg-rgb: 5, 7, 10;
   --bs-body-color: #d6dde8;
@@ -365,8 +368,8 @@ body {
   overflow: auto;
   color: var(--bs-body-color);
   transition:
-    opacity 0.22s ease,
-    visibility 0.22s ease;
+    opacity var(--app-motion-slow) ease,
+    visibility var(--app-motion-slow) ease;
 }
 
 .initial-loader.is-hidden {
@@ -520,7 +523,7 @@ body {
   background: transparent;
   color: var(--bs-body-color);
   text-align: left;
-  transition: background-color 0.12s ease, color 0.12s ease;
+  transition: background-color var(--app-motion-fast) ease, color var(--app-motion-fast) ease;
 }
 
 .filter:hover,
@@ -811,7 +814,7 @@ body {
   position: absolute;
   right: 3px;
   top: 0.35rem;
-  transition: opacity 0.15s ease;
+  transition: opacity var(--app-motion-fast) ease;
   width: 1px;
 }
 
@@ -1171,7 +1174,7 @@ body.resizing-details {
   border: 1px solid var(--bs-border-color);
   border-radius: 0.6rem;
   background: rgba(var(--bs-secondary-bg-rgb), 0.58);
-  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: background-color var(--app-motion-fast) ease, border-color var(--app-motion-fast) ease, box-shadow var(--app-motion-fast) ease;
 }
 
 .profile-row.active,
@@ -1304,7 +1307,7 @@ body.resizing-details {
   border-radius: calc(10px * var(--ui-scale));
   box-shadow: 0 calc(10px * var(--ui-scale)) calc(30px * var(--ui-scale)) rgba(0, 0, 0, 0.26);
   pointer-events: auto;
-  animation: toast-enter 180ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+  animation: toast-enter var(--app-motion-base) cubic-bezier(0.2, 0.75, 0.25, 1) both;
 }
 
 .toast-success {
@@ -1432,7 +1435,7 @@ body.resizing-details {
 
 .toast-item.is-leaving {
   pointer-events: none;
-  animation: toast-leave 180ms ease-in both;
+  animation: toast-leave var(--app-motion-base) ease-in both;
 }
 
 @keyframes toast-enter {
@@ -1674,6 +1677,134 @@ body.resizing-details {
   --bs-btn-padding-x: 0.42rem;
   --bs-btn-font-size: 0.78rem;
   --bs-btn-border-radius: 0.35rem;
+}
+
+/* Note: Destructive entry points stay visually quiet; the solid danger treatment is reserved for final confirmation actions. */
+.btn-outline-danger {
+  --bs-btn-color: var(--bs-danger-text-emphasis);
+  --bs-btn-border-color: rgba(var(--bs-danger-rgb), 0.42);
+  --bs-btn-hover-color: var(--bs-danger-text-emphasis);
+  --bs-btn-hover-bg: rgba(var(--bs-danger-rgb), 0.1);
+  --bs-btn-hover-border-color: rgba(var(--bs-danger-rgb), 0.62);
+  --bs-btn-active-color: var(--bs-danger-text-emphasis);
+  --bs-btn-active-bg: rgba(var(--bs-danger-rgb), 0.15);
+  --bs-btn-active-border-color: rgba(var(--bs-danger-rgb), 0.72);
+}
+
+/* Note: Framework-specific controls remain in shared application CSS because they belong to Settings, not to either visual framework. */
+.framework-preference-field small,
+#bootstrapThemeField small {
+  color: var(--bs-secondary-color);
+  line-height: 1.35;
+}
+
+/* Note: Global action feedback adds a restrained press, loading and result motion while preserving Bootstrap button semantics. */
+.action-feedback-button {
+  position: relative;
+  transition:
+    color var(--app-motion-fast) ease-in-out,
+    background-color var(--app-motion-fast) ease-in-out,
+    border-color var(--app-motion-fast) ease-in-out,
+    box-shadow var(--app-motion-fast) ease-in-out,
+    filter var(--app-motion-fast) ease,
+    transform 80ms ease;
+}
+
+.action-feedback-button:not(:disabled):active {
+  transform: translateY(1px) scale(0.985);
+}
+
+.action-feedback-button.is-action-loading {
+  cursor: progress;
+  filter: saturate(0.82);
+  pointer-events: none;
+}
+
+.action-feedback-button.is-action-success {
+  animation: action-feedback-success 280ms ease-out;
+}
+
+.action-feedback-button.is-action-error {
+  animation: action-feedback-error 220ms ease-out;
+}
+
+.action-feedback-indicator {
+  display: inline-block;
+  width: 1em;
+  text-align: center;
+  transform-origin: center;
+}
+
+.action-feedback-indicator:not(.spinner-border) {
+  animation: action-feedback-indicator-in var(--app-motion-fast) ease-out;
+}
+
+.spinner-border.action-feedback-indicator {
+  width: 0.9em;
+  height: 0.9em;
+  border-width: 0.12em;
+  vertical-align: -0.08em;
+}
+
+.action-feedback-indicator-floating {
+  position: absolute;
+  top: 50%;
+  right: 0.45rem;
+  margin-top: -0.5em;
+}
+
+@keyframes action-feedback-indicator-in {
+  from {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes action-feedback-success {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+
+  45% {
+    box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--bs-success) 18%, transparent);
+  }
+}
+
+@keyframes action-feedback-error {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  30% {
+    transform: translateX(-2px);
+  }
+
+  65% {
+    transform: translateX(2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .action-feedback-button,
+  .action-feedback-indicator {
+    animation: none !important;
+    transition: none;
+  }
+
+  .action-feedback-button:not(:disabled):active {
+    transform: none;
+  }
+
+  .spinner-border.action-feedback-indicator {
+    animation: none;
+  }
 }
 
 .nav-btn {
@@ -2158,9 +2289,9 @@ body.mobile-mode .main-grid {
   cursor: pointer;
   user-select: none;
   transition:
-    background 0.15s,
-    border-color 0.15s,
-    transform 0.15s;
+    background var(--app-motion-fast),
+    border-color var(--app-motion-fast),
+    transform var(--app-motion-fast);
 }
 
 .column-card:hover,
@@ -2355,8 +2486,8 @@ body.mobile-mode .mobile-card {
   min-width: 0 !important;
   position: relative;
   transition:
-    width 0.25s ease,
-    background-color 0.25s ease;
+    width var(--app-motion-slow) ease,
+    background-color var(--app-motion-slow) ease;
 }
 
 .torrent-progress.is-complete .progress-bar {
@@ -2957,7 +3088,7 @@ body.mobile-mode .mobile-card {
   width: 0;
   height: 100%;
   background: #22c55e;
-  transition: width 0.2s ease;
+  transition: width var(--app-motion-base) ease;
 }
 
 .disk-status.disk-caution .disk-meter-fill {
@@ -3805,7 +3936,7 @@ body.mobile-mode .mobile-filter-bar {
   border-radius: 0.75rem;
   background: rgba(var(--bs-secondary-bg-rgb), 0.45);
   user-select: none;
-  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, opacity 0.15s;
+  transition: background var(--app-motion-fast), border-color var(--app-motion-fast), box-shadow var(--app-motion-fast), opacity var(--app-motion-fast);
 }
 
 .footer-pref-card:hover,
@@ -3910,15 +4041,15 @@ body.mobile-mode .mobile-filter-bar {
 
 .preference-drag-preview-dropping {
   transition:
-    transform 140ms cubic-bezier(.2, .8, .2, 1),
-    box-shadow 140ms ease,
-    opacity 140ms ease;
+    transform var(--app-motion-fast) cubic-bezier(.2, .8, .2, 1),
+    box-shadow var(--app-motion-fast) ease,
+    opacity var(--app-motion-fast) ease;
   box-shadow: 0 0.25rem 0.7rem rgba(0, 0, 0, 0.12);
   opacity: 0.92;
 }
 
 .preference-card-dropped {
-  animation: preference-card-drop 180ms cubic-bezier(.2, .8, .2, 1);
+  animation: preference-card-drop var(--app-motion-base) cubic-bezier(.2, .8, .2, 1);
 }
 
 @keyframes preference-card-drop {
@@ -4943,7 +5074,7 @@ body.sorting-preference-cards * {
 
 .planner-card-chevron {
   color: var(--bs-secondary-color);
-  transition: transform 0.15s ease;
+  transition: transform var(--app-motion-fast) ease;
 }
 
 .planner-disclosure[open] .planner-card-chevron {
@@ -5653,7 +5784,7 @@ body,
 }
 
 .preference-dependent-field {
-  transition: opacity 0.15s ease;
+  transition: opacity var(--app-motion-fast) ease;
 }
 
 .preference-dependent-field.is-disabled {
@@ -8050,7 +8181,7 @@ body.compact-torrent-list .mobile-progress .torrent-progress {
   min-width: 0;
   padding: 0.55rem 0.65rem;
   text-align: left;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  transition: border-color var(--app-motion-fast) ease, box-shadow var(--app-motion-fast) ease, transform var(--app-motion-fast) ease;
 }
 
 .smart-simulation-point:hover,
@@ -8192,7 +8323,7 @@ body.compact-torrent-list .mobile-progress .torrent-progress {
   font-family: "Font Awesome 6 Free";
   font-size: 0.72rem;
   font-weight: 900;
-  transition: transform 0.15s ease;
+  transition: transform var(--app-motion-fast) ease;
 }
 
 .smart-simulation-block[open] summary::after {

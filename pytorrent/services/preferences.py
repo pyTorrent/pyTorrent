@@ -7,6 +7,11 @@ from .deletion import purge_profile
 
 BOOTSTRAP_THEMES = BOOTSTRAP_THEME_LABELS
 
+UI_FRAMEWORKS = {
+    "bootstrap": "Bootstrap",
+    "pytorrent": "PyTorrent (Beta)",
+}
+
 FONT_FAMILIES = {
     "default": "Theme default",
     "system-ui": "System UI / Apple-like",
@@ -623,6 +628,7 @@ def save_preferences(data: dict, user_id: int | None = None, profile_id: int | N
     profile_id = profile_id or _active_profile_id_for_user(user_id)
     allowed_theme = data.get("theme") if data.get("theme") in {"light", "dark"} else None
     bootstrap_theme = data.get("bootstrap_theme") if data.get("bootstrap_theme") in BOOTSTRAP_THEMES else None
+    ui_framework = data.get("ui_framework") if data.get("ui_framework") in UI_FRAMEWORKS else None
     font_family = data.get("font_family") if data.get("font_family") in FONT_FAMILIES else None
     title_speed_enabled = data.get("title_speed_enabled")
     automation_toasts_enabled = data.get("automation_toasts_enabled")
@@ -675,6 +681,9 @@ def save_preferences(data: dict, user_id: int | None = None, profile_id: int | N
             conn.execute("UPDATE user_preferences SET theme=?, updated_at=? WHERE user_id=?", (allowed_theme, now, user_id))
         if bootstrap_theme:
             conn.execute("UPDATE user_preferences SET bootstrap_theme=?, updated_at=? WHERE user_id=?", (bootstrap_theme, now, user_id))
+        if ui_framework:
+            # Note: Bootstrap remains the safe default while the standalone PyTorrent CSS framework is developed as an opt-in beta.
+            conn.execute("UPDATE user_preferences SET ui_framework=?, updated_at=? WHERE user_id=?", (ui_framework, now, user_id))
         if font_family:
             conn.execute("UPDATE user_preferences SET font_family=?, updated_at=? WHERE user_id=?", (font_family, now, user_id))
         if title_speed_enabled is not None:

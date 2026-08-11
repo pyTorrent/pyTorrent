@@ -22,5 +22,7 @@
       <a class="btn btn-outline-secondary" href="{{ url_for('main.docs') }}"><i class="fa-solid fa-book"></i> API docs</a>
     </div>
   </main>
+  <!-- Note: Standalone pages reuse the same button interaction feedback as the dashboard. -->
+  <script src="{{ static_url('js/actionFeedback.js') }}"></script>
 </body>
 </html>

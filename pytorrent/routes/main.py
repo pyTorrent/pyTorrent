@@ -9,7 +9,7 @@ import threading
 import zipfile
 
 from flask import Blueprint, render_template, Response, request, redirect, url_for, abort, send_file, stream_with_context
-from ..services.preferences import get_preferences, list_profiles, active_profile, get_profile, BOOTSTRAP_THEMES, FONT_FAMILIES
+from ..services.preferences import get_preferences, list_profiles, active_profile, get_profile, BOOTSTRAP_THEMES, UI_FRAMEWORKS, FONT_FAMILIES
 from ..services import auth, pdf_preview_links, rtorrent, prometheus_metrics
 from ..config import PYTORRENT_TMP_DIR, SMART_QUEUE_LABEL, SMART_QUEUE_STALLED_LABEL, METRICS_PATH
 from ..services.frontend_assets import asset_path, bootstrap_css_path, static_hash
@@ -103,6 +103,7 @@ def _frontend_bootstrap_config(prefs: dict, profile: dict | None, current_user: 
         "diskMonitorSelectedPath": str(prefs.get("disk_monitor_selected_path") or ""),
         "diskMonitorOwnerLabel": str(prefs.get("disk_monitor_owner_label") or ""),
         "bootstrapTheme": str(prefs.get("bootstrap_theme") or "default"),
+        "uiFramework": str(prefs.get("ui_framework") or "bootstrap"),
         "fontFamily": str(prefs.get("font_family") or "default"),
         "footerItems": _bootstrap_json_value(prefs.get("footer_items_json"), {}, dict),
         "footerOrder": _bootstrap_json_value(prefs.get("footer_order_json"), [], list),
@@ -318,6 +319,7 @@ def index():
         profiles=list_profiles(),
         active_profile=profile,
         bootstrap_themes=BOOTSTRAP_THEMES,
+        ui_frameworks=UI_FRAMEWORKS,
         font_families=FONT_FAMILIES,
         auth_enabled=auth.enabled(),
         auth_provider=auth.provider(),

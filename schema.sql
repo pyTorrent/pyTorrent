@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS user_preferences (
   user_id INTEGER NOT NULL,
   theme TEXT DEFAULT 'dark',
   bootstrap_theme TEXT DEFAULT 'default',
+  ui_framework TEXT DEFAULT 'bootstrap',
   font_family TEXT DEFAULT 'default',
   active_rtorrent_id INTEGER,
   keyboard_json TEXT,

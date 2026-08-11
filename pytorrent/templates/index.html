@@ -1,5 +1,6 @@
 <!doctype html>
 <html lang="en" data-bs-theme="{{ prefs.theme if prefs else 'dark' }}"
+  data-ui-framework="{{ prefs.ui_framework if prefs and prefs.ui_framework else 'bootstrap' }}"
   data-bootstrap-skin="{{ prefs.bootstrap_theme if prefs and prefs.bootstrap_theme else 'default' }}"
   data-app-font="{{ prefs.font_family if prefs and prefs.font_family else 'default' }}"
   style="--ui-scale: {{ ((prefs.interface_scale if prefs and prefs.interface_scale else 80) / 100) }};">
@@ -10,9 +11,11 @@
   <title>pyTorrent</title>
   <link rel="icon" href="{{ static_url('favicon.svg') }}" type="image/svg+xml">
   <link rel="shortcut icon" href="{{ static_url('favicon.svg') }}" type="image/svg+xml">
-  <link id="bootstrapBaseStylesheet" href="{{ bootstrap_theme_url('default') }}" rel="stylesheet">
+  <!-- Note: Bootstrap CSS remains the default; PyTorrent (Beta) can replace only the CSS layer while Bootstrap JS stays temporarily for component behavior. -->
+  <link id="bootstrapBaseStylesheet" href="{{ bootstrap_theme_url('default') }}" rel="stylesheet"{% if prefs and prefs.ui_framework == 'pytorrent' %} disabled{% endif %}>
   <link id="bootstrapThemeStylesheet" href="{{ bootstrap_theme_url(prefs.bootstrap_theme if prefs else 'default') }}"
-    rel="stylesheet">
+    rel="stylesheet"{% if prefs and prefs.ui_framework == 'pytorrent' %} disabled{% endif %}>
+  <link id="pytorrentFrameworkStylesheet" href="{{ static_url('pytorrent.css') }}" rel="stylesheet"{% if not prefs or prefs.ui_framework != 'pytorrent' %} disabled{% endif %}>
   <link href="{{ frontend_asset_url('fontawesome_css') }}" rel="stylesheet">
   <link href="{{ frontend_asset_url('font_css') }}" rel="stylesheet">
   <link href="{{ frontend_asset_url('flag_icons_css') }}" rel="stylesheet">
@@ -42,6 +45,7 @@
     <header class="topbar border-bottom">
       <div class="toolbar-left">
         <div class="brand"><i class="fa-solid fa-robot"></i> pyTorrent</div>
+        <!-- UI note: Bootstrap button variants use a quiet semantic hierarchy: primary commits, outline primary assists, outline success runs positive operations, outline secondary stays neutral, and danger removes persisted data. -->
         <div class="toolbar-group toolbar-group-navigation" role="group" aria-label="Application navigation">
           <button id="profilePickerBtn" class="btn btn-xs btn-outline-primary nav-btn profile-picker-btn"
             data-bs-toggle="modal" data-bs-target="#profilePickerModal" title="Change rTorrent">
@@ -50,7 +54,7 @@
           </button>
           <button class="btn btn-xs btn-outline-primary nav-btn" data-bs-toggle="modal"
             data-bs-target="#trafficModal"><i class="fa-solid fa-chart-column"></i><span> History</span></button>
-          <button class="btn btn-xs btn-success nav-btn" data-bs-toggle="modal" data-bs-target="#addModal"><i
+          <button class="btn btn-xs btn-outline-primary nav-btn" data-bs-toggle="modal" data-bs-target="#addModal"><i
               class="fa-solid fa-plus"></i><span> Add</span></button>
           <!-- UI note: Jobs and Logs stay one click away but use quiet navigation styling to reduce topbar visual weight. -->
           <button class="btn btn-xs btn-outline-secondary nav-btn nav-btn-quiet" data-bs-toggle="modal"
@@ -102,7 +106,7 @@
               id="notificationHistoryBadge" class="notification-history-badge d-none">0</span></button>
           <div id="notificationHistoryMenu" class="dropdown-menu dropdown-menu-end notification-history-menu">
             <div class="notification-history-header"><strong>Recent notifications</strong><button
-                id="clearToastNotificationsBtn" class="btn btn-xs btn-outline-secondary" type="button"><i
+                id="clearToastNotificationsBtn" class="btn btn-xs btn-outline-danger" type="button"><i
                   class="fa-solid fa-trash-can"></i> Clear</button></div>
             <div id="notificationHistoryMenuBody" class="notification-history-list">
               <div class="notification-history-empty">No saved toast notifications.</div>
@@ -379,7 +383,7 @@
         <div class="modal-header">
           <h5 class="modal-title"><i class="fa-solid fa-server"></i> Choose rTorrent</h5>
           <div class="profile-picker-header-actions">
-            <button id="profilePickerRefreshBtn" class="btn btn-sm btn-outline-primary" type="button">
+            <button id="profilePickerRefreshBtn" class="btn btn-sm btn-outline-secondary" type="button">
               <i class="fa-solid fa-rotate"></i> Refresh
             </button>
             <button class="btn-close" data-bs-dismiss="modal"></button>
@@ -490,7 +494,7 @@
           <div class="form-check form-switch"><input id="removeData" class="form-check-input" type="checkbox"
               checked><label class="form-check-label" for="removeData">Remove with data</label></div>
         </div>
-        <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal"><i
+        <div class="modal-footer"><button class="btn btn-outline-secondary" data-bs-dismiss="modal"><i
               class="fa-solid fa-xmark"></i> Cancel</button><button id="confirmRemoveBtn" class="btn btn-danger"><i
               class="fa-solid fa-trash"></i> Remove</button></div>
       </div>
@@ -581,7 +585,7 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" data-bs-dismiss="modal"><i class="fa-solid fa-xmark"></i> Cancel</button>
+          <button class="btn btn-outline-secondary" data-bs-dismiss="modal"><i class="fa-solid fa-xmark"></i> Cancel</button>
           <button id="pathSelectBtn" class="btn btn-primary"><i class="fa-solid fa-check"></i> Select</button>
         </div>
       </div>
@@ -698,9 +702,9 @@
           </div>
         </div>
         <div class="modal-footer add-modal-footer"><button id="clearAddTorrentBtn"
-            class="btn btn-outline-danger me-auto" type="button"><i class="fa-solid fa-eraser"></i> Clear add
-            form</button><button class="btn btn-secondary" data-bs-dismiss="modal"><i class="fa-solid fa-xmark"></i>
-            Close</button><button id="addBtn" class="btn btn-success"><span class="btn-label"><i
+            class="btn btn-outline-secondary me-auto" type="button"><i class="fa-solid fa-eraser"></i> Clear add
+            form</button><button class="btn btn-outline-secondary" data-bs-dismiss="modal"><i class="fa-solid fa-xmark"></i>
+            Close</button><button id="addBtn" class="btn btn-primary"><span class="btn-label"><i
                 class="fa-solid fa-plus"></i> Add</span></button><button id="createTorrentBtn"
             class="btn btn-primary d-none"><span class="btn-label"><i class="fa-solid fa-file-circle-plus"></i>
               Create</span></button></div>
@@ -726,8 +730,8 @@
           </label>
           <div id="dropLocationFiles" class="drop-location-file-list"></div>
         </div>
-        <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal"><i
-              class="fa-solid fa-xmark"></i> Cancel</button><button id="dropLocationConfirmBtn" class="btn btn-success"
+        <div class="modal-footer"><button class="btn btn-outline-secondary" data-bs-dismiss="modal"><i
+              class="fa-solid fa-xmark"></i> Cancel</button><button id="dropLocationConfirmBtn" class="btn btn-primary"
             type="button"><i class="fa-solid fa-plus"></i> Add</button></div>
       </div>
     </div>
@@ -793,7 +797,7 @@
             <div class="speed-profile-editor mt-2">
               <input id="speedProfileName" class="form-control form-control-sm" maxlength="80"
                 placeholder="Profile name">
-              <button id="saveSpeedProfileBtn" class="btn btn-sm btn-outline-secondary" type="button"><i
+              <button id="saveSpeedProfileBtn" class="btn btn-sm btn-outline-primary" type="button"><i
                   class="fa-solid fa-floppy-disk"></i> Save current as profile</button>
             </div>
             <div class="small text-muted mt-2">Profiles are your shortcuts. They do not change the active limit until
@@ -801,7 +805,7 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" data-bs-dismiss="modal"><i class="fa-solid fa-xmark"></i> Close</button>
+          <button class="btn btn-outline-secondary" data-bs-dismiss="modal"><i class="fa-solid fa-xmark"></i> Close</button>
           <button id="saveSpeedBtn" class="btn btn-primary"><span class="btn-label"><i
                 class="fa-solid fa-floppy-disk"></i> Save limits</span></button>
         </div>
@@ -825,8 +829,8 @@
           <div class="section-title">Saved labels</div>
           <div id="labelList" class="chips mt-2"></div>
         </div>
-        <div class="modal-footer"><button id="clearLabelsBtn" class="btn btn-outline-danger me-auto"><i
-              class="fa-solid fa-eraser"></i> Clear labels</button><button class="btn btn-secondary"
+        <div class="modal-footer"><button id="clearLabelsBtn" class="btn btn-outline-secondary me-auto"><i
+              class="fa-solid fa-eraser"></i> Clear labels</button><button class="btn btn-outline-secondary"
             data-bs-dismiss="modal"><i class="fa-solid fa-xmark"></i> Close</button><button id="saveLabelBtn"
             class="btn btn-primary"><i class="fa-solid fa-check"></i> Apply</button></div>
       </div>
@@ -840,7 +844,7 @@
           <h5 class="modal-title">Set ratio group</h5><button class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body"><select id="ratioAssignSelect" class="form-select"></select></div>
-        <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal"><i
+        <div class="modal-footer"><button class="btn btn-outline-secondary" data-bs-dismiss="modal"><i
               class="fa-solid fa-xmark"></i> Close</button><button id="applyRatioBtn" class="btn btn-primary"><i
               class="fa-solid fa-check"></i> Apply</button></div>
       </div>
@@ -966,7 +970,7 @@
                     </div>
                     <div class="torrent-stats-actions">
                       <span id="torrentStatsMeta" class="small text-muted">Not loaded.</span>
-                      <button id="torrentStatsRefreshBtn" class="btn btn-sm btn-outline-primary" type="button"><span
+                      <button id="torrentStatsRefreshBtn" class="btn btn-sm btn-outline-secondary" type="button"><span
                           class="btn-label"><i class="fa-solid fa-rotate"></i> Refresh now</span></button>
                     </div>
                   </div>
@@ -1018,19 +1022,22 @@
                     <div id="prefPane-appearance" class="tab-pane fade show active" role="tabpanel">
                       <div class="surface-section">
                         <div class="section-title"><i class="fa-solid fa-palette"></i> Appearance</div>
-                        <div class="small text-muted mb-2">Theme, typography and interface scale. Torrent view
+                        <div class="small text-muted mb-2">Framework, theme, typography and interface scale. Torrent view
                           preferences also remember the selected filter, sorting and the height of the General / Files /
                           Trackers panel.</div>
                         <div class="view-preferences-note"><i class="fa-solid fa-circle-info"></i><span>View state is
                             saved automatically in the database: current torrent filter, last sort column and direction,
                             visible columns, and details panel height.</span><button id="resetViewPreferencesBtn"
-                            class="btn btn-sm btn-outline-primary" type="button"><i
+                            class="btn btn-sm btn-outline-secondary" type="button"><i
                               class="fa-solid fa-arrow-rotate-left"></i> Reset view defaults</button></div>
-                        <div class="preferences-grid"><label class="form-field"><span>Bootstrap theme</span><select
+                        <div class="preferences-grid"><label class="form-field framework-preference-field"><span>UI framework</span><select
+                              id="uiFrameworkSelect" class="form-select form-select-sm">{% for value, label in
+                              ui_frameworks.items() %}<option value="{{ value }}" {% if (prefs and prefs.ui_framework==value) or (not prefs and value=='bootstrap') %}selected{% endif %}>{{ label }}</option>{% endfor
+                              %}</select><small id="uiFrameworkHelp">Bootstrap is the default. PyTorrent (Beta) is an independent CSS layer designed for gradual replacement.</small></label><label id="bootstrapThemeField" class="form-field"><span>Theme</span><select
                               id="bootstrapThemeSelect" class="form-select form-select-sm">{% for value, label in
                               bootstrap_themes.items() %}<option value="{{ value }}" {% if prefs and
                                 prefs.bootstrap_theme==value %}selected{% endif %}>{{ label }}</option>{% endfor
-                              %}</select></label><label class="form-field"><span>Font</span><select
+                              %}</select><small id="bootstrapThemeHelp">The selected theme is loaded natively by Bootstrap.</small></label><label class="form-field"><span>Font</span><select
                               id="fontFamilySelect" class="form-select form-select-sm">{% for value, label in
                               font_families.items() %}<option value="{{ value }}" {% if prefs and
                                 prefs.font_family==value %}selected{% endif %}>{{ label }}</option>{% endfor
@@ -1177,7 +1184,8 @@
                             <label class="preference-setting-row preference-setting-row-standalone form-check form-switch"><span class="preference-setting-copy"><b>Check free space before add</b><small>Count selected torrent files before queueing and warn when the destination has insufficient free space.</small></span><input id="freeSpaceCheckEnabled" class="form-check-input" type="checkbox" {% if not prefs or prefs.free_space_check_enabled %}checked{% endif %}></label>
                           </div>
                         </section>
-                        <div class="preference-actions"><button id="saveDownloadLocationPrefsBtn" class="btn btn-sm btn-primary" type="button">Save download settings</button></div>
+                        <!-- UI note: Every explicit Save action includes the same floppy-disk cue without changing the existing save handler. -->
+                        <div class="preference-actions"><button id="saveDownloadLocationPrefsBtn" class="btn btn-sm btn-primary" type="button"><i class="fa-solid fa-floppy-disk"></i> Save download settings</button></div>
                       </div>
                     </div>
                     <div id="prefPane-disk" class="tab-pane fade " role="tabpanel">
@@ -1287,7 +1295,8 @@
                           <div class="easter-egg-preview-copy"><b id="easterEggPreviewTitle">Image preview</b><small id="easterEggPreviewStatus">Choose Preview for one of the image sources.</small></div>
                           <div class="easter-egg-preview-media"><img id="easterEggPreviewImage" class="d-none" alt="Easter egg preview"></div>
                         </div>
-                        <div class="d-flex gap-2 align-items-center flex-wrap mt-3"><button id="saveEasterEggPrefsBtn" class="btn btn-sm btn-primary" type="button">Save easter egg</button><span class="form-text">Settings take effect after saving; the startup image is visible on the next reload.</span></div>
+                        <!-- UI note: The Save label uses the shared floppy-disk cue while preserving the existing preference behavior. -->
+                        <div class="d-flex gap-2 align-items-center flex-wrap mt-3"><button id="saveEasterEggPrefsBtn" class="btn btn-sm btn-primary" type="button"><i class="fa-solid fa-floppy-disk"></i> Save easter egg</button><span class="form-text">Settings take effect after saving; the startup image is visible on the next reload.</span></div>
                       </div>
                     </div>
                   </div>
@@ -1377,7 +1386,7 @@
                         retention</button><button id="applyOperationLogRetentionBtn"
                         class="btn btn-sm btn-outline-secondary" type="button"><i
                           class="fa-solid fa-filter-circle-xmark"></i> Apply all retention now</button><button
-                        id="clearOperationLogsBtn" class="btn btn-sm btn-outline-secondary text-danger" type="button"><i
+                        id="clearOperationLogsBtn" class="btn btn-sm btn-outline-danger" type="button"><i
                           class="fa-solid fa-trash"></i> Clear current filter</button></div>
                   </div>
                   <div class="surface-section operation-log-default-section">
@@ -1562,8 +1571,8 @@
                           placeholder="Label"></label></div>
                     <div class="management-actions"><button id="rssRuleBtn" class="btn btn-sm btn-primary"><i
                           class="fa-solid fa-floppy-disk"></i> Save rule</button><button id="rssTestBtn"
-                        class="btn btn-sm btn-outline-success"><i class="fa-solid fa-vial"></i> Test
-                        rule</button><button id="rssCheckBtn" class="btn btn-sm btn-success"><i
+                        class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-vial"></i> Test
+                        rule</button><button id="rssCheckBtn" class="btn btn-sm btn-outline-success"><i
                           class="fa-solid fa-play"></i> Check now</button></div>
                   </div><!-- Note: RSS test output is required by the existing Test rule handler. -->
                   <div id="rssTestResult" class="mt-3"></div>
@@ -1605,8 +1614,8 @@
                         </div>
                         <div class="smart-header-actions"><button id="smartSaveBtn" class="btn btn-sm btn-primary"><i
                               class="fa-solid fa-floppy-disk"></i> Save</button><button id="smartCheckBtn"
-                            class="btn btn-sm btn-success"><i class="fa-solid fa-play"></i> Check now</button></div>
-                        <!-- UI note: Smart Queue keeps Save as the primary action and uses Bootstrap outline primary for manual checks. -->
+                            class="btn btn-sm btn-outline-success"><i class="fa-solid fa-play"></i> Check now</button></div>
+                        <!-- UI note: Smart Queue keeps Save primary, uses outline success for the live check, and keeps dry-run neutral because it is read-only. -->
                       </div><!-- UI note: Smart Queue switch is named plainly and kept inside the row on mobile. -->
                       <div class="smart-settings-list">
                         <div class="smart-setting-row smart-toggle-row">
@@ -1747,7 +1756,7 @@
                           <div class="section-title"><i class="fa-solid fa-flask-vial"></i> Smart Queue simulation</div>
                           <div class="small text-muted">Read-only dry run based on current torrents and unsaved form
                             settings.</div>
-                        </div><button id="smartDryRunBtn" class="btn btn-sm btn-success" type="button"><i
+                        </div><button id="smartDryRunBtn" class="btn btn-sm btn-outline-secondary" type="button"><i
                             class="fa-solid fa-play"></i> Run dry run</button>
                       </div>
                       <div class="smart-simulation-controls"><label class="smart-input-field"><span>Total simulated
@@ -1961,7 +1970,7 @@
                       changes</span><label class="form-check form-switch mb-0"><input id="rtConfigApplyOnStart"
                         class="form-check-input" type="checkbox"><span class="form-check-label">Apply saved changes 60s
                         after pyTorrent start</span></label><button id="rtConfigReloadBtn"
-                      class="btn btn-sm btn-outline-primary"><i class="fa-solid fa-rotate"></i> Reload</button></div>
+                      class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-rotate"></i> Reload</button></div>
                   <div id="rtConfigManager"><span class="spinner-border spinner-border-sm"></span> Loading config...
                   </div>
                   <div class="rt-config-actions mt-3">
@@ -2276,6 +2285,8 @@
   <div id="toastHost" class="toast-host"></div>
   <script src="{{ frontend_asset_url('socket_io_js') }}"></script>
   <script src="{{ frontend_asset_url('bootstrap_js') }}"></script>
+  <!-- Note: Shared action feedback keeps asynchronous buttons consistent without changing individual handlers. -->
+  <script src="{{ static_url('js/actionFeedback.js') }}"></script>
   <!-- Note: Server bootstrap preferences must be initialized before app.js starts. -->
   <script>window.PYTORRENT = {{ bootstrap_config | tojson }};</script>
   <script type="module" src="{{ static_url('js/app.js') }}"></script>
