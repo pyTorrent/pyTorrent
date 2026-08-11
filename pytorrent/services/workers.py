@@ -646,7 +646,8 @@ def _handle_job_exception(job_id: str, job: dict, payload: dict, exc: Exception)
     else:
         # Note: Retried attempts are logged explicitly so transient failures are not lost between final states.
         _record_job_event(int(job.get("profile_id") or 0), job.get("action"), "retry", payload, error=str(exc), job_id=job_id, user_id=int(job.get("user_id") or 0))
-    _emit("operation_failed", {"job_id": job_id, "action": job.get("action"), "profile_id": job.get("profile_id"), "hashes": payload.get("hashes") or [], "error": str(exc), **_job_event_meta(payload)})
+    # Note: Frontend lifecycle Toasts distinguish a scheduled retry from a terminal job failure.
+    _emit("operation_failed", {"job_id": job_id, "action": job.get("action"), "profile_id": job.get("profile_id"), "hashes": payload.get("hashes") or [], "error": str(exc), "status": status, "retrying": status == "pending", **_job_event_meta(payload)})
     _emit("job_update", {"id": job_id, "profile_id": job.get("profile_id"), "status": status, "error": str(exc), "attempts": attempts})
     if status == "pending":
         try:

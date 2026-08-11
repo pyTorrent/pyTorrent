@@ -606,7 +606,9 @@ def save_preferences(data: dict, user_id: int | None = None, profile_id: int | N
     title_speed_enabled = data.get("title_speed_enabled")
     automation_toasts_enabled = data.get("automation_toasts_enabled")
     smart_queue_toasts_enabled = data.get("smart_queue_toasts_enabled")
+    toast_notification_mode = data.get("toast_notification_mode")
     notification_history_enabled = data.get("notification_history_enabled")
+    notification_history_mode = data.get("notification_history_mode")
     easter_egg_enabled = data.get("easter_egg_enabled")
     easter_egg_loading_image_url = data.get("easter_egg_loading_image_url")
     easter_egg_click_image_url = data.get("easter_egg_click_image_url")
@@ -662,9 +664,21 @@ def save_preferences(data: dict, user_id: int | None = None, profile_id: int | N
         if smart_queue_toasts_enabled is not None:
             # Note: Smart Queue toast noise can be disabled independently from automation notifications.
             conn.execute("UPDATE user_preferences SET smart_queue_toasts_enabled=?, updated_at=? WHERE user_id=?", (1 if smart_queue_toasts_enabled else 0, now, user_id))
+        if toast_notification_mode is not None:
+            # Note: Visible Toast filtering is separate from history filtering so either surface can stay verbose or quiet independently.
+            toast_mode = str(toast_notification_mode or "all").strip().lower()
+            if toast_mode not in {"important", "all"}:
+                toast_mode = "all"
+            conn.execute("UPDATE user_preferences SET toast_notification_mode=?, updated_at=? WHERE user_id=?", (toast_mode, now, user_id))
         if notification_history_enabled is not None:
             # Note: Toast history is an opt-in UX preference; message contents remain browser-local in localStorage.
             conn.execute("UPDATE user_preferences SET notification_history_enabled=?, updated_at=? WHERE user_id=?", (1 if notification_history_enabled else 0, now, user_id))
+        if notification_history_mode is not None:
+            # Note: History filtering is persisted separately from the enable flag so Toast visibility never depends on archive mode.
+            history_mode = str(notification_history_mode or "important").strip().lower()
+            if history_mode not in {"important", "all"}:
+                history_mode = "important"
+            conn.execute("UPDATE user_preferences SET notification_history_mode=?, updated_at=? WHERE user_id=?", (history_mode, now, user_id))
         if easter_egg_enabled is not None:
             conn.execute("UPDATE user_preferences SET easter_egg_enabled=?, updated_at=? WHERE user_id=?", (1 if (easter_egg_enabled and easter_egg_has_image) else 0, now, user_id))
         elif (easter_egg_loading_image_url is not None or easter_egg_click_image_url is not None) and not easter_egg_has_image:

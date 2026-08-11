@@ -43,6 +43,7 @@ class ProfileStartupTests(unittest.TestCase):
         self.assertIn("activeProfile: {{ active_profile.id if active_profile else 'null' }}", bootstrap_line)
         self.assertIn("easterEggEnabled: {{ 1 if prefs and prefs.easter_egg_enabled else 0 }}", bootstrap_line)
         self.assertIn("notificationHistoryEnabled: {{ 1 if prefs and prefs.notification_history_enabled else 0 }}", bootstrap_line)
+        self.assertIn("notificationHistoryMode: {{ (prefs.notification_history_mode if prefs and prefs.notification_history_mode in ['important', 'all'] else 'important') | tojson }}", bootstrap_line)
 
     def test_missing_bootstrap_config_cannot_start_partial_ui(self) -> None:
         # Note: If server bootstrap data is missing, fail closed instead of running with false default profile/preferences.

@@ -1273,40 +1273,211 @@ body.resizing-details {
   gap: 0.4rem;
 }
 
+/* Toast notifications: readable status cards with pauseable lifetime feedback. */
 .toast-host {
+  /* Note: Toast position, spacing and maximum width follow the same interface scale as the rest of the application. */
   position: fixed;
-  right: 14px;
-  top: 70px;
+  top: calc(var(--topbar) + (12px * var(--ui-scale)));
+  right: calc(14px * var(--ui-scale));
   z-index: 8000;
   display: grid;
-  gap: 0.4rem;
+  gap: calc(9px * var(--ui-scale));
+  width: min(calc(400px * var(--ui-scale)), calc(100vw - (28px * var(--ui-scale))));
+  pointer-events: none;
 }
 
 .toast-item {
-  display: flex;
+  --toast-accent-rgb: var(--bs-secondary-rgb, 108, 117, 125);
+  --toast-duration: 5000ms;
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: calc(10px * var(--ui-scale));
+  width: 100%;
+  overflow: hidden;
+  padding: calc(12px * var(--ui-scale)) calc(12px * var(--ui-scale)) calc(13px * var(--ui-scale)) calc(13px * var(--ui-scale));
+  color: var(--bs-body-color);
+  background: color-mix(in srgb, rgb(var(--toast-accent-rgb)) 12%, var(--bs-body-bg));
+  border: 1px solid color-mix(in srgb, rgb(var(--toast-accent-rgb)) 44%, var(--bs-border-color));
+  border-left: max(2px, calc(4px * var(--ui-scale))) solid rgb(var(--toast-accent-rgb));
+  border-radius: calc(10px * var(--ui-scale));
+  box-shadow: 0 calc(10px * var(--ui-scale)) calc(30px * var(--ui-scale)) rgba(0, 0, 0, 0.26);
+  pointer-events: auto;
+  animation: toast-enter 180ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+.toast-success {
+  --toast-accent-rgb: var(--bs-success-rgb, 25, 135, 84);
+}
+
+.toast-danger {
+  --toast-accent-rgb: var(--bs-danger-rgb, 220, 53, 69);
+}
+
+.toast-warning {
+  --toast-accent-rgb: var(--bs-warning-rgb, 255, 193, 7);
+}
+
+.toast-info {
+  --toast-accent-rgb: var(--bs-info-rgb, 13, 202, 240);
+}
+
+.toast-secondary {
+  --toast-accent-rgb: var(--bs-secondary-rgb, 108, 117, 125);
+}
+
+.toast-icon {
+  display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
-  max-width: 360px;
-  padding: 0.45rem 0.65rem;
-  border-radius: 0.55rem;
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.28);
+  justify-content: center;
+  width: calc(27px * var(--ui-scale));
+  height: calc(27px * var(--ui-scale));
+  margin-top: calc(1px * var(--ui-scale));
+  color: rgb(var(--toast-accent-rgb));
+  background: color-mix(in srgb, rgb(var(--toast-accent-rgb)) 14%, transparent);
+  border-radius: 999px;
+  font-size: calc(14px * var(--ui-scale));
+}
+
+.toast-copy {
+  display: grid;
+  gap: calc(2px * var(--ui-scale));
+  min-width: 0;
+}
+
+.toast-title {
+  font-size: calc(13px * var(--ui-scale));
+  font-weight: 700;
+  line-height: 1.2;
 }
 
 .toast-message {
   min-width: 0;
+  color: var(--bs-body-color);
+  font-size: calc(13px * var(--ui-scale));
+  line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
-.toast-count {
+.toast-actions {
+  display: inline-flex;
   align-items: center;
-  background: rgba(255, 255, 255, 0.22);
-  border-radius: 999px;
+  gap: calc(4px * var(--ui-scale));
+}
+
+.toast-count {
   display: inline-flex;
   flex: 0 0 auto;
-  font-size: 0.78rem;
+  align-items: center;
+  gap: calc(1px * var(--ui-scale));
+  padding: calc(1px * var(--ui-scale)) calc(6px * var(--ui-scale));
+  color: var(--bs-body-color);
+  background: color-mix(in srgb, rgb(var(--toast-accent-rgb)) 16%, var(--bs-tertiary-bg));
+  border-radius: 999px;
+  font-size: calc(11px * var(--ui-scale));
   font-weight: 700;
-  gap: 0.1rem;
-  padding: 0.05rem 0.35rem;
+  line-height: 1.1;
+}
+
+.toast-dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(25px * var(--ui-scale));
+  height: calc(25px * var(--ui-scale));
+  padding: 0;
+  color: var(--bs-secondary-color);
+  background: transparent;
+  border: 0;
+  border-radius: calc(6px * var(--ui-scale));
+  font-size: calc(12px * var(--ui-scale));
+  line-height: 1;
+  cursor: pointer;
+}
+
+.toast-dismiss:hover,
+.toast-dismiss:focus-visible {
+  color: var(--bs-body-color);
+  background: color-mix(in srgb, var(--bs-secondary-bg) 80%, transparent);
+  outline: none;
+}
+
+.toast-progress {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: max(2px, calc(3px * var(--ui-scale)));
+  overflow: hidden;
+  background: color-mix(in srgb, rgb(var(--toast-accent-rgb)) 12%, transparent);
+}
+
+.toast-progress-bar {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: rgb(var(--toast-accent-rgb));
+  transform-origin: left center;
+  animation: toast-countdown var(--toast-duration) linear forwards;
+}
+
+.toast-item.is-paused {
+  box-shadow: 0 calc(12px * var(--ui-scale)) calc(34px * var(--ui-scale)) rgba(0, 0, 0, 0.32);
+}
+
+.toast-item.is-paused .toast-progress-bar {
+  animation-play-state: paused;
+}
+
+.toast-item.is-leaving {
+  pointer-events: none;
+  animation: toast-leave 180ms ease-in both;
+}
+
+@keyframes toast-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(calc(14px * var(--ui-scale)), calc(-4px * var(--ui-scale)), 0) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes toast-countdown {
+  from {
+    transform: scaleX(1);
+  }
+
+  to {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes toast-leave {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translate3d(calc(14px * var(--ui-scale)), calc(-2px * var(--ui-scale)), 0) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast-item,
+  .toast-item.is-leaving {
+    animation: none;
+  }
+
+  .toast-item .toast-progress {
+    display: none;
+  }
 }
 
 .notification-history-wrap {
