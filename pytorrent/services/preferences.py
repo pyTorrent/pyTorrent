@@ -104,7 +104,6 @@ RECOMMENDED_TABLE_COLUMNS = {
     "mobileSortFilters": {
         "seeds:-1": True, "up_rate:-1": True, "down_rate:-1": True, "progress:-1": True,
     },
-    "mobileSmartFiltersEnabled": False,
     "widths": {
         "select": 44, "name": 389, "status": 83, "size": 75, "progress": 177,
         "down_rate": 60, "up_rate": 55, "eta": 53, "seeds": 44, "peers": 49,
@@ -116,8 +115,28 @@ RECOMMENDED_TABLE_COLUMNS = {
 }
 
 
+def _normalize_table_columns_json(value) -> str:
+    parsed = _json_payload(value, {})
+    if not isinstance(parsed, dict):
+        parsed = {}
+    return json.dumps(parsed, separators=(",", ":"))
+
+
+def _normalize_active_filter(value) -> str:
+    raw = str(value or "all").strip()
+    if not raw or len(raw) > 180:
+        return "all"
+    allowed_static = {
+        "all", "downloading", "queued", "seeding", "paused", "checking",
+        "error", "post_check", "stopped", "moving",
+    }
+    if raw in allowed_static or raw.startswith("label:") or raw.startswith("tracker:"):
+        return raw
+    return "all"
+
+
 def recommended_table_columns_json() -> str:
-    return json.dumps(RECOMMENDED_TABLE_COLUMNS, separators=(",", ":"))
+    return _normalize_table_columns_json(RECOMMENDED_TABLE_COLUMNS)
 
 
 def apply_recommended_table_columns(user_id: int | None = None, profile_id: int | None = None):
@@ -475,6 +494,14 @@ def _seed_profile_preferences(conn, user_id: int, profile_id: int) -> dict:
             missing["footer_items_json"] = footer_items
         if row.get("footer_order_json") is None:
             missing["footer_order_json"] = footer_order
+        clean_active_filter = _normalize_active_filter(row.get("active_filter"))
+        if clean_active_filter != str(row.get("active_filter") or "all"):
+            missing["active_filter"] = clean_active_filter
+        clean_table_columns = _normalize_table_columns_json(
+            row.get("table_columns_json") or recommended_table_columns_json()
+        )
+        if clean_table_columns != str(row.get("table_columns_json") or ""):
+            missing["table_columns_json"] = clean_table_columns
         if missing:
             assignments = ", ".join(f"{column}=?" for column in missing)
             conn.execute(
@@ -489,9 +516,9 @@ def _seed_profile_preferences(conn, user_id: int, profile_id: int) -> dict:
         (
             user_id,
             profile_id,
-            legacy.get("table_columns_json") or recommended_table_columns_json(),
+            _normalize_table_columns_json(legacy.get("table_columns_json") or recommended_table_columns_json()),
             legacy.get("torrent_sort_json"),
-            legacy.get("active_filter") or "all",
+            _normalize_active_filter(legacy.get("active_filter")),
             int(legacy.get("peers_refresh_seconds") or 0),
             int(legacy.get("port_check_enabled") or 0),
             int(legacy["tracker_favicons_enabled"]) if legacy.get("tracker_favicons_enabled") is not None else 1,
@@ -525,7 +552,7 @@ def save_profile_preferences(user_id: int, profile_id: int | None, data: dict) -
         _seed_profile_preferences(conn, user_id, profile_id)
         updates: dict[str, object] = {}
         if data.get("table_columns_json") is not None:
-            updates["table_columns_json"] = str(data.get("table_columns_json"))
+            updates["table_columns_json"] = _normalize_table_columns_json(data.get("table_columns_json"))
         if data.get("peers_refresh_seconds") is not None:
             try:
                 sec = int(data.get("peers_refresh_seconds") or 0)
@@ -566,13 +593,7 @@ def save_profile_preferences(user_id: int, profile_id: int | None, data: dict) -
                 sort_key = "name"
             updates["torrent_sort_json"] = json.dumps({"key": sort_key, "dir": 1 if direction >= 0 else -1})
         if data.get("active_filter") is not None:
-            value = str(data.get("active_filter") or "all").strip()
-            if not value or len(value) > 180:
-                value = "all"
-            allowed_static_filters = {"all", "downloading", "queued", "seeding", "paused", "checking", "error", "post_check", "stopped", "moving"}
-            if value not in allowed_static_filters and not value.startswith("label:") and not value.startswith("tracker:"):
-                value = "all"
-            updates["active_filter"] = value
+            updates["active_filter"] = _normalize_active_filter(data.get("active_filter"))
         if not updates:
             return
         assignments = ", ".join(f"{column}=?" for column in updates)

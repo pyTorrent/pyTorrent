@@ -943,7 +943,8 @@
                         if you want to connect to a remote rTorrent instance instead of localhost.</small></label>
                     <div class="profile-form-actions"><button id="saveProfileBtn" class="btn btn-primary btn-sm"><i
                           class="fa-solid fa-plus"></i> Add profile</button><button id="testProfileBtn"
-                        class="btn btn-outline-info btn-sm" type="button"><i class="fa-solid fa-plug-circle-check"></i>
+                        class="btn btn-outline-info btn-sm" type="button" disabled
+                        title="Enter an SCGI URL to enable the connection test."><i class="fa-solid fa-plug-circle-check"></i>
                         Test SCGI</button><button id="profileExportBtn" class="btn btn-outline-secondary btn-sm"
                         type="button"><i class="fa-solid fa-file-export"></i> Export</button><button
                         id="profileImportBtn" class="btn btn-outline-secondary btn-sm" type="button"><i
@@ -958,13 +959,26 @@
               </div>
               <div id="toolTorrentStats" class="d-none">
                 <div class="surface-section">
-                  <div class="section-title"><i class="fa-solid fa-chart-pie"></i> Torrent statistics</div>
-                  <div class="tool-note mb-3">Cached metadata summary. File metadata is refreshed every 15 minutes, a
-                    few minutes after startup, or manually.</div>
-                  <div class="torrent-stats-toolbar"><button id="torrentStatsRefreshBtn"
-                      class="btn btn-sm btn-outline-primary"><i class="fa-solid fa-rotate"></i> Refresh
-                      now</button><span id="torrentStatsMeta" class="small text-muted">Not loaded.</span></div>
+                  <div class="torrent-stats-header">
+                    <div>
+                      <div class="section-title"><i class="fa-solid fa-chart-pie"></i> Torrent statistics</div>
+                      <div class="tool-note">Profile-wide totals from the cached torrent metadata snapshot.</div>
+                    </div>
+                    <div class="torrent-stats-actions">
+                      <span id="torrentStatsMeta" class="small text-muted">Not loaded.</span>
+                      <button id="torrentStatsRefreshBtn" class="btn btn-sm btn-outline-primary" type="button"><span
+                          class="btn-label"><i class="fa-solid fa-rotate"></i> Refresh now</span></button>
+                    </div>
+                  </div>
+                  <!-- Note: Primary torrent statistics stay visible together instead of being split across one-card tabs. -->
                   <div id="torrentStatsManager" class="mt-3">Open this tab to load statistics.</div>
+                  <div id="torrentStatsWarnings" class="d-none mt-3"></div>
+                </div>
+                <div class="surface-section mt-3">
+                  <div class="section-title"><i class="fa-solid fa-heart-pulse"></i> Torrent health</div>
+                  <div class="tool-note mb-3">Live categories from the current profile. Open a category to inspect the
+                    complete torrent list in a separate window.</div>
+                  <div id="healthDashboardManager"></div>
                 </div>
               </div>
               <div id="toolPreferences" class="d-none">
@@ -1040,170 +1054,189 @@
                       </div>
                     </div>
                     <div id="prefPane-browser" class="tab-pane fade " role="tabpanel">
-                      <div class="preferences-browser-layout">
-                        <div class="surface-section preference-block">
-                          <div class="section-title"><i class="fa-solid fa-heading"></i> Browser title</div>
-                          <div class="small text-muted mb-2">Controls what is shown in the browser tab.</div><label
-                            class="browser-speed-pref form-check form-switch"><input id="titleSpeedEnabled"
-                              class="form-check-input" type="checkbox" {% if not prefs or prefs.title_speed_enabled
-                              %}checked{% endif %}><span class="form-check-label">Show DL/UP in browser
-                              title</span><small>Displays current speeds next to pyTorrent in the tab
-                              title.</small></label>
-                        </div>
-                        <div class="surface-section preference-block">
-                          <div class="section-title"><i class="fa-solid fa-icons"></i> Tracker icons</div>
-                          <div class="small text-muted mb-2">Visual helper for tracker filters in the sidebar.</div>
-                          <label class="browser-speed-pref form-check form-switch"><input id="trackerFaviconsEnabled"
-                              class="form-check-input" type="checkbox" {% if not prefs or prefs.tracker_favicons_enabled
-                              %}checked{% endif %}><span class="form-check-label">Download tracker
-                              favicons</span><small>Shows tracker icons in the sidebar tracker filter when
-                              available.</small></label>
+                      <div class="surface-section">
+                        <div class="section-title"><i class="fa-solid fa-window-maximize"></i> Browser</div>
+                        <div class="small text-muted mb-3">Small browser-only helpers that do not change torrent behavior.</div>
+                        <!-- Note: Browser options use one compact list so two simple toggles do not look like separate feature panels. -->
+                        <div class="preference-setting-list">
+                          <label class="preference-setting-row form-check form-switch">
+                            <span class="preference-setting-copy"><b>Speed in browser title</b><small>Show current download and upload speed next to pyTorrent in the browser tab.</small></span>
+                            <input id="titleSpeedEnabled" class="form-check-input" type="checkbox" {% if not prefs or prefs.title_speed_enabled %}checked{% endif %}>
+                          </label>
+                          <label class="preference-setting-row form-check form-switch">
+                            <span class="preference-setting-copy"><b>Tracker favicons</b><small>Download and show tracker icons in the sidebar tracker filter when available.</small></span>
+                            <input id="trackerFaviconsEnabled" class="form-check-input" type="checkbox" {% if not prefs or prefs.tracker_favicons_enabled %}checked{% endif %}>
+                          </label>
                         </div>
                       </div>
                     </div>
                     <div id="prefPane-notifications" class="tab-pane fade " role="tabpanel">
                       <div class="surface-section">
                         <div class="section-title"><i class="fa-solid fa-bell"></i> Notifications</div>
-                        <div class="small text-muted mb-2">Toast visibility, automatic notification sources and local history.</div>
-                        <div class="preferences-grid"><label class="browser-speed-pref form-check form-switch"><input
-                              id="automationToastsEnabled" class="form-check-input" type="checkbox" {% if not prefs or
-                              prefs.automation_toasts_enabled %}checked{% endif %}><span
-                              class="form-check-label">Automation toasts</span><small>Show toasts created by automation
-                              runs.</small></label><label class="browser-speed-pref form-check form-switch"><input
-                              id="smartQueueToastsEnabled" class="form-check-input" type="checkbox" {% if not prefs or
-                              prefs.smart_queue_toasts_enabled %}checked{% endif %}><span class="form-check-label">Smart
-                              Queue toasts</span><small>Show Smart Queue automatic run messages.</small></label>
-                          <!-- Note: Visible Toast filtering is independent from the local Notification history filter. -->
-                          <label class="form-field"><span>Toast contents</span><select
-                              id="toastNotificationMode" class="form-select form-select-sm"><option value="all" {% if not prefs or not prefs.toast_notification_mode or prefs.toast_notification_mode == 'all' %}selected{% endif %}>All Toasts</option><option value="important" {% if prefs and prefs.toast_notification_mode == 'important' %}selected{% endif %}>Important only</option></select><small>Important only keeps warnings, failures and significant data, profile, security, backup, automation and rTorrent changes.</small></label><label
-                            class="browser-speed-pref form-check form-switch"><input id="notificationHistoryEnabled"
-                              class="form-check-input" type="checkbox" {% if prefs and
-                              prefs.notification_history_enabled %}checked{% endif %}><span
-                              class="form-check-label">Notification history</span><small>Stores selected Toast events
-                              in this browser and shows an unread counter in the topbar. Disabled by
-                              default.</small></label><label class="form-field"><span>History contents</span><select
-                              id="notificationHistoryMode" class="form-select form-select-sm" {% if not prefs or not
-                              prefs.notification_history_enabled %}disabled{% endif %}><option value="important" {% if
-                              not prefs or not prefs.notification_history_mode or prefs.notification_history_mode ==
-                              'important' %}selected{% endif %}>Important only</option><option value="all" {% if prefs and
-                              prefs.notification_history_mode == 'all' %}selected{% endif %}>All Toasts</option></select><small>Important only keeps failures and significant data, profile, security, backup, automation and rTorrent changes.</small></label></div>
+                        <div class="small text-muted mb-3">Control what appears on screen and what is saved for later.</div>
+                        <!-- Note: Visible Toast settings and local history are separate concepts, so each gets its own panel. -->
+                        <div class="notification-preferences-layout">
+                          <section class="notification-preference-card" aria-labelledby="toastDisplaySettingsTitle">
+                            <div class="notification-preference-card-header">
+                              <div class="notification-preference-card-copy">
+                                <strong id="toastDisplaySettingsTitle">On-screen Toasts</strong>
+                                <small>Choose which Toasts can interrupt the current view.</small>
+                              </div>
+                            </div>
+                            <label class="notification-select-row" for="toastNotificationMode">
+                              <span class="notification-setting-copy"><b>What to show</b><small>Important only keeps
+                                  warnings, failures and significant data, profile, security, backup, automation and
+                                  rTorrent changes.</small></span>
+                              <select id="toastNotificationMode" class="form-select form-select-sm">
+                                <option value="all" {% if not prefs or not prefs.toast_notification_mode or
+                                  prefs.toast_notification_mode=='all' %}selected{% endif %}>All Toasts</option>
+                                <option value="important" {% if prefs and prefs.toast_notification_mode=='important'
+                                  %}selected{% endif %}>Important only</option>
+                              </select>
+                            </label>
+                            <div class="notification-preference-subtitle">Automatic sources</div>
+                            <div class="notification-source-list">
+                              <label class="notification-toggle-row form-check form-switch">
+                                <span class="notification-setting-copy"><b>Automation</b><small>Show Toasts created by
+                                    automation runs.</small></span>
+                                <input id="automationToastsEnabled" class="form-check-input" type="checkbox" {% if not
+                                  prefs or prefs.automation_toasts_enabled %}checked{% endif %}>
+                              </label>
+                              <label class="notification-toggle-row form-check form-switch">
+                                <span class="notification-setting-copy"><b>Smart Queue</b><small>Show messages from
+                                    automatic Smart Queue runs.</small></span>
+                                <input id="smartQueueToastsEnabled" class="form-check-input" type="checkbox" {% if not
+                                  prefs or prefs.smart_queue_toasts_enabled %}checked{% endif %}>
+                              </label>
+                            </div>
+                          </section>
+                          <section class="notification-preference-card" aria-labelledby="notificationHistorySettingsTitle">
+                            <div class="notification-preference-card-header">
+                              <div class="notification-preference-card-copy">
+                                <strong id="notificationHistorySettingsTitle">Notification history</strong>
+                                <small>Optional local archive with an unread counter in the topbar.</small>
+                              </div>
+                            </div>
+                            <label class="notification-toggle-row notification-history-toggle form-check form-switch">
+                              <span class="notification-setting-copy"><b>Save history</b><small>Keep selected Toast
+                                  events in this browser. Disabled by default.</small></span>
+                              <input id="notificationHistoryEnabled" class="form-check-input" type="checkbox" {% if
+                                prefs and prefs.notification_history_enabled %}checked{% endif %}>
+                            </label>
+                            <!-- Note: History filtering remains independent from the visible Toast filter above. -->
+                            <label class="notification-select-row notification-history-options"
+                              for="notificationHistoryMode">
+                              <span class="notification-setting-copy"><b>What to save</b><small>Important only keeps
+                                  failures and significant data, profile, security, backup, automation and rTorrent
+                                  changes.</small></span>
+                              <select id="notificationHistoryMode" class="form-select form-select-sm" {% if not prefs or
+                                not prefs.notification_history_enabled %}disabled{% endif %}>
+                                <option value="important" {% if not prefs or not prefs.notification_history_mode or
+                                  prefs.notification_history_mode=='important' %}selected{% endif %}>Important only</option>
+                                <option value="all" {% if prefs and prefs.notification_history_mode=='all' %}selected{% endif
+                                  %}>All Toasts</option>
+                              </select>
+                            </label>
+                            <div class="notification-local-note">History stays in this browser and is not shared between
+                              devices.</div>
+                          </section>
+                        </div>
                       </div>
                     </div>
                     <div id="prefPane-downloads" class="tab-pane fade " role="tabpanel">
                       <div class="surface-section">
                         <div class="section-title"><i class="fa-solid fa-download"></i> Downloads</div>
-                        <div class="small text-muted mb-2">Default location, Add dialog memory and drag-and-drop
-                          behavior.</div>
-                        <div class="preferences-grid download-location-grid"><label class="form-field"><span>Default
-                              download path</span>
-                            <div class="input-group input-group-sm"><input id="defaultDownloadPathInput"
-                                class="form-control" placeholder="/data/torrents"
-                                value="{{ prefs.default_download_path if prefs and prefs.default_download_path else '' }}"><button
-                                class="btn btn-outline-secondary browse-path" data-target="defaultDownloadPathInput"
-                                type="button"><i class="fa-solid fa-folder-open"></i></button></div><small>Uses the
-                              active rTorrent profile default when not changed.</small>
-                          </label><label class="form-field"><span>Default save location behavior</span><select
-                              id="downloadLocationMode" class="form-select form-select-sm">
-                              <option value="profile_default" {% if not prefs or
-                                prefs.download_location_mode=='profile_default' %}selected{% endif %}>Use default
-                                location</option>
-                              <option value="choose_each_time" {% if prefs and
-                                prefs.download_location_mode=='choose_each_time' %}selected{% endif %}>Ask every time
-                              </option>
-                              <option value="remember_last" {% if prefs and
-                                prefs.download_location_mode=='remember_last' %}selected{% endif %}>Use last selected
-                                location</option>
-                            </select><small>Controls which path appears when the Add modal opens.</small></label><label
-                            class="form-field"><span>Last selected location</span>
-                            <div class="input-group input-group-sm"><input id="downloadLastPathInput"
-                                class="form-control" placeholder="/data/torrents"
-                                value="{{ prefs.download_last_path if prefs and prefs.download_last_path else '' }}"><button
-                                class="btn btn-outline-secondary browse-path" data-target="downloadLastPathInput"
-                                type="button"><i class="fa-solid fa-folder-open"></i></button></div><small>Used when the
-                              mode remembers the previous location.</small>
-                          </label><label class="form-field"><span>Drag and drop</span><select id="dropLocationMode"
-                              class="form-select form-select-sm">
-                              <option value="default" {% if not prefs or prefs.drop_location_mode=='default'
-                                %}selected{% endif %}>Use default location</option>
-                              <option value="ask_batch" {% if prefs and prefs.drop_location_mode=='ask_batch'
-                                %}selected{% endif %}>Ask every time</option>
-                              <option value="ask_each" {% if prefs and prefs.drop_location_mode=='ask_each' %}selected{%
-                                endif %}>Ask for each torrent</option>
-                            </select><small>Choose the target folder before dropped torrents are
-                              queued.</small></label><label class="browser-speed-pref form-check form-switch"><input
-                              id="freeSpaceCheckEnabled" class="form-check-input" type="checkbox" {% if not prefs or
-                              prefs.free_space_check_enabled %}checked{% endif %}><span class="form-check-label">Check
-                              free space before add</span><small>Enabled by default. Selected files from torrent preview
-                              are counted before queueing.</small></label></div><button
-                          id="saveDownloadLocationPrefsBtn" class="btn btn-sm btn-primary mt-2" type="button"><i
-                            class="fa-solid fa-floppy-disk"></i> Save download locations</button>
+                        <div class="small text-muted mb-3">Defaults used by the Add Torrent dialog and drag-and-drop actions.</div>
+                        <!-- Note: Download settings are grouped by the moment they affect the user instead of mixing paths, safety and drop behavior in one grid. -->
+                        <section class="preference-subsection" aria-labelledby="downloadAddDefaultsTitle">
+                          <div class="preference-subsection-heading"><b id="downloadAddDefaultsTitle">Add Torrent defaults</b><small>Choose the path behavior used when the Add Torrent dialog opens.</small></div>
+                          <div class="preferences-grid preference-fields-grid">
+                            <label class="form-field"><span>Default download path</span>
+                              <div class="input-group input-group-sm"><input id="defaultDownloadPathInput" class="form-control" placeholder="/data/torrents" value="{{ prefs.default_download_path if prefs and prefs.default_download_path else '' }}"><button class="btn btn-outline-secondary browse-path" data-target="defaultDownloadPathInput" type="button" aria-label="Browse default download path"><i class="fa-solid fa-folder-open"></i></button></div>
+                              <small>Uses the active rTorrent profile path when left unchanged.</small>
+                            </label>
+                            <label class="form-field"><span>Location behavior</span><select id="downloadLocationMode" class="form-select form-select-sm">
+                              <option value="profile_default" {% if not prefs or prefs.download_location_mode=='profile_default' %}selected{% endif %}>Use default location</option>
+                              <option value="choose_each_time" {% if prefs and prefs.download_location_mode=='choose_each_time' %}selected{% endif %}>Ask every time</option>
+                              <option value="remember_last" {% if prefs and prefs.download_location_mode=='remember_last' %}selected{% endif %}>Use last selected location</option>
+                            </select><small>Controls which path is preselected when Add Torrent opens.</small></label>
+                            <label id="downloadLastLocationField" class="form-field preference-dependent-field{% if not prefs or prefs.download_location_mode!='remember_last' %} is-disabled{% endif %}"><span>Last selected location</span>
+                              <div class="input-group input-group-sm"><input id="downloadLastPathInput" class="form-control" placeholder="/data/torrents" value="{{ prefs.download_last_path if prefs and prefs.download_last_path else '' }}" {% if not prefs or prefs.download_location_mode!='remember_last' %}disabled{% endif %}><button class="btn btn-outline-secondary browse-path" data-target="downloadLastPathInput" type="button" aria-label="Browse last selected download path" {% if not prefs or prefs.download_location_mode!='remember_last' %}disabled{% endif %}><i class="fa-solid fa-folder-open"></i></button></div>
+                              <small>Used only when Location behavior is set to use the last selected location.</small>
+                            </label>
+                          </div>
+                        </section>
+                        <section class="preference-subsection" aria-labelledby="downloadBehaviorTitle">
+                          <div class="preference-subsection-heading"><b id="downloadBehaviorTitle">Drag and drop &amp; safety</b><small>Controls dropped torrent files and the pre-add free-space check.</small></div>
+                          <div class="preferences-grid preference-fields-grid">
+                            <label class="form-field"><span>Drag and drop</span><select id="dropLocationMode" class="form-select form-select-sm">
+                              <option value="default" {% if not prefs or prefs.drop_location_mode=='default' %}selected{% endif %}>Use default location</option>
+                              <option value="ask_batch" {% if prefs and prefs.drop_location_mode=='ask_batch' %}selected{% endif %}>Ask once for the batch</option>
+                              <option value="ask_each" {% if prefs and prefs.drop_location_mode=='ask_each' %}selected{% endif %}>Ask for each torrent</option>
+                            </select><small>Choose how the target folder is resolved before dropped torrents are queued.</small></label>
+                            <label class="preference-setting-row preference-setting-row-standalone form-check form-switch"><span class="preference-setting-copy"><b>Check free space before add</b><small>Count selected torrent files before queueing and warn when the destination has insufficient free space.</small></span><input id="freeSpaceCheckEnabled" class="form-check-input" type="checkbox" {% if not prefs or prefs.free_space_check_enabled %}checked{% endif %}></label>
+                          </div>
+                        </section>
+                        <div class="preference-actions"><button id="saveDownloadLocationPrefsBtn" class="btn btn-sm btn-primary" type="button">Save download settings</button></div>
                       </div>
                     </div>
                     <div id="prefPane-disk" class="tab-pane fade " role="tabpanel">
                       <div class="surface-section">
                         <div class="section-title"><i class="fa-solid fa-hard-drive"></i> Disk monitor</div>
-                        <div class="small text-muted mb-2">Choose what the footer disk bar should represent and add
-                          extra storage paths.</div>
-                        <div id="diskMonitorOwner" class="small text-muted mb-2">{% if prefs and
-                          prefs.disk_monitor_owner_label %}Owner: {{ prefs.disk_monitor_owner_label }}{% endif %}</div>
-                        <div class="disk-monitor-shell disk-monitor-shell-flat">
-                          <div class="disk-monitor-mode-card">
-                            <div class="disk-monitor-card-title">Progress source</div><label
-                              class="form-check form-switch disk-monitor-switch"><input id="diskModeDefault"
-                                class="form-check-input disk-monitor-mode" type="radio" name="diskMonitorModeChoice"
-                                value="default"><span class="form-check-label">Default rTorrent path</span><small>Use
-                                the main directory from the active rTorrent profile.</small></label><label
-                              class="form-check form-switch disk-monitor-switch"><input id="diskModeSelected"
-                                class="form-check-input disk-monitor-mode" type="radio" name="diskMonitorModeChoice"
-                                value="selected"><span class="form-check-label">Selected monitored path</span><small>Use
-                                one custom path below as the footer progress value.</small></label><label
-                              class="form-check form-switch disk-monitor-switch"><input id="diskModeAggregate"
-                                class="form-check-input disk-monitor-mode" type="radio" name="diskMonitorModeChoice"
-                                value="aggregate"><span class="form-check-label">Aggregate all paths</span><small>Show
-                                combined usage. Single path selection is disabled in this mode.</small></label>
-                          </div>
-                          <div class="disk-monitor-path-card">
-                            <div class="disk-monitor-card-title">Monitored paths</div>
-                            <div class="input-group input-group-sm"><input id="diskMonitorPathInput"
-                                class="form-control" placeholder="/data/torrents"><button id="addDiskPathBtn"
-                                class="btn btn-outline-primary" type="button"><i class="fa-solid fa-plus"></i> Add
-                                path</button></div><label class="form-field mt-2"><span>Path used for selected
-                                mode</span><select id="diskMonitorSelectedPath"
-                                class="form-select form-select-sm"></select><small id="diskMonitorSelectedHint">Select a
-                                monitored path first.</small></label>
+                        <div class="small text-muted mb-2">Choose which storage value drives the footer disk progress bar and manage extra monitored paths.</div>
+                        <div id="diskMonitorOwner" class="preference-context-line">{% if prefs and prefs.disk_monitor_owner_label %}Owner: {{ prefs.disk_monitor_owner_label }}{% endif %}</div>
+                        <!-- Note: Progress source is an exclusive choice, so regular radio rows are clearer than switch-looking radio controls. -->
+                        <div class="preference-two-column-layout">
+                          <section class="preference-subsection preference-subsection-flat" aria-labelledby="diskProgressSourceTitle">
+                            <div class="preference-subsection-heading"><b id="diskProgressSourceTitle">Progress source</b><small>Select the value shown by the footer progress bar.</small></div>
+                            <div class="preference-choice-list">
+                              <label class="preference-choice-row"><input id="diskModeDefault" class="form-check-input disk-monitor-mode" type="radio" name="diskMonitorModeChoice" value="default"><span><b>Default rTorrent path</b><small>Use the main directory from the active rTorrent profile.</small></span></label>
+                              <label class="preference-choice-row"><input id="diskModeSelected" class="form-check-input disk-monitor-mode" type="radio" name="diskMonitorModeChoice" value="selected"><span><b>Selected monitored path</b><small>Use one custom path as the footer progress value.</small></span></label>
+                              <label class="preference-choice-row"><input id="diskModeAggregate" class="form-check-input disk-monitor-mode" type="radio" name="diskMonitorModeChoice" value="aggregate"><span><b>Aggregate all paths</b><small>Combine all monitored paths into one usage value.</small></span></label>
+                            </div>
+                          </section>
+                          <section class="preference-subsection preference-subsection-flat" aria-labelledby="diskMonitoredPathsTitle">
+                            <div class="preference-subsection-heading"><b id="diskMonitoredPathsTitle">Monitored paths</b><small>Add storage directories used by selected and aggregate modes.</small></div>
+                            <div class="input-group input-group-sm"><input id="diskMonitorPathInput" class="form-control" placeholder="/data/torrents"><button id="addDiskPathBtn" class="btn btn-outline-primary" type="button">Add path</button></div>
+                            <label class="form-field mt-2"><span>Selected path</span><select id="diskMonitorSelectedPath" class="form-select form-select-sm"></select><small id="diskMonitorSelectedHint">Select a monitored path first.</small></label>
                             <div id="diskMonitorPaths" class="disk-monitor-path-list"></div>
-                          </div>
-                        </div><input id="diskMonitorMode" type="hidden" value="default">
-                        <div class="form-text">The footer tooltip always shows details for available paths; this setting
-                          only decides which value drives the visible progress bar.</div>
+                          </section>
+                        </div>
+                        <input id="diskMonitorMode" type="hidden" value="default">
+                        <div class="form-text mt-2">The footer tooltip still lists available paths; this setting only controls the value used by the visible progress bar.</div>
                       </div>
                     </div>
                     <div id="prefPane-port" class="tab-pane fade " role="tabpanel">
                       <div class="surface-section">
                         <div class="section-title"><i class="fa-solid fa-network-wired"></i> Port checker</div>
-                        <div class="small text-muted mb-2">Incoming connection test, separate from visual preferences.
+                        <div class="small text-muted mb-3">Check whether the active rTorrent incoming port is reachable from the internet.</div>
+                        <!-- Note: Automatic checking, current status and manual diagnostics are separated so the result is readable at a glance. -->
+                        <div class="preference-setting-list">
+                          <label class="preference-setting-row form-check form-switch"><span class="preference-setting-copy"><b>Automatic port checks</b><small>Keep the port status available in the footer and reuse a result for up to 6 hours.</small></span><input id="portCheckEnabled" class="form-check-input" type="checkbox"></label>
                         </div>
-                        <div class="form-check form-switch mb-3"><input id="portCheckEnabled" class="form-check-input"
-                            type="checkbox"><label class="form-check-label" for="portCheckEnabled">Enable incoming port
-                            check</label></div>
-                        <!-- Note: The manual check button is placed below the open/closed badge so the current port state stays easy to read. -->
-                        <div class="d-inline-flex flex-column align-items-start gap-2"><span id="portCheckBadge"
-                            class="port-status port-secondary">disabled</span><button id="portCheckNowBtn"
-                            class="btn btn-sm btn-outline-primary" type="button"><i
-                              class="fa-solid fa-plug-circle-check"></i> Check port now</button></div>
-                        <div id="portCheckInfo" class="form-text mt-2">Uses YouGetSignal first. Manual check bypasses
-                          the 6h cache.</div>
+                        <div class="port-check-panel">
+                          <div class="port-check-summary">
+                            <div class="port-check-summary-copy"><span>Current status</span><span id="portCheckBadge" class="port-status port-secondary"><i class="fa-solid fa-circle-question"></i> disabled</span></div>
+                            <button id="portCheckNowBtn" class="btn btn-sm btn-outline-primary" type="button"><span class="btn-label">Check now</span></button>
+                          </div>
+                          <div class="port-check-details" aria-live="polite">
+                            <div class="port-check-detail"><span>Port</span><b id="portCheckPort">-</b></div>
+                            <div class="port-check-detail"><span>Public IP</span><b id="portCheckPublicIp">-</b></div>
+                            <div class="port-check-detail"><span>Source</span><b id="portCheckSource">-</b></div>
+                            <div class="port-check-detail"><span>Last check</span><b id="portCheckLastChecked">-</b></div>
+                          </div>
+                          <div id="portCheckInfo" class="form-text">Manual checks always request a fresh result, even when automatic checks are disabled.</div>
+                        </div>
                       </div>
                     </div>
                     <div id="prefPane-peers" class="tab-pane fade " role="tabpanel">
                       <div class="surface-section">
                         <div class="section-title"><i class="fa-solid fa-users-viewfinder"></i> Peers</div>
-                        <div class="small text-muted mb-2">Optional peer table helpers.</div><label
-                          class="browser-speed-pref form-check form-switch"><input id="reverseDnsEnabled"
-                            class="form-check-input" type="checkbox" {% if not prefs or prefs.reverse_dns_enabled
-                            %}checked{% endif %}><span class="form-check-label">Resolve peer IP to reverse DNS
-                            host</span><small>Uses a lightweight built-in resolver with cache. Hostnames appear only in
-                            the Peers tab.</small></label>
+                        <div class="small text-muted mb-3">Optional helpers for the torrent Peers tab.</div>
+                        <!-- Note: A single peer preference uses the same compact setting-row pattern as Browser and Port checker. -->
+                        <div class="preference-setting-list">
+                          <label class="preference-setting-row form-check form-switch"><span class="preference-setting-copy"><b>Reverse DNS hostnames</b><small>Resolve peer IP addresses with the built-in cached resolver and show hostnames only in the Peers tab.</small></span><input id="reverseDnsEnabled" class="form-check-input" type="checkbox" {% if not prefs or prefs.reverse_dns_enabled %}checked{% endif %}></label>
+                        </div>
                       </div>
                     </div>
                     <div id="prefPane-footer" class="tab-pane fade " role="tabpanel">
@@ -1236,31 +1269,25 @@
                     <div id="prefPane-easteregg" class="tab-pane fade " role="tabpanel">
                       <div class="surface-section">
                         <div class="section-title"><i class="fa-solid fa-egg"></i> Easter egg</div>
-                        <div class="small text-muted mb-2">Optional visual easter egg for loading states and occasional
-                          button clicks. Disabled by default.</div>
-                        <div class="preferences-grid"><label class="browser-speed-pref form-check form-switch"><input
-                              id="easterEggEnabled" class="form-check-input" type="checkbox" {% if prefs and
-                              prefs.easter_egg_enabled and (prefs.easter_egg_loading_image_url or
-                              prefs.easter_egg_click_image_url) %}checked{% endif %} {% if not prefs or not
-                              (prefs.easter_egg_loading_image_url or prefs.easter_egg_click_image_url) %}disabled{%
-                              endif %}><span class="form-check-label">Enable easter egg</span><small
-                              id="easterEggEnabledHint">{% if prefs and (prefs.easter_egg_loading_image_url or
-                              prefs.easter_egg_click_image_url) %}Available after an image URL is set. Saved only with
-                              the button below.{% else %}Add at least one image URL before enabling.{% endif
-                              %}</small></label><label class="form-field"><span>Loading image URL</span><input
-                              id="easterEggLoadingImageUrl" class="form-control form-control-sm" type="url"
-                              placeholder="https://example.com/loading.gif"
-                              value="{{ prefs.easter_egg_loading_image_url if prefs and prefs.easter_egg_loading_image_url else '' }}"><small>Shown
-                              in loading states instead of the standard spinner.</small></label><label
-                            class="form-field"><span>Random click image URL</span><input id="easterEggClickImageUrl"
-                              class="form-control form-control-sm" type="url"
-                              placeholder="https://example.com/click.png"
-                              value="{{ prefs.easter_egg_click_image_url if prefs and prefs.easter_egg_click_image_url else '' }}"><small>Appears
-                              near clicked buttons only sometimes.</small></label></div>
-                        <div class="d-flex gap-2 align-items-center flex-wrap mt-2"><button id="saveEasterEggPrefsBtn"
-                            class="btn btn-sm btn-primary" type="button"><i class="fa-solid fa-floppy-disk"></i> Save
-                            easter egg</button><span class="form-text">Changes are saved only with this button; startup
-                            loader uses them after reload.</span></div>
+                        <div class="small text-muted mb-3">Optional image effects for the startup loader and occasional button clicks. Disabled by default.</div>
+                        <div class="preference-setting-list">
+                          <label class="preference-setting-row form-check form-switch">
+                            <span class="preference-setting-copy"><b>Enable easter egg</b><small id="easterEggEnabledHint">{% if prefs and (prefs.easter_egg_loading_image_url or prefs.easter_egg_click_image_url) %}Applies the saved startup and random click effects.{% else %}Add at least one image URL before enabling.{% endif %}</small></span>
+                            <input id="easterEggEnabled" class="form-check-input" type="checkbox" {% if prefs and prefs.easter_egg_enabled and (prefs.easter_egg_loading_image_url or prefs.easter_egg_click_image_url) %}checked{% endif %} {% if not prefs or not (prefs.easter_egg_loading_image_url or prefs.easter_egg_click_image_url) %}disabled{% endif %}>
+                          </label>
+                        </div>
+                        <div class="preference-subsection">
+                          <div class="preference-subsection-heading"><b>Images</b><small>Use direct HTTP or HTTPS image URLs. Preview each source before saving if needed.</small></div>
+                          <div class="easter-egg-source-list">
+                            <label class="form-field"><span>Startup loading image</span><div class="input-group input-group-sm"><input id="easterEggLoadingImageUrl" class="form-control" type="url" placeholder="https://example.com/loading.gif" value="{{ prefs.easter_egg_loading_image_url if prefs and prefs.easter_egg_loading_image_url else '' }}"><button id="easterEggLoadingPreviewBtn" class="btn btn-outline-secondary" type="button" {% if not prefs or not prefs.easter_egg_loading_image_url %}disabled{% endif %}>Preview</button></div><small>Replaces the standard startup spinner after the next reload.</small></label>
+                            <label class="form-field"><span>Random click image</span><div class="input-group input-group-sm"><input id="easterEggClickImageUrl" class="form-control" type="url" placeholder="https://example.com/click.png" value="{{ prefs.easter_egg_click_image_url if prefs and prefs.easter_egg_click_image_url else '' }}"><button id="easterEggClickPreviewBtn" class="btn btn-outline-secondary" type="button" {% if not prefs or not prefs.easter_egg_click_image_url %}disabled{% endif %}>Preview</button></div><small>Appears occasionally near clicked buttons while the easter egg is enabled.</small></label>
+                          </div>
+                        </div>
+                        <div id="easterEggPreview" class="easter-egg-preview d-none" aria-live="polite">
+                          <div class="easter-egg-preview-copy"><b id="easterEggPreviewTitle">Image preview</b><small id="easterEggPreviewStatus">Choose Preview for one of the image sources.</small></div>
+                          <div class="easter-egg-preview-media"><img id="easterEggPreviewImage" class="d-none" alt="Easter egg preview"></div>
+                        </div>
+                        <div class="d-flex gap-2 align-items-center flex-wrap mt-3"><button id="saveEasterEggPrefsBtn" class="btn btn-sm btn-primary" type="button">Save easter egg</button><span class="form-text">Settings take effect after saving; the startup image is visible on the next reload.</span></div>
                       </div>
                     </div>
                   </div>
@@ -2221,11 +2248,36 @@
     </div>
   </div>
 
+  <div class="modal fade" id="torrentHealthModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable modal-xl">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="fa-solid fa-heart-pulse"></i> Torrent health: <span
+              id="torrentHealthModalTitle">Torrents</span></h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div id="torrentHealthModalNote" class="tool-note mb-3"></div>
+          <!-- Note: Health categories render full lists only on demand so the Torrent Stats tab stays compact. -->
+          <div class="health-modal-toolbar mb-3">
+            <input id="torrentHealthSearch" class="form-control" type="search"
+              placeholder="Search torrents by name, hash, label or status...">
+            <span id="torrentHealthCounter" class="health-modal-counter">0 of 0</span>
+          </div>
+          <div id="torrentHealthList" class="health-modal-list"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="toastHost" class="toast-host"></div>
   <script src="{{ frontend_asset_url('socket_io_js') }}"></script>
   <script src="{{ frontend_asset_url('bootstrap_js') }}"></script>
   <!-- Note: Server bootstrap preferences must be initialized before app.js starts. -->
-  <script>window.PYTORRENT = {authEnabled: {{ 1 if auth_enabled else 0 }}, authProvider: {{ auth_provider | tojson }}, externalAuth: {{ 1 if external_auth else 0 }}, currentUser: {% if current_user %}{{ current_user | tojson }}{% else %}null{% endif %}, activeProfile: {{ active_profile.id if active_profile else 'null' }}, tableColumns: {{ (prefs.table_columns_json or '{}') | safe }}, torrentSort: {{ (prefs.torrent_sort_json or '{}') | safe }}, activeFilter: {{ (prefs.active_filter if prefs and prefs.active_filter else 'all') | tojson }}, detailPanelHeight: {{ prefs.detail_panel_height if prefs and prefs.detail_panel_height else 255 }}, peersRefreshSeconds: {{ prefs.peers_refresh_seconds if prefs else 0 }}, portCheckEnabled: {{ 1 if prefs and prefs.port_check_enabled else 0 }}, freeSpaceCheckEnabled: {{ 1 if not prefs or prefs.free_space_check_enabled else 0 }}, interfaceScale: {{ prefs.interface_scale if prefs and prefs.interface_scale else 80 }}, torrentListFontSize: {{ prefs.torrent_list_font_size if prefs and prefs.torrent_list_font_size else 12 }}, compactTorrentListEnabled: {{ 1 if not prefs or prefs.compact_torrent_list_enabled else 0 }}, titleSpeedEnabled: {{ 1 if not prefs or prefs.title_speed_enabled else 0 }}, trackerFaviconsEnabled: {{ 1 if not prefs or prefs.tracker_favicons_enabled else 0 }}, reverseDnsEnabled: {{ 1 if not prefs or prefs.reverse_dns_enabled else 0 }}, automationToastsEnabled: {{ 1 if not prefs or prefs.automation_toasts_enabled else 0 }}, smartQueueToastsEnabled: {{ 1 if not prefs or prefs.smart_queue_toasts_enabled else 0 }}, toastNotificationMode: {{ (prefs.toast_notification_mode if prefs and prefs.toast_notification_mode in ['important', 'all'] else 'all') | tojson }}, notificationHistoryEnabled: {{ 1 if prefs and prefs.notification_history_enabled else 0 }}, notificationHistoryMode: {{ (prefs.notification_history_mode if prefs and prefs.notification_history_mode in ['important', 'all'] else 'important') | tojson }}, diskMonitorPaths: {{ (prefs.disk_monitor_paths_json or "[]") | safe }}, diskMonitorMode: {{ (prefs.disk_monitor_mode if prefs and prefs.disk_monitor_mode else "default") | tojson }}, diskMonitorSelectedPath: {{ (prefs.disk_monitor_selected_path if prefs and prefs.disk_monitor_selected_path else "") | tojson }}, diskMonitorOwnerLabel: {{ (prefs.disk_monitor_owner_label if prefs and prefs.disk_monitor_owner_label else "") | tojson }}, bootstrapTheme: {{ (prefs.bootstrap_theme if prefs and prefs.bootstrap_theme else 'default') | tojson }}, fontFamily: {{ (prefs.font_family if prefs and prefs.font_family else 'default') | tojson }}, footerItems: {{ (prefs.footer_items_json or '{}') | safe }}, footerOrder: {{ (prefs.footer_order_json or '[]') | safe }}, easterEggEnabled: {{ 1 if prefs and prefs.easter_egg_enabled else 0 }}, easterEggLoadingImageUrl: {{ (prefs.easter_egg_loading_image_url if prefs and prefs.easter_egg_loading_image_url else '') | tojson }}, easterEggClickImageUrl: {{ (prefs.easter_egg_click_image_url if prefs and prefs.easter_egg_click_image_url else '') | tojson }}, bootstrapThemes: {{ bootstrap_themes | tojson }}, bootstrapThemeUrls: { {% for key in bootstrap_themes.keys() %}{{ key | tojson }}: {{ bootstrap_theme_url(key) | tojson }}{% if not loop.last %}, {% endif %}{% endfor %} }, fontFamilies: {{ font_families | tojson }}, staticHash: {{ static_hash() | tojson }}, smartQueueTechnicalLabel: {{ smart_queue_label | tojson }}, smartQueueStalledLabel: {{ smart_queue_stalled_label | tojson }}, sidebarLabelsExpanded: {{ 1 if prefs and prefs.sidebar_labels_expanded else 0 }}, sidebarShortcutsExpanded: {{ 1 if prefs and prefs.sidebar_shortcuts_expanded else 0 }}, systemUsageChartMode: {{ (prefs.system_usage_chart_mode if prefs and prefs.system_usage_chart_mode else 'combined') | tojson }}, systemUsageChartExpanded: {{ 1 if prefs and prefs.system_usage_chart_expanded else 0 }}};</script>
+  <script>window.PYTORRENT = {{ bootstrap_config | tojson }};</script>
   <script type="module" src="{{ static_url('js/app.js') }}"></script>
 </body>
 

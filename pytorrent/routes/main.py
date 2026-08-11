@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 from urllib.parse import quote
 import queue
 import tempfile
@@ -11,7 +12,7 @@ from flask import Blueprint, render_template, Response, request, redirect, url_f
 from ..services.preferences import get_preferences, list_profiles, active_profile, get_profile, BOOTSTRAP_THEMES, FONT_FAMILIES
 from ..services import auth, pdf_preview_links, rtorrent, prometheus_metrics
 from ..config import PYTORRENT_TMP_DIR, SMART_QUEUE_LABEL, SMART_QUEUE_STALLED_LABEL, METRICS_PATH
-from ..services.frontend_assets import asset_path
+from ..services.frontend_assets import asset_path, bootstrap_css_path, static_hash
 from flask import current_app, send_from_directory
 
 bp = Blueprint("main", __name__)
@@ -20,6 +21,105 @@ bp = Blueprint("main", __name__)
 def _asset_url(key: str) -> str:
     path = asset_path(key)
     return path if path.startswith("http") else url_for("static", filename=path)
+
+
+def _bootstrap_json_value(value, fallback, expected_type):
+    # Note: Stored JSON preferences are normalized before they reach JavaScript so one malformed legacy value cannot break the whole page bootstrap.
+    parsed = value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return fallback
+    return parsed if isinstance(parsed, expected_type) else fallback
+
+
+def _bootstrap_static_url(filename: str) -> str:
+    path = Path(current_app.static_folder or "") / filename
+    try:
+        path.stat()
+        return url_for("static", filename=filename, v=static_hash(Path(current_app.static_folder or "")))
+    except OSError:
+        return url_for("static", filename=filename)
+
+
+def _bootstrap_theme_urls() -> dict[str, str]:
+    # Note: Theme URLs are serialized inside the same bootstrap payload as the remaining frontend configuration.
+    urls: dict[str, str] = {}
+    for key in BOOTSTRAP_THEMES.keys():
+        path = bootstrap_css_path(key)
+        urls[key] = path if path.startswith("http") else _bootstrap_static_url(path)
+    return urls
+
+
+def _frontend_bootstrap_config(prefs: dict, profile: dict | None, current_user: dict | None) -> dict:
+    # Note: Build one typed Python payload and serialize it once in Jinja instead of concatenating executable JavaScript fragments.
+    def flag(key: str, default: bool = False) -> int:
+        value = prefs.get(key)
+        if value is None:
+            value = default
+        return 1 if bool(value) else 0
+
+    def number(key: str, default: int) -> int:
+        try:
+            value = prefs.get(key)
+            return int(value) if value is not None else default
+        except (TypeError, ValueError):
+            return default
+
+    toast_mode = str(prefs.get("toast_notification_mode") or "all").strip().lower()
+    if toast_mode not in {"important", "all"}:
+        toast_mode = "all"
+    history_mode = str(prefs.get("notification_history_mode") or "important").strip().lower()
+    if history_mode not in {"important", "all"}:
+        history_mode = "important"
+
+    return {
+        "authEnabled": 1 if auth.enabled() else 0,
+        "authProvider": auth.provider(),
+        "externalAuth": 1 if auth.uses_external_provider() else 0,
+        "currentUser": current_user,
+        "activeProfile": profile.get("id") if profile else None,
+        "tableColumns": _bootstrap_json_value(prefs.get("table_columns_json"), {}, dict),
+        "torrentSort": _bootstrap_json_value(prefs.get("torrent_sort_json"), {}, dict),
+        "activeFilter": str(prefs.get("active_filter") or "all"),
+        "detailPanelHeight": number("detail_panel_height", 255),
+        "peersRefreshSeconds": number("peers_refresh_seconds", 0),
+        "portCheckEnabled": flag("port_check_enabled"),
+        "freeSpaceCheckEnabled": flag("free_space_check_enabled", True),
+        "interfaceScale": number("interface_scale", 80),
+        "torrentListFontSize": number("torrent_list_font_size", 12),
+        "compactTorrentListEnabled": flag("compact_torrent_list_enabled", True),
+        "titleSpeedEnabled": flag("title_speed_enabled", True),
+        "trackerFaviconsEnabled": flag("tracker_favicons_enabled", True),
+        "reverseDnsEnabled": flag("reverse_dns_enabled", True),
+        "automationToastsEnabled": flag("automation_toasts_enabled", True),
+        "smartQueueToastsEnabled": flag("smart_queue_toasts_enabled", True),
+        "toastNotificationMode": toast_mode,
+        "notificationHistoryEnabled": flag("notification_history_enabled"),
+        "notificationHistoryMode": history_mode,
+        "diskMonitorPaths": _bootstrap_json_value(prefs.get("disk_monitor_paths_json"), [], list),
+        "diskMonitorMode": str(prefs.get("disk_monitor_mode") or "default"),
+        "diskMonitorSelectedPath": str(prefs.get("disk_monitor_selected_path") or ""),
+        "diskMonitorOwnerLabel": str(prefs.get("disk_monitor_owner_label") or ""),
+        "bootstrapTheme": str(prefs.get("bootstrap_theme") or "default"),
+        "fontFamily": str(prefs.get("font_family") or "default"),
+        "footerItems": _bootstrap_json_value(prefs.get("footer_items_json"), {}, dict),
+        "footerOrder": _bootstrap_json_value(prefs.get("footer_order_json"), [], list),
+        "easterEggEnabled": flag("easter_egg_enabled"),
+        "easterEggLoadingImageUrl": str(prefs.get("easter_egg_loading_image_url") or ""),
+        "easterEggClickImageUrl": str(prefs.get("easter_egg_click_image_url") or ""),
+        "bootstrapThemes": BOOTSTRAP_THEMES,
+        "bootstrapThemeUrls": _bootstrap_theme_urls(),
+        "fontFamilies": FONT_FAMILIES,
+        "staticHash": static_hash(Path(current_app.static_folder or "")),
+        "smartQueueTechnicalLabel": SMART_QUEUE_LABEL,
+        "smartQueueStalledLabel": SMART_QUEUE_STALLED_LABEL,
+        "sidebarLabelsExpanded": flag("sidebar_labels_expanded"),
+        "sidebarShortcutsExpanded": flag("sidebar_shortcuts_expanded"),
+        "systemUsageChartMode": str(prefs.get("system_usage_chart_mode") or "combined"),
+        "systemUsageChartExpanded": flag("system_usage_chart_expanded"),
+    }
 
 
 def _attachment_headers(download_name: str, content_type: str = "application/octet-stream", disposition: str = "attachment") -> dict:
@@ -209,19 +309,23 @@ def logout():
 @bp.get("/")
 def index():
     prefs = get_preferences()
+    profile = active_profile()
+    current_user = auth.current_user()
+    bootstrap_config = _frontend_bootstrap_config(prefs, profile, current_user)
     return render_template(
         "index.html",
         prefs=prefs,
         profiles=list_profiles(),
-        active_profile=active_profile(),
+        active_profile=profile,
         bootstrap_themes=BOOTSTRAP_THEMES,
         font_families=FONT_FAMILIES,
         auth_enabled=auth.enabled(),
         auth_provider=auth.provider(),
         external_auth=auth.uses_external_provider(),
-        current_user=auth.current_user(),
+        current_user=current_user,
         smart_queue_label=SMART_QUEUE_LABEL,
         smart_queue_stalled_label=SMART_QUEUE_STALLED_LABEL,
+        bootstrap_config=bootstrap_config,
     )
 
 

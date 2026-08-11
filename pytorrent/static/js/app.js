@@ -54,7 +54,7 @@ const moduleImportSpecs = [
   ['./plannerSettings.js', 'plannerSettingsSource'],
   ['./plannerPreviewHistory.js', 'plannerPreviewHistorySource'],
   ['./plannerActions.js', 'plannerActionsSource'],
-  ['./smartViews.js', 'smartViewsSource'],
+  ['./searchHealth.js', 'searchHealthSource'],
   ['./notificationCenter.js', 'notificationCenterSource'],
   ['./diagnosticsDashboard.js', 'diagnosticsDashboardSource'],
   ['./dashboardTools.js', 'dashboardToolsSource'],

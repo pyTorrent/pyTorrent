@@ -1990,9 +1990,6 @@
             },
             "type": "object"
           },
-          "mobileSmartFiltersEnabled": {
-            "type": "boolean"
-          },
           "shown": {
             "items": {
               "type": "string"
@@ -6335,7 +6332,7 @@
     },
     "/api/preferences/table-columns/recommended": {
       "post": {
-        "description": "Applies the backend-owned recommended torrent table layout, including desktop visibility, mobile visibility, smart mobile filters and column widths.",
+        "description": "Applies the backend-owned recommended torrent table layout, including desktop visibility, mobile visibility and column widths.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"

@@ -58,7 +58,7 @@ Full installer documentation: [`scripts/INSTALL.md`](scripts/INSTALL.md).
 - RSS tools, automation rules and cleanup helpers.
 - Torrent details: general data, files, peers, trackers and logs.
 - Peer GeoIP lookup with MaxMind GeoLite2 database support.
-- Dashboard, smart views, global search and notification center.
+- Dashboard, global search, torrent health and notification center.
 - OpenAPI docs available from the app.
 - Offline frontend assets support for self-hosted deployments.
 
