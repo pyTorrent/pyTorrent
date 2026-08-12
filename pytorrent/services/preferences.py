@@ -2,10 +2,14 @@ from __future__ import annotations
 import json
 from ..db import connect, utcnow, default_user_id
 from . import auth
-from .frontend_assets import BOOTSTRAP_THEME_LABELS
+from .frontend_assets import BOOTSTRAP_THEME_LABELS, PYTORRENT_APP_THEMES
 from .deletion import purge_profile
 
 BOOTSTRAP_THEMES = BOOTSTRAP_THEME_LABELS
+PYTORRENT_THEMES = {
+    "default-beta": "PyTorrent Default (Beta)",
+    **{f"pytorrent-{key}": label.replace("pyTorrent", "PyTorrent") for key, label in PYTORRENT_APP_THEMES.items()},
+}
 
 UI_FRAMEWORKS = {
     "bootstrap": "Bootstrap",
@@ -628,6 +632,7 @@ def save_preferences(data: dict, user_id: int | None = None, profile_id: int | N
     profile_id = profile_id or _active_profile_id_for_user(user_id)
     allowed_theme = data.get("theme") if data.get("theme") in {"light", "dark"} else None
     bootstrap_theme = data.get("bootstrap_theme") if data.get("bootstrap_theme") in BOOTSTRAP_THEMES else None
+    pytorrent_theme = data.get("pytorrent_theme") if data.get("pytorrent_theme") in PYTORRENT_THEMES else None
     ui_framework = data.get("ui_framework") if data.get("ui_framework") in UI_FRAMEWORKS else None
     font_family = data.get("font_family") if data.get("font_family") in FONT_FAMILIES else None
     title_speed_enabled = data.get("title_speed_enabled")
@@ -647,6 +652,7 @@ def save_preferences(data: dict, user_id: int | None = None, profile_id: int | N
     interface_scale = data.get("interface_scale")
     torrent_list_font_size = data.get("torrent_list_font_size")
     compact_torrent_list_enabled = data.get("compact_torrent_list_enabled")
+    pytorrent_animations_enabled = data.get("pytorrent_animations_enabled")
     detail_panel_height = data.get("detail_panel_height")
     default_download_path = data.get("default_download_path")
     download_location_mode = data.get("download_location_mode")
@@ -681,6 +687,8 @@ def save_preferences(data: dict, user_id: int | None = None, profile_id: int | N
             conn.execute("UPDATE user_preferences SET theme=?, updated_at=? WHERE user_id=?", (allowed_theme, now, user_id))
         if bootstrap_theme:
             conn.execute("UPDATE user_preferences SET bootstrap_theme=?, updated_at=? WHERE user_id=?", (bootstrap_theme, now, user_id))
+        if pytorrent_theme:
+            conn.execute("UPDATE user_preferences SET pytorrent_theme=?, updated_at=? WHERE user_id=?", (pytorrent_theme, now, user_id))
         if ui_framework:
             # Note: Bootstrap remains the safe default while the standalone PyTorrent CSS framework is developed as an opt-in beta.
             conn.execute("UPDATE user_preferences SET ui_framework=?, updated_at=? WHERE user_id=?", (ui_framework, now, user_id))
@@ -738,6 +746,9 @@ def save_preferences(data: dict, user_id: int | None = None, profile_id: int | N
         if compact_torrent_list_enabled is not None:
             # Note: Compact torrent list is a visual-only preference for desktop and mobile list density.
             conn.execute("UPDATE user_preferences SET compact_torrent_list_enabled=?, updated_at=? WHERE user_id=?", (1 if compact_torrent_list_enabled else 0, now, user_id))
+        if pytorrent_animations_enabled is not None:
+            # Note: Motion is a PyTorrent-framework preference; Bootstrap keeps its native behavior.
+            conn.execute("UPDATE user_preferences SET pytorrent_animations_enabled=?, updated_at=? WHERE user_id=?", (1 if pytorrent_animations_enabled else 0, now, user_id))
         if detail_panel_height is not None:
             try:
                 height = int(detail_panel_height or 255)

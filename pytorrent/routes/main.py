@@ -9,7 +9,7 @@ import threading
 import zipfile
 
 from flask import Blueprint, render_template, Response, request, redirect, url_for, abort, send_file, stream_with_context
-from ..services.preferences import get_preferences, list_profiles, active_profile, get_profile, BOOTSTRAP_THEMES, UI_FRAMEWORKS, FONT_FAMILIES
+from ..services.preferences import get_preferences, list_profiles, active_profile, get_profile, BOOTSTRAP_THEMES, PYTORRENT_THEMES, UI_FRAMEWORKS, FONT_FAMILIES
 from ..services import auth, pdf_preview_links, rtorrent, prometheus_metrics
 from ..config import PYTORRENT_TMP_DIR, SMART_QUEUE_LABEL, SMART_QUEUE_STALLED_LABEL, METRICS_PATH
 from ..services.frontend_assets import asset_path, bootstrap_css_path, static_hash
@@ -103,6 +103,8 @@ def _frontend_bootstrap_config(prefs: dict, profile: dict | None, current_user: 
         "diskMonitorSelectedPath": str(prefs.get("disk_monitor_selected_path") or ""),
         "diskMonitorOwnerLabel": str(prefs.get("disk_monitor_owner_label") or ""),
         "bootstrapTheme": str(prefs.get("bootstrap_theme") or "default"),
+        "pytorrentTheme": str(prefs.get("pytorrent_theme") or "default-beta"),
+        "pytorrentAnimationsEnabled": flag("pytorrent_animations_enabled", True),
         "uiFramework": str(prefs.get("ui_framework") or "bootstrap"),
         "fontFamily": str(prefs.get("font_family") or "default"),
         "footerItems": _bootstrap_json_value(prefs.get("footer_items_json"), {}, dict),
@@ -111,6 +113,7 @@ def _frontend_bootstrap_config(prefs: dict, profile: dict | None, current_user: 
         "easterEggLoadingImageUrl": str(prefs.get("easter_egg_loading_image_url") or ""),
         "easterEggClickImageUrl": str(prefs.get("easter_egg_click_image_url") or ""),
         "bootstrapThemes": BOOTSTRAP_THEMES,
+        "pytorrentThemes": PYTORRENT_THEMES,
         "bootstrapThemeUrls": _bootstrap_theme_urls(),
         "fontFamilies": FONT_FAMILIES,
         "staticHash": static_hash(Path(current_app.static_folder or "")),
@@ -319,6 +322,7 @@ def index():
         profiles=list_profiles(),
         active_profile=profile,
         bootstrap_themes=BOOTSTRAP_THEMES,
+        pytorrent_themes=PYTORRENT_THEMES,
         ui_frameworks=UI_FRAMEWORKS,
         font_families=FONT_FAMILIES,
         auth_enabled=auth.enabled(),

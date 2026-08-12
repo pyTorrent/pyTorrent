@@ -1473,6 +1473,14 @@
             ],
             "type": "string"
           },
+          "pytorrent_theme": {
+            "description": "Theme used only by the PyTorrent UI framework.",
+            "type": "string"
+          },
+          "pytorrent_animations_enabled": {
+            "description": "Enable lightweight PyTorrent UI motion for modals, menus, tabs and controls.",
+            "type": "boolean"
+          },
           "default_download_path": {
             "description": "User-level default download path. Empty value falls back to the active rTorrent profile default.",
             "type": "string"

@@ -2,6 +2,8 @@
 <html lang="en" data-bs-theme="{{ prefs.theme if prefs else 'dark' }}"
   data-ui-framework="{{ prefs.ui_framework if prefs and prefs.ui_framework else 'bootstrap' }}"
   data-bootstrap-skin="{{ prefs.bootstrap_theme if prefs and prefs.bootstrap_theme else 'default' }}"
+  data-pytorrent-theme="{{ prefs.pytorrent_theme if prefs and prefs.pytorrent_theme else 'default-beta' }}"
+  data-pytorrent-motion="{% if not prefs or prefs.pytorrent_animations_enabled %}on{% else %}off{% endif %}"
   data-app-font="{{ prefs.font_family if prefs and prefs.font_family else 'default' }}"
   style="--ui-scale: {{ ((prefs.interface_scale if prefs and prefs.interface_scale else 80) / 100) }};">
 
@@ -11,7 +13,7 @@
   <title>pyTorrent</title>
   <link rel="icon" href="{{ static_url('favicon.svg') }}" type="image/svg+xml">
   <link rel="shortcut icon" href="{{ static_url('favicon.svg') }}" type="image/svg+xml">
-  <!-- Note: Bootstrap CSS remains the default; PyTorrent (Beta) can replace only the CSS layer while Bootstrap JS stays temporarily for component behavior. -->
+  <!-- Bootstrap remains the default UI. In PyTorrent mode both Bootstrap CSS and Bootstrap JS are replaced; existing Bootstrap-compatible markup is kept as a migration contract. -->
   <link id="bootstrapBaseStylesheet" href="{{ bootstrap_theme_url('default') }}" rel="stylesheet"{% if prefs and prefs.ui_framework == 'pytorrent' %} disabled{% endif %}>
   <link id="bootstrapThemeStylesheet" href="{{ bootstrap_theme_url(prefs.bootstrap_theme if prefs else 'default') }}"
     rel="stylesheet"{% if prefs and prefs.ui_framework == 'pytorrent' %} disabled{% endif %}>
@@ -546,47 +548,73 @@
     </div>
   </div>
 
-  <!-- Note: Shared path picker is required by Move and by every browse-path button; styles are reused unchanged. -->
-  <div class="modal fade" id="pathModal" tabindex="-1" aria-labelledby="pathModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+  <!-- Shared path picker is used by Move and every browse-path action. -->
+  <div class="modal fade path-picker-modal" id="pathModal" tabindex="-1" aria-labelledby="pathModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
       <div class="modal-content">
-        <div class="modal-header">
-          <h5 id="pathModalLabel" class="modal-title"><i class="fa-solid fa-folder-open"></i> Select path</h5>
+        <div class="modal-header path-picker-header">
+          <div>
+            <div class="path-picker-kicker">Storage browser</div>
+            <h5 id="pathModalLabel" class="modal-title"><i class="fa-solid fa-folder-open"></i> Choose location</h5>
+            <div class="path-picker-subtitle">Select the exact directory used by this action.</div>
+          </div>
           <button class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-        <div class="modal-body">
-          <div class="input-group input-group-sm mb-3">
-            <button id="pathUpBtn" class="btn btn-outline-secondary" type="button" title="Parent directory"><i
-                class="fa-solid fa-arrow-up"></i></button>
-            <input id="pathCurrent" class="form-control" autocomplete="off" placeholder="/path/to/downloads">
-            <button id="pathGoBtn" class="btn btn-outline-primary" type="button"><i class="fa-solid fa-arrow-right"></i>
-              Go</button>
-            <button id="pathReloadBtn" class="btn btn-outline-secondary" type="button" title="Reload"><i
-                class="fa-solid fa-rotate"></i></button>
-          </div>
-          <div id="moveOptions" class="move-options mb-3 d-none">
-            <div class="form-check form-switch">
-              <input id="moveDataPhysical" class="form-check-input" type="checkbox" checked>
-              <label class="form-check-label" for="moveDataPhysical">Move data files</label>
+        <div class="modal-body path-picker-body">
+          <section class="path-location-card" aria-label="Current location">
+            <div class="path-location-heading">
+              <div><span class="path-field-label">Current location</span><small>Type a path directly or navigate with the shortcuts.</small></div>
+              <div class="path-quick-actions">
+                <button id="pathDefaultBtn" class="btn btn-sm btn-outline-secondary" type="button"><i class="fa-solid fa-house"></i> Default</button>
+                <button id="pathRootBtn" class="btn btn-sm btn-outline-secondary" type="button"><span class="path-root-symbol">/</span> Root</button>
+                <button id="pathUpBtn" class="btn btn-sm btn-outline-secondary" type="button" title="Parent directory"><i class="fa-solid fa-arrow-up"></i> Up</button>
+                <button id="pathReloadBtn" class="btn btn-sm btn-outline-secondary" type="button" title="Reload"><i class="fa-solid fa-rotate"></i> Refresh</button>
+              </div>
             </div>
-            <div class="form-check form-switch">
-              <input id="moveRecheck" class="form-check-input" type="checkbox" checked>
-              <label class="form-check-label" for="moveRecheck">Recheck after move</label>
+            <div class="input-group path-picker-toolbar">
+              <span class="input-group-text"><i class="fa-solid fa-location-dot"></i></span>
+              <input id="pathCurrent" class="form-control" autocomplete="off" placeholder="/path/to/downloads" aria-label="Current path">
+              <button id="pathGoBtn" class="btn btn-primary" type="button"><i class="fa-solid fa-arrow-right"></i> Open</button>
+            </div>
+          </section>
+
+          <div id="moveOptions" class="move-options path-move-options d-none">
+            <div class="path-options-title">Move options</div>
+            <div class="path-options-switches">
+              <div class="form-check form-switch">
+                <input id="moveDataPhysical" class="form-check-input" type="checkbox" checked>
+                <label class="form-check-label" for="moveDataPhysical">Move data files</label>
+              </div>
+              <div class="form-check form-switch">
+                <input id="moveRecheck" class="form-check-input" type="checkbox" checked>
+                <label class="form-check-label" for="moveRecheck">Recheck after move</label>
+              </div>
             </div>
           </div>
-          <div class="path-inline-create mb-3">
-            <input id="pathCreateName" class="form-control form-control-sm" autocomplete="off"
-              placeholder="New folder name">
-            <button id="pathCreateBtn" class="btn btn-sm btn-outline-primary" type="button"><i
-                class="fa-solid fa-folder-plus"></i> Create</button>
-          </div>
-          <div id="pathList" class="path-list">
-            <div class="p-3 text-muted">No path loaded.</div>
-          </div>
+
+          <section class="path-create-card" aria-label="Create folder">
+            <div><span class="path-field-label">New folder</span><small>Create it inside the currently open location.</small></div>
+            <div class="path-inline-create">
+              <input id="pathCreateName" class="form-control" autocomplete="off" placeholder="Folder name">
+              <button id="pathCreateBtn" class="btn btn-outline-primary" type="button"><i class="fa-solid fa-folder-plus"></i> Create folder</button>
+            </div>
+          </section>
+
+          <section class="path-browser-panel" aria-label="Folders">
+            <div class="path-browser-panel-heading">
+              <div><strong>Folders</strong><span>Open a folder to browse deeper. Search filters this location.</span></div>
+            </div>
+            <div id="pathList" class="path-list">
+              <div class="path-empty-state">No path loaded.</div>
+            </div>
+          </section>
         </div>
-        <div class="modal-footer">
-          <button class="btn btn-outline-secondary" data-bs-dismiss="modal"><i class="fa-solid fa-xmark"></i> Cancel</button>
-          <button id="pathSelectBtn" class="btn btn-primary"><i class="fa-solid fa-check"></i> Select</button>
+        <div class="modal-footer path-picker-footer">
+          <div class="path-selection-summary"><span>Selected folder</span><code id="pathSelectionPreview">/</code></div>
+          <div class="path-picker-footer-actions">
+            <button class="btn btn-outline-secondary" data-bs-dismiss="modal" type="button">Cancel</button>
+            <button id="pathSelectBtn" class="btn btn-primary" type="button"><i class="fa-solid fa-check"></i> Use this folder</button>
+          </div>
         </div>
       </div>
     </div>
@@ -1033,11 +1061,12 @@
                         <div class="preferences-grid"><label class="form-field framework-preference-field"><span>UI framework</span><select
                               id="uiFrameworkSelect" class="form-select form-select-sm">{% for value, label in
                               ui_frameworks.items() %}<option value="{{ value }}" {% if (prefs and prefs.ui_framework==value) or (not prefs and value=='bootstrap') %}selected{% endif %}>{{ label }}</option>{% endfor
-                              %}</select><small id="uiFrameworkHelp">Bootstrap is the default. PyTorrent (Beta) is an independent CSS layer designed for gradual replacement.</small></label><label id="bootstrapThemeField" class="form-field"><span>Theme</span><select
-                              id="bootstrapThemeSelect" class="form-select form-select-sm">{% for value, label in
+                              %}</select><small id="uiFrameworkHelp">Bootstrap is the compatibility framework. PyTorrent (Beta) uses its own lightweight CSS and JavaScript runtime with a Tailwind-inspired default palette.</small></label><label id="uiThemeField" class="form-field"><span>Theme</span><select
+                              id="uiThemeSelect" class="form-select form-select-sm">{% if prefs and prefs.ui_framework == 'pytorrent' %}{% for value, label in
+                              pytorrent_themes.items() %}<option value="{{ value }}" {% if prefs.pytorrent_theme==value %}selected{% endif %}>{{ label }}</option>{% endfor %}{% else %}{% for value, label in
                               bootstrap_themes.items() %}<option value="{{ value }}" {% if prefs and
-                                prefs.bootstrap_theme==value %}selected{% endif %}>{{ label }}</option>{% endfor
-                              %}</select><small id="bootstrapThemeHelp">The selected theme is loaded natively by Bootstrap.</small></label><label class="form-field"><span>Font</span><select
+                                prefs.bootstrap_theme==value %}selected{% endif %}>{{ label }}</option>{% endfor %}{% endif
+                              %}</select><small id="uiThemeHelp">The selected theme is loaded natively by Bootstrap.</small></label><label class="form-field"><span>Font</span><select
                               id="fontFamilySelect" class="form-select form-select-sm">{% for value, label in
                               font_families.items() %}<option value="{{ value }}" {% if prefs and
                                 prefs.font_family==value %}selected{% endif %}>{{ label }}</option>{% endfor
@@ -1057,7 +1086,10 @@
                               id="compactTorrentListEnabled" class="form-check-input" type="checkbox" {% if not prefs or
                               prefs.compact_torrent_list_enabled %}checked{% endif %}><span
                               class="form-check-label">Compact torrent list</span><small>Uses lower rows and smaller
-                              list elements on desktop and mobile so more torrents fit on screen.</small></label></div>
+                              list elements on desktop and mobile so more torrents fit on screen.</small></label><label id="pytorrentAnimationsField"
+                            class="browser-speed-pref form-check form-switch{% if not prefs or prefs.ui_framework != 'pytorrent' %} d-none{% endif %}"><input
+                              id="pytorrentAnimationsEnabled" class="form-check-input" type="checkbox" {% if not prefs or prefs.pytorrent_animations_enabled %}checked{% endif %}><span
+                              class="form-check-label">Interface animations</span><small>PyTorrent only. Uses short, lightweight motion for modals, menus, tabs and controls. Disable it for instant transitions.</small></label></div>
                       </div>
                     </div>
                     <div id="prefPane-browser" class="tab-pane fade " role="tabpanel">
@@ -2171,49 +2203,44 @@
   <div class="modal fade" id="aboutModal" tabindex="-1" aria-labelledby="aboutModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
       <div class="modal-content about-modal-content">
-        <div class="modal-header">
-          <h5 id="aboutModalLabel" class="modal-title"><i class="fa-solid fa-robot"></i> About pyTorrent</h5>
+        <div class="modal-header about-modal-header">
+          <h5 id="aboutModalLabel" class="modal-title"><i class="fa-solid fa-circle-info"></i> About pyTorrent</h5>
           <button class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-        <div class="modal-body">
-          <div class="about-hero">
-            <div class="about-logo"><i class="fa-solid fa-robot"></i></div>
-            <div>
+        <div class="modal-body about-modal-body">
+          <section class="about-hero">
+            <div class="about-logo" aria-hidden="true"><i class="fa-solid fa-robot"></i></div>
+            <div class="about-hero-copy">
+              <div class="about-eyebrow">rTorrent web interface</div>
               <h6>pyTorrent</h6>
-              <p>Web panel for rTorrent management, queue control and more!</p>
+              <p>A focused control panel for torrents, automation, queue management and system diagnostics.</p>
+              <div class="about-tags" aria-label="Project highlights">
+                <span><i class="fa-solid fa-code-branch"></i> Open source</span>
+                <span><i class="fa-solid fa-shield-halved"></i> AGPL-3.0</span>
+                <span><i class="fa-solid fa-bolt"></i> Realtime UI</span>
+              </div>
             </div>
+          </section>
+
+          <div class="about-card-grid">
+            <section class="about-card">
+              <div><b>Interface</b><span>{{ 'PyTorrent UI runtime' if prefs and prefs.ui_framework == 'pytorrent' else 'Bootstrap 5 runtime' }}, JavaScript, Chart.js and Font Awesome.</span></div>
+            </section>
+            <section class="about-card">
+              <div><b>Backend</b><span>Python, Flask, Flask-SocketIO and SQLite, with rTorrent over SCGI.</span></div>
+            </section>
+            <section class="about-card">
+              <div><b>Operations</b><span>Smart Queue, automation rules, RSS, traffic history, health checks and system status.</span></div>
+            </section>
           </div>
+
           <dl class="about-list">
             <div>
               <dt>Repository</dt>
-              <dd><a href="https://github.com/pyTorrent/pyTorrent" target="_blank"
-                  rel="noopener noreferrer">https://github.com/pyTorrent/pyTorrent</a></dd>
+              <dd><a class="about-repository-link" href="https://github.com/pyTorrent/pyTorrent" target="_blank" rel="noopener noreferrer"><i class="fa-brands fa-github"></i><span>github.com/pyTorrent/pyTorrent</span><i class="fa-solid fa-arrow-up-right-from-square"></i></a></dd>
             </div>
-            <div>
-              <dt>License</dt>
-              <dd>AGPL-3.0</dd>
-            </div>
-            <div>
-              <dt>Author</dt>
-              <dd>zdzichu6969</dd>
-            </div>
-            <div>
-              <dt>Backend</dt>
-              <dd>Python, Flask, Flask-SocketIO, SQLite</dd>
-            </div>
-            <div>
-              <dt>Frontend</dt>
-              <dd>Bootstrap, JavaScript, Chart.js, Font Awesome</dd>
-            </div>
-            <div>
-              <dt>Runtime</dt>
-              <dd>Gunicorn, systemd, rTorrent over SCGI</dd>
-            </div>
-            <div>
-              <dt>Features</dt>
-              <dd>Magnet and torrent upload, file priorities, labels, ratio groups, Smart Queue, automation rules, RSS,
-                traffic charts, port checker, system status and more</dd>
-            </div>
+            <div><dt>Author</dt><dd>zdzichu6969</dd></div>
+            <div><dt>Runtime</dt><dd>Gunicorn, systemd, rTorrent over SCGI</dd></div>
           </dl>
         </div>
       </div>
@@ -2284,7 +2311,11 @@
 
   <div id="toastHost" class="toast-host"></div>
   <script src="{{ frontend_asset_url('socket_io_js') }}"></script>
+  {% if prefs and prefs.ui_framework == 'pytorrent' %}
+  <script src="{{ static_url('js/pytorrentUi.js') }}"></script>
+  {% else %}
   <script src="{{ frontend_asset_url('bootstrap_js') }}"></script>
+  {% endif %}
   <!-- Note: Shared action feedback keeps asynchronous buttons consistent without changing individual handlers. -->
   <script src="{{ static_url('js/actionFeedback.js') }}"></script>
   <!-- Note: Server bootstrap preferences must be initialized before app.js starts. -->

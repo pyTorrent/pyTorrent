@@ -46,6 +46,8 @@ CREATE TABLE IF NOT EXISTS user_preferences (
   theme TEXT DEFAULT 'dark',
   bootstrap_theme TEXT DEFAULT 'default',
   ui_framework TEXT DEFAULT 'bootstrap',
+  pytorrent_theme TEXT DEFAULT 'default-beta',
+  pytorrent_animations_enabled INTEGER DEFAULT 1,
   font_family TEXT DEFAULT 'default',
   active_rtorrent_id INTEGER,
   keyboard_json TEXT,
