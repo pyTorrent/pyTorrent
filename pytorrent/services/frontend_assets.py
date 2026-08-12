@@ -175,8 +175,17 @@ def bootstrap_css_path(theme: str | None = None) -> str:
 def required_offline_paths() -> list[Path]:
     paths = [LIBS_DIR.parent / item["local"] for item in STATIC_ASSETS.values()]
     paths.extend(LIBS_DIR.parent / bootstrap_css_asset(theme)["local"] for theme in BOOTSTRAP_THEMES)
-    # Note: Modern custom themes share one local foundation file to avoid duplicated component rules.
-    paths.append(LIBS_DIR / "pytorrent-themes/modern-foundation.css")
+    # Bundled PyTorrent UI assets are part of the repository rather than downloaded
+    # from a CDN, but the default offline installer must still fail fast if a clone
+    # is incomplete.
+    paths.extend([
+        LIBS_DIR.parent / "pytorrent.css",
+        LIBS_DIR / "pytorrent-ui/pytorrentUi.js",
+        LIBS_DIR / "pytorrent-ui/themes/default.css",
+        *(LIBS_DIR / f"pytorrent-ui/themes/{theme}.css" for theme in PYTORRENT_FRAMEWORK_EXTRA_THEMES),
+        LIBS_DIR / "pytorrent-themes/modern-foundation.css",
+        LIBS_DIR / "pytorrent-themes/classic-foundation.css",
+    ])
     return paths
 
 
@@ -203,7 +212,7 @@ def validate_offline_assets() -> None:
         extra = "" if len(missing) <= 20 else f"\n- ... and {len(missing) - 20} more"
         raise RuntimeError(
             "PYTORRENT_USE_OFFLINE_LIBS=true, but frontend libraries are missing. "
-            "Run: ./scripts/download_frontend_libs.py or ./install.sh\n"
+            "Run: python scripts/download_frontend_libs.py\n"
             f"Missing files:\n{preview}{extra}"
         )
 

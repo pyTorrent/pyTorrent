@@ -84,8 +84,11 @@ Clone the repository and run the local development installer:
 ```bash
 git clone https://github.com/pyTorrent/pyTorrent
 cd pyTorrent
-./install.sh
+python3 -m venv .venv
 . .venv/bin/activate
+pip install -r requirements.txt
+python scripts/download_frontend_libs.py
+cp .env.example .env
 python app.py
 ```
 
