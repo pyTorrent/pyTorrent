@@ -1431,13 +1431,6 @@ html[data-ui-framework="pytorrent"] .row>* {
   padding-left: 0.5rem;
 }
 
-@media (min-width: 768px) {
-  html[data-ui-framework="pytorrent"] .col-md-6 {
-    flex: 0 0 auto;
-    width: 50%;
-  }
-}
-
 html[data-ui-framework="pytorrent"] .d-none {
   display: none !important;
 }
@@ -1547,10 +1540,6 @@ html[data-ui-framework="pytorrent"] .shadow {
 html[data-ui-framework="pytorrent"] .small,
 html[data-ui-framework="pytorrent"] small {
   font-size: 0.82em;
-}
-
-html[data-ui-framework="pytorrent"] .fw-bold {
-  font-weight: 700 !important;
 }
 
 html[data-ui-framework="pytorrent"] .text-muted,
