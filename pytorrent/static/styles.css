@@ -4528,10 +4528,6 @@ body.sorting-preference-cards * {
   }
 }
 
-.about-modal-content {
-  overflow: hidden;
-}
-
 .about-nav-btn {
   opacity: 0.82;
 }
@@ -4541,10 +4537,6 @@ body.sorting-preference-cards * {
   opacity: 1;
 }
 
-.about-modal-header {
-  background: var(--bs-secondary-bg);
-}
-
 .about-modal-body {
   display: grid;
   gap: 0.9rem;
@@ -4552,9 +4544,9 @@ body.sorting-preference-cards * {
 
 .about-hero {
   align-items: center;
-  background: linear-gradient(135deg, var(--bs-primary-bg-subtle), var(--bs-body-bg) 68%);
-  border: 1px solid color-mix(in srgb, var(--bs-primary) 24%, var(--bs-border-color));
-  border-radius: 0.9rem;
+  background: var(--bs-tertiary-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.75rem;
   display: grid;
   gap: 1rem;
   grid-template-columns: auto minmax(0, 1fr);
@@ -4565,7 +4557,6 @@ body.sorting-preference-cards * {
   align-items: center;
   background: var(--bs-primary);
   border-radius: 0.8rem;
-  box-shadow: none;
   color: #fff;
   display: inline-flex;
   font-size: 1.35rem;
@@ -4595,7 +4586,6 @@ body.sorting-preference-cards * {
 .about-hero h6 {
   font-size: 1.15rem;
   font-weight: 800;
-  text-shadow: none;
 }
 
 .about-hero p {
@@ -4631,27 +4621,11 @@ body.sorting-preference-cards * {
 }
 
 .about-card {
-  align-items: flex-start;
   background: var(--bs-tertiary-bg);
   border: 1px solid var(--bs-border-color);
   border-radius: 0.75rem;
-  display: flex;
-  gap: 0.6rem;
   min-width: 0;
   padding: 0.75rem;
-}
-
-.about-card-icon {
-  align-items: center;
-  background: var(--bs-body-bg);
-  border: 1px solid var(--bs-border-color);
-  border-radius: 0.55rem;
-  color: var(--bs-primary);
-  display: inline-flex;
-  flex: 0 0 auto;
-  height: 2rem;
-  justify-content: center;
-  width: 2rem;
 }
 
 .about-card b,
@@ -4729,7 +4703,7 @@ body.sorting-preference-cards * {
 
   .about-list div {
     align-items: start;
-    gap: 0.18rem;
+    gap: 0.15rem;
     grid-template-columns: 1fr;
   }
 }
@@ -4804,11 +4778,6 @@ body.sorting-preference-cards * {
 }
 
 @media (max-width: 576px) {
-  .about-list div {
-    grid-template-columns: 1fr;
-    gap: 0.15rem;
-  }
-
   .error-actions .btn {
     width: 100%;
   }
@@ -7479,25 +7448,10 @@ body,
   overflow-x: hidden;
 }
 
-/* App modal widths stay consistent while Bootstrap still handles full-screen mobile breakpoints. */
+/* App modal widths stay consistent across the wide dialog variants. */
 .app-modal-dialog,
 .modal-dialog.modal-xl {
   --bs-modal-width: min(1140px, calc(var(--ui-scaled-viewport-width) - 2rem));
-}
-
-@media (max-width: 575.98px) {
-  .app-modal-dialog {
-    --bs-modal-width: var(--ui-scaled-viewport-width);
-  }
-
-  .modal-dialog.modal-fullscreen-sm-down {
-    height: var(--ui-scaled-viewport-height);
-    width: var(--ui-scaled-viewport-width);
-  }
-
-  .modal-dialog.modal-fullscreen-sm-down .modal-content {
-    height: 100%;
-  }
 }
 
 .file-row-actions {
@@ -9237,10 +9191,6 @@ body.compact-torrent-list .mobile-progress .torrent-progress {
 
 
 @media (max-width: 576px) {
-  .path-picker-modal .modal-dialog {
-    margin: 0.5rem;
-  }
-
   .path-list {
     height: min(46dvh, 360px);
   }
@@ -9676,11 +9626,6 @@ body.sorting-preference-cards .footer-pref-card {
 }
 
 @media (max-width: 760px) {
-  .path-picker-modal .modal-dialog {
-    margin: 0.5rem;
-    width: calc(var(--ui-scaled-viewport-width) - 1rem);
-  }
-
   .path-location-heading,
   .path-picker-footer {
     align-items: stretch;
@@ -9960,10 +9905,6 @@ html[data-ui-framework="pytorrent"] .speed-limit-presets .btn {
 }
 
 @media (max-width: 767.98px) {
-  .speed-limit-modal .modal-dialog {
-    width: auto;
-  }
-
   .speed-limit-grid {
     grid-template-columns: 1fr;
   }
@@ -10000,5 +9941,17 @@ html[data-ui-framework="pytorrent"] .speed-limit-presets .btn {
   .speed-limit-footer-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Mobile modal contract ------------------------------------------------------
+ * Every dialog keeps the same framed treatment on phones. Width is calculated
+ * from the inverse-scaled viewport because .modal-dialog is zoomed with the UI.
+ */
+@media (max-width: 575.98px) {
+  .modal .modal-dialog {
+    width: calc(var(--ui-scaled-viewport-width) - 1.3rem);
+    max-width: none;
+    margin: 0.65rem;
   }
 }

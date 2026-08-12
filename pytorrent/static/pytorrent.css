@@ -1600,19 +1600,6 @@ html[data-ui-framework="pytorrent"] .visually-hidden {
   html[data-ui-framework="pytorrent"] .modal-dialog {
     margin: 0.65rem;
   }
-
-  html[data-ui-framework="pytorrent"] .modal-fullscreen-sm-down {
-    width: 100vw;
-    max-width: none;
-    height: 100%;
-    margin: 0;
-  }
-
-  html[data-ui-framework="pytorrent"] .modal-fullscreen-sm-down .modal-content {
-    height: 100%;
-    border: 0;
-    border-radius: 0;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
