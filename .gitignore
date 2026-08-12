@@ -42,6 +42,7 @@ data/logs/*
 
 todo.txt
 pytorrent/static/libs/*
+!pytorrent/static/libs/pytorrent-ui/
 !pytorrent/static/libs/pytorrent-themes/
 !pytorrent/static/libs/pytorrent-themes/**
 smart_queue_scoring_todo.md

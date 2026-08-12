@@ -9,7 +9,7 @@ import threading
 import zipfile
 
 from flask import Blueprint, render_template, Response, request, redirect, url_for, abort, send_file, stream_with_context
-from ..services.preferences import get_preferences, list_profiles, active_profile, get_profile, BOOTSTRAP_THEMES, PYTORRENT_THEMES, PYTORRENT_DEDICATED_THEMES, UI_FRAMEWORKS, FONT_FAMILIES
+from ..services.preferences import get_preferences, list_profiles, active_profile, get_profile, BOOTSTRAP_THEMES, PYTORRENT_THEMES, PYTORRENT_BOOTSTRAP_THEME_PREFIX, normalize_pytorrent_theme, UI_FRAMEWORKS, FONT_FAMILIES
 from ..services import auth, pdf_preview_links, rtorrent, prometheus_metrics
 from ..config import PYTORRENT_TMP_DIR, SMART_QUEUE_LABEL, SMART_QUEUE_STALLED_LABEL, METRICS_PATH
 from ..services.frontend_assets import asset_path, bootstrap_css_path, static_hash
@@ -43,12 +43,28 @@ def _bootstrap_static_url(filename: str) -> str:
         return url_for("static", filename=filename)
 
 
+def _theme_asset_url(path: str) -> str:
+    if path.startswith("http"):
+        return path
+    if path.startswith("/static/"):
+        path = path[len("/static/"):]
+    return _bootstrap_static_url(path)
+
+
 def _bootstrap_theme_urls() -> dict[str, str]:
     # Note: Theme URLs are serialized inside the same bootstrap payload as the remaining frontend configuration.
-    urls: dict[str, str] = {}
+    return {key: _theme_asset_url(bootstrap_css_path(key)) for key in BOOTSTRAP_THEMES.keys()}
+
+
+def _pytorrent_theme_urls() -> dict[str, str]:
+    # Native themes extend pytorrent.css. Compatible Bootstrap themes keep their
+    # own CSS assets but can be selected while the PyTorrent JavaScript runtime is active.
+    urls = {
+        key: _bootstrap_static_url(f"libs/pytorrent-ui/themes/{key}.css")
+        for key in PYTORRENT_THEMES.keys()
+    }
     for key in BOOTSTRAP_THEMES.keys():
-        path = bootstrap_css_path(key)
-        urls[key] = path if path.startswith("http") else _bootstrap_static_url(path)
+        urls[f"{PYTORRENT_BOOTSTRAP_THEME_PREFIX}{key}"] = _theme_asset_url(bootstrap_css_path(key))
     return urls
 
 
@@ -103,9 +119,9 @@ def _frontend_bootstrap_config(prefs: dict, profile: dict | None, current_user: 
         "diskMonitorSelectedPath": str(prefs.get("disk_monitor_selected_path") or ""),
         "diskMonitorOwnerLabel": str(prefs.get("disk_monitor_owner_label") or ""),
         "bootstrapTheme": str(prefs.get("bootstrap_theme") or "default"),
-        "pytorrentTheme": str(prefs.get("pytorrent_theme") or "default-beta"),
+        "pytorrentTheme": str(prefs.get("pytorrent_theme") or "default"),
         "pytorrentAnimationsEnabled": flag("pytorrent_animations_enabled", True),
-        "uiFramework": str(prefs.get("ui_framework") or "bootstrap"),
+        "uiFramework": str(prefs.get("ui_framework") or "pytorrent"),
         "fontFamily": str(prefs.get("font_family") or "default"),
         "footerItems": _bootstrap_json_value(prefs.get("footer_items_json"), {}, dict),
         "footerOrder": _bootstrap_json_value(prefs.get("footer_order_json"), [], list),
@@ -114,8 +130,8 @@ def _frontend_bootstrap_config(prefs: dict, profile: dict | None, current_user: 
         "easterEggClickImageUrl": str(prefs.get("easter_egg_click_image_url") or ""),
         "bootstrapThemes": BOOTSTRAP_THEMES,
         "pytorrentThemes": PYTORRENT_THEMES,
-        "pytorrentDedicatedThemes": PYTORRENT_DEDICATED_THEMES,
         "bootstrapThemeUrls": _bootstrap_theme_urls(),
+        "pytorrentThemeUrls": _pytorrent_theme_urls(),
         "fontFamilies": FONT_FAMILIES,
         "staticHash": static_hash(Path(current_app.static_folder or "")),
         "smartQueueTechnicalLabel": SMART_QUEUE_LABEL,
@@ -317,6 +333,10 @@ def index():
     profile = active_profile()
     current_user = auth.current_user()
     bootstrap_config = _frontend_bootstrap_config(prefs, profile, current_user)
+    pytorrent_theme_urls = _pytorrent_theme_urls()
+    active_pytorrent_theme = normalize_pytorrent_theme(prefs.get("pytorrent_theme"), "default")
+    if active_pytorrent_theme not in pytorrent_theme_urls:
+        active_pytorrent_theme = "default"
     return render_template(
         "index.html",
         prefs=prefs,
@@ -324,7 +344,7 @@ def index():
         active_profile=profile,
         bootstrap_themes=BOOTSTRAP_THEMES,
         pytorrent_themes=PYTORRENT_THEMES,
-        pytorrent_dedicated_themes=PYTORRENT_DEDICATED_THEMES,
+        pytorrent_theme_url=pytorrent_theme_urls[active_pytorrent_theme],
         ui_frameworks=UI_FRAMEWORKS,
         font_families=FONT_FAMILIES,
         auth_enabled=auth.enabled(),

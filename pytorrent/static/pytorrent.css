@@ -1,15 +1,15 @@
 /*
- * PyTorrent UI Framework - Beta
+ * PyTorrent UI Framework
  *
- * Note: This stylesheet is a standalone CSS foundation for the pyTorrent UI.
- * It intentionally supports the existing Bootstrap-compatible class names so
- * the application can migrate away from Bootstrap CSS without rewriting its
- * markup or behavior in one step.
+ * Note: This stylesheet is the shared CSS foundation for the pyTorrent UI.
+ * Native themes in static/libs/pytorrent-ui/themes/*.css only override theme
+ * tokens on top of this file. Bootstrap themes remain separate assets but can
+ * also be used as compatible skins by the PyTorrent runtime.
+ * Bootstrap-compatible class names are kept as a migration contract.
  */
 
 html[data-ui-framework="pytorrent"] {
   color-scheme: light;
-  /* Tailwind-inspired neutral defaults: restrained surfaces, crisp borders and one clear blue accent. */
   --pt-page: #f8fafc;
   --pt-page-rgb: 248, 250, 252;
   --pt-surface: #ffffff;
@@ -45,103 +45,6 @@ html[data-ui-framework="pytorrent"] {
   --pt-motion-fast: 110ms;
   --pt-motion-base: 180ms;
 
-  /* Bootstrap variable aliases keep shared application CSS framework-neutral. */
-  --bs-body-bg: var(--pt-page);
-  --bs-body-bg-rgb: var(--pt-page-rgb);
-  --bs-body-color: var(--pt-text);
-  --bs-body-color-rgb: 15, 23, 42;
-  --bs-secondary-color: var(--pt-text-muted);
-  --bs-tertiary-color: var(--pt-text-subtle);
-  --bs-secondary-bg: var(--pt-surface);
-  --bs-secondary-bg-rgb: var(--pt-surface-rgb);
-  --bs-tertiary-bg: var(--pt-surface-soft);
-  --bs-tertiary-bg-rgb: var(--pt-surface-soft-rgb);
-  --bs-border-color: var(--pt-border);
-  --bs-border-color-translucent: rgba(23, 32, 51, 0.12);
-  --bs-primary: var(--pt-primary);
-  --bs-primary-rgb: var(--pt-primary-rgb);
-  --bs-primary-text-emphasis: color-mix(in srgb, var(--pt-primary) 72%, #111827);
-  --bs-primary-bg-subtle: var(--pt-primary-soft);
-  --bs-secondary: var(--pt-text-muted);
-  --bs-secondary-rgb: 100, 116, 139;
-  --bs-success: var(--pt-success);
-  --bs-success-rgb: var(--pt-success-rgb);
-  --bs-success-text-emphasis: color-mix(in srgb, var(--pt-success) 76%, #0f172a);
-  --bs-warning: var(--pt-warning);
-  --bs-warning-rgb: var(--pt-warning-rgb);
-  --bs-warning-text-emphasis: color-mix(in srgb, var(--pt-warning) 76%, #0f172a);
-  --bs-danger: var(--pt-danger);
-  --bs-danger-rgb: var(--pt-danger-rgb);
-  --bs-danger-text-emphasis: color-mix(in srgb, var(--pt-danger) 76%, #0f172a);
-  --bs-info: var(--pt-info);
-  --bs-info-rgb: var(--pt-info-rgb);
-  --bs-white: #ffffff;
-  --bs-font-monospace: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-
-  --pytorrent-page-bg: var(--pt-page);
-  --pytorrent-shell-shadow: var(--pt-shadow-md);
-  --pytorrent-topbar-bg: var(--pt-surface);
-  --pytorrent-sidebar-bg: var(--pt-surface);
-  --pytorrent-statusbar-bg: var(--pt-surface-soft);
-  --pytorrent-surface-bg: var(--pt-surface);
-  --pytorrent-surface-radius: var(--pt-radius-lg);
-  --pytorrent-panel-border: var(--pt-border);
-  --pytorrent-table-header-bg: var(--pt-surface-soft);
-  --pytorrent-backdrop-filter: none;
-}
-
-
-/* PyTorrent Default (Beta): neutral Tailwind/Zinc surfaces with a restrained Supabase-like green accent. */
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="default-beta"] {
-  --pt-page: #fafafa;
-  --pt-page-rgb: 250, 250, 250;
-  --pt-surface: #ffffff;
-  --pt-surface-rgb: 255, 255, 255;
-  --pt-surface-soft: #f4f4f5;
-  --pt-surface-soft-rgb: 244, 244, 245;
-  --pt-surface-raised: #ffffff;
-  --pt-text: #18181b;
-  --pt-text-muted: #71717a;
-  --pt-text-subtle: #a1a1aa;
-  --pt-border: #e4e4e7;
-  --pt-border-strong: #d4d4d8;
-  --pt-primary: #24b47e;
-  --pt-primary-rgb: 36, 180, 126;
-  --pt-primary-strong: #16875f;
-  --pt-primary-soft: #e9f8f1;
-  --pt-focus: rgba(36, 180, 126, 0.2);
-  --pt-shadow-sm: 0 1px 2px rgba(24, 24, 27, 0.05);
-  --pt-shadow-md: 0 16px 38px rgba(24, 24, 27, 0.12);
-  --bs-body-color-rgb: 24, 24, 27;
-  --bs-secondary-rgb: 113, 113, 122;
-  --bs-border-color-translucent: rgba(24, 24, 27, 0.1);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="default-beta"][data-bs-theme="dark"] {
-  --pt-page: #09090b;
-  --pt-page-rgb: 9, 9, 11;
-  --pt-surface: #111113;
-  --pt-surface-rgb: 17, 17, 19;
-  --pt-surface-soft: #18181b;
-  --pt-surface-soft-rgb: 24, 24, 27;
-  --pt-surface-raised: #141416;
-  --pt-text: #ededed;
-  --pt-text-muted: #a1a1aa;
-  --pt-text-subtle: #71717a;
-  --pt-border: #27272a;
-  --pt-border-strong: #3f3f46;
-  --pt-primary: #3ecf8e;
-  --pt-primary-rgb: 62, 207, 142;
-  --pt-primary-strong: #66dba8;
-  --pt-primary-soft: #10261c;
-  --pt-success: #3ecf8e;
-  --pt-success-rgb: 62, 207, 142;
-  --pt-focus: rgba(62, 207, 142, 0.22);
-  --pt-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --pt-shadow-md: 0 18px 48px rgba(0, 0, 0, 0.48);
-  --bs-body-color-rgb: 237, 237, 237;
-  --bs-secondary-rgb: 161, 161, 170;
-  --bs-border-color-translucent: rgba(255, 255, 255, 0.08);
 }
 
 html[data-ui-framework="pytorrent"][data-bs-theme="dark"] {
@@ -174,6 +77,64 @@ html[data-ui-framework="pytorrent"][data-bs-theme="dark"] {
   --pt-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.28);
   --pt-shadow-md: 0 18px 46px rgba(0, 0, 0, 0.38);
 
+}
+
+
+/*
+ * Bootstrap-compatible variable aliases deliberately use :where() so their
+ * specificity is zero. Native PyTorrent themes use these aliases, while a
+ * selected Bootstrap skin gets its variables from Bootstrap base/theme CSS.
+ */
+/* Theme-facing application aliases also stay at zero specificity so both native
+ * PyTorrent themes and compatible Bootstrap themes can override them cleanly. */
+:where(html[data-ui-framework="pytorrent"]) {
+  --pytorrent-page-bg: var(--pt-page);
+  --pytorrent-shell-shadow: var(--pt-shadow-md);
+  --pytorrent-topbar-bg: var(--pt-surface);
+  --pytorrent-sidebar-bg: var(--pt-surface);
+  --pytorrent-statusbar-bg: var(--pt-surface-soft);
+  --pytorrent-surface-bg: var(--pt-surface);
+  --pytorrent-surface-radius: var(--pt-radius-lg);
+  --pytorrent-panel-border: var(--pt-border);
+  --pytorrent-table-header-bg: var(--pt-surface-soft);
+  --pytorrent-backdrop-filter: none;
+}
+
+:where(html[data-ui-framework="pytorrent"]:not([data-pytorrent-theme^="bootstrap:"])) {
+  --bs-body-bg: var(--pt-page);
+  --bs-body-bg-rgb: var(--pt-page-rgb);
+  --bs-body-color: var(--pt-text);
+  --bs-body-color-rgb: 15, 23, 42;
+  --bs-secondary-color: var(--pt-text-muted);
+  --bs-tertiary-color: var(--pt-text-subtle);
+  --bs-secondary-bg: var(--pt-surface);
+  --bs-secondary-bg-rgb: var(--pt-surface-rgb);
+  --bs-tertiary-bg: var(--pt-surface-soft);
+  --bs-tertiary-bg-rgb: var(--pt-surface-soft-rgb);
+  --bs-border-color: var(--pt-border);
+  --bs-border-color-translucent: rgba(23, 32, 51, 0.12);
+  --bs-primary: var(--pt-primary);
+  --bs-primary-rgb: var(--pt-primary-rgb);
+  --bs-primary-text-emphasis: color-mix(in srgb, var(--pt-primary) 72%, #111827);
+  --bs-primary-bg-subtle: var(--pt-primary-soft);
+  --bs-secondary: var(--pt-text-muted);
+  --bs-secondary-rgb: 100, 116, 139;
+  --bs-success: var(--pt-success);
+  --bs-success-rgb: var(--pt-success-rgb);
+  --bs-success-text-emphasis: color-mix(in srgb, var(--pt-success) 76%, #0f172a);
+  --bs-warning: var(--pt-warning);
+  --bs-warning-rgb: var(--pt-warning-rgb);
+  --bs-warning-text-emphasis: color-mix(in srgb, var(--pt-warning) 76%, #0f172a);
+  --bs-danger: var(--pt-danger);
+  --bs-danger-rgb: var(--pt-danger-rgb);
+  --bs-danger-text-emphasis: color-mix(in srgb, var(--pt-danger) 76%, #0f172a);
+  --bs-info: var(--pt-info);
+  --bs-info-rgb: var(--pt-info-rgb);
+  --bs-white: #ffffff;
+  --bs-font-monospace: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+:where(html[data-ui-framework="pytorrent"][data-bs-theme="dark"]:not([data-pytorrent-theme^="bootstrap:"])) {
   --bs-body-bg: var(--pt-page);
   --bs-body-bg-rgb: var(--pt-page-rgb);
   --bs-body-color: var(--pt-text);
@@ -193,1513 +154,44 @@ html[data-ui-framework="pytorrent"][data-bs-theme="dark"] {
   --bs-success-text-emphasis: color-mix(in srgb, var(--pt-success) 72%, #ffffff);
   --bs-warning-text-emphasis: color-mix(in srgb, var(--pt-warning) 72%, #ffffff);
   --bs-danger-text-emphasis: color-mix(in srgb, var(--pt-danger) 72%, #ffffff);
-  --pytorrent-topbar-bg: var(--pt-surface);
-  --pytorrent-sidebar-bg: var(--pt-surface);
-  --pytorrent-statusbar-bg: var(--pt-surface-soft);
-  --pytorrent-surface-bg: var(--pt-surface);
-  --pytorrent-table-header-bg: var(--pt-surface-soft);
 }
 
-
-/* PyTorrent theme palette bridge ------------------------------------------------
- * Note: PyTorrent owns its theme selector independently from Bootstrap. Legacy
- * PyTorrent palettes map into framework tokens without loading Bootstrap CSS.
- */
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-adaptive"]:not([data-bs-theme="dark"]) {
-  --pt-page: #f6f7fb;
-  --pt-page-rgb: 246,247,251;
-  --pt-surface: #ffffff;
-  --pt-surface-rgb: 255,255,255;
-  --pt-surface-soft: #eef1f7;
-  --pt-surface-soft-rgb: 238, 241, 247;
-  --pt-surface-raised: #ffffff;
-  --pt-text: #1f2937;
-  --pt-text-muted: #667085;
-  --pt-text-subtle: color-mix(in srgb, #667085 78%, transparent);
-  --pt-border: #d9deea;
-  --pt-border-strong: color-mix(in srgb, #d9deea 76%, #1f2937);
-  --pt-primary: #6750a4;
-  --pt-primary-rgb: 103,80,164;
-  --pt-primary-strong: #4b2f8f;
-  --pt-primary-soft: #ece7ff;
-  --pt-focus: rgba(103,80,164, 0.22);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-adaptive"][data-bs-theme="dark"] {
-  --pt-page: #080b12;
-  --pt-page-rgb: 8,11,18;
-  --pt-surface: #101624;
-  --pt-surface-rgb: 16,22,36;
-  --pt-surface-soft: #151d2e;
-  --pt-surface-soft-rgb: 21, 29, 46;
-  --pt-surface-raised: #101624;
-  --pt-text: #dce3f0;
-  --pt-text-muted: #97a4ba;
-  --pt-text-subtle: color-mix(in srgb, #97a4ba 78%, transparent);
-  --pt-border: #273247;
-  --pt-border-strong: color-mix(in srgb, #273247 76%, #dce3f0);
-  --pt-primary: #8f7cff;
-  --pt-primary-rgb: 143,124,255;
-  --pt-primary-strong: #c6bdff;
-  --pt-primary-soft: #191735;
-  --pt-focus: rgba(143,124,255, 0.28);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-ocean"]:not([data-bs-theme="dark"]) {
-  --pt-page: #f2fbfa;
-  --pt-page-rgb: 242,251,250;
-  --pt-surface: #ffffff;
-  --pt-surface-rgb: 255,255,255;
-  --pt-surface-soft: #dff5f2;
-  --pt-surface-soft-rgb: 223, 245, 242;
-  --pt-surface-raised: #ffffff;
-  --pt-text: #102a2a;
-  --pt-text-muted: #54706f;
-  --pt-text-subtle: color-mix(in srgb, #54706f 78%, transparent);
-  --pt-border: #bfe4df;
-  --pt-border-strong: color-mix(in srgb, #bfe4df 76%, #102a2a);
-  --pt-primary: #0f766e;
-  --pt-primary-rgb: 15,118,110;
-  --pt-primary-strong: #095c55;
-  --pt-primary-soft: #d6f4ef;
-  --pt-focus: rgba(15,118,110, 0.22);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-ocean"][data-bs-theme="dark"] {
-  --pt-page: #031316;
-  --pt-page-rgb: 3,19,22;
-  --pt-surface: #082326;
-  --pt-surface-rgb: 8,35,38;
-  --pt-surface-soft: #0d3034;
-  --pt-surface-soft-rgb: 13, 48, 52;
-  --pt-surface-raised: #082326;
-  --pt-text: #d5f4f1;
-  --pt-text-muted: #8ab6b2;
-  --pt-text-subtle: color-mix(in srgb, #8ab6b2 78%, transparent);
-  --pt-border: #17494e;
-  --pt-border-strong: color-mix(in srgb, #17494e 76%, #d5f4f1);
-  --pt-primary: #2dd4bf;
-  --pt-primary-rgb: 45,212,191;
-  --pt-primary-strong: #99f6e4;
-  --pt-primary-soft: #063a3c;
-  --pt-focus: rgba(45,212,191, 0.28);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-graphite"]:not([data-bs-theme="dark"]) {
-  --pt-page: #f5f6f8;
-  --pt-page-rgb: 245,246,248;
-  --pt-surface: #ffffff;
-  --pt-surface-rgb: 255,255,255;
-  --pt-surface-soft: #eceff3;
-  --pt-surface-soft-rgb: 236, 239, 243;
-  --pt-surface-raised: #ffffff;
-  --pt-text: #18202f;
-  --pt-text-muted: #667085;
-  --pt-text-subtle: color-mix(in srgb, #667085 78%, transparent);
-  --pt-border: #d7dce3;
-  --pt-border-strong: color-mix(in srgb, #d7dce3 76%, #18202f);
-  --pt-primary: #334155;
-  --pt-primary-rgb: 51,65,85;
-  --pt-primary-strong: #1f2937;
-  --pt-primary-soft: #e4e8ef;
-  --pt-focus: rgba(51,65,85, 0.22);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-graphite"][data-bs-theme="dark"] {
-  --pt-page: #07090d;
-  --pt-page-rgb: 7,9,13;
-  --pt-surface: #11151c;
-  --pt-surface-rgb: 17,21,28;
-  --pt-surface-soft: #171c25;
-  --pt-surface-soft-rgb: 23, 28, 37;
-  --pt-surface-raised: #11151c;
-  --pt-text: #d7dde7;
-  --pt-text-muted: #99a3b3;
-  --pt-text-subtle: color-mix(in srgb, #99a3b3 78%, transparent);
-  --pt-border: #2b3442;
-  --pt-border-strong: color-mix(in srgb, #2b3442 76%, #d7dde7);
-  --pt-primary: #94a3b8;
-  --pt-primary-rgb: 148,163,184;
-  --pt-primary-strong: #e2e8f0;
-  --pt-primary-soft: #1d2531;
-  --pt-focus: rgba(148,163,184, 0.28);
-}
-
-
-/* Graphite Studio: a denser monochrome palette with cooler graphite surfaces. */
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-graphite-studio"]:not([data-bs-theme="dark"]) {
-  --pt-page: #f1f2f3;
-  --pt-page-rgb: 241, 242, 243;
-  --pt-surface: #fbfbfc;
-  --pt-surface-rgb: 251, 251, 252;
-  --pt-surface-soft: #e7e9ec;
-  --pt-surface-soft-rgb: 231, 233, 236;
-  --pt-surface-raised: #ffffff;
-  --pt-text: #202326;
-  --pt-text-muted: #656b73;
-  --pt-text-subtle: #9298a0;
-  --pt-border: #d2d5d9;
-  --pt-border-strong: #b8bdc3;
-  --pt-primary: #4b5563;
-  --pt-primary-rgb: 75, 85, 99;
-  --pt-primary-strong: #303740;
-  --pt-primary-soft: #e1e4e8;
-  --pt-success: #2f8f6b;
-  --pt-success-rgb: 47, 143, 107;
-  --pt-focus: rgba(75, 85, 99, 0.22);
-  --pt-shadow-sm: 0 1px 2px rgba(32, 35, 38, 0.05);
-  --pt-shadow-md: 0 14px 34px rgba(32, 35, 38, 0.14);
-  --pt-radius-sm: 0.34rem;
-  --pt-radius: 0.46rem;
-  --pt-radius-lg: 0.64rem;
-  --bs-body-color-rgb: 32, 35, 38;
-  --bs-secondary-rgb: 101, 107, 115;
-  --bs-border-color-translucent: rgba(32, 35, 38, 0.1);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-graphite-studio"][data-bs-theme="dark"] {
-  --pt-page: #0b0c0e;
-  --pt-page-rgb: 11, 12, 14;
-  --pt-surface: #141619;
-  --pt-surface-rgb: 20, 22, 25;
-  --pt-surface-soft: #1d2024;
-  --pt-surface-soft-rgb: 29, 32, 36;
-  --pt-surface-raised: #181a1e;
-  --pt-text: #e7e9ec;
-  --pt-text-muted: #a4a9b0;
-  --pt-text-subtle: #747a82;
-  --pt-border: #30343a;
-  --pt-border-strong: #464b53;
-  --pt-primary: #c2c7ce;
-  --pt-primary-rgb: 194, 199, 206;
-  --pt-primary-strong: #f2f3f5;
-  --pt-primary-soft: #24282d;
-  --pt-success: #4ec095;
-  --pt-success-rgb: 78, 192, 149;
-  --pt-focus: rgba(194, 199, 206, 0.24);
-  --pt-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.34);
-  --pt-shadow-md: 0 18px 48px rgba(0, 0, 0, 0.5);
-  --pt-radius-sm: 0.34rem;
-  --pt-radius: 0.46rem;
-  --pt-radius-lg: 0.64rem;
-  --bs-body-color-rgb: 231, 233, 236;
-  --bs-secondary-rgb: 164, 169, 176;
-  --bs-border-color-translucent: rgba(255, 255, 255, 0.09);
-}
-
-/* OpenAI-inspired (Beta): current ChatGPT-style neutral surfaces and default neutral accent.
-   Success stays green, but primary actions follow the present configurable/default-neutral UI rather than the legacy green brand accent. */
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-openai"]:not([data-bs-theme="dark"]) {
-  --pt-page: #f9f9f9;
-  --pt-page-rgb: 249, 249, 249;
-  --pt-surface: #ffffff;
-  --pt-surface-rgb: 255, 255, 255;
-  --pt-surface-soft: #f2f2f2;
-  --pt-surface-soft-rgb: 242, 242, 242;
-  --pt-surface-raised: #ffffff;
-  --pt-text: #0d0d0d;
-  --pt-text-muted: #5d5d5d;
-  --pt-text-subtle: #8f8f8f;
-  --pt-border: #e5e5e5;
-  --pt-border-strong: #d1d1d1;
-  --pt-primary: #0d0d0d;
-  --pt-primary-rgb: 13, 13, 13;
-  --pt-primary-strong: #2f2f2f;
-  --pt-primary-soft: #ececec;
-  --pt-success: #10a37f;
-  --pt-success-rgb: 16, 163, 127;
-  --pt-focus: rgba(13, 13, 13, 0.15);
-  --pt-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --pt-shadow-md: 0 12px 32px rgba(0, 0, 0, 0.1);
-  --pt-radius-sm: 0.55rem;
-  --pt-radius: 0.75rem;
-  --pt-radius-lg: 1rem;
-  --pt-control-height: 2rem;
-  --pt-menu-bg: #ffffff;
-  --pytorrent-surface-radius: 1rem;
-  --bs-body-color-rgb: 13, 13, 13;
-  --bs-secondary-rgb: 93, 93, 93;
-  --bs-border-color-translucent: rgba(0, 0, 0, 0.08);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-openai"][data-bs-theme="dark"] {
-  --pt-page: #212121;
-  --pt-page-rgb: 33, 33, 33;
-  --pt-surface: #2f2f2f;
-  --pt-surface-rgb: 47, 47, 47;
-  --pt-surface-soft: #383838;
-  --pt-surface-soft-rgb: 56, 56, 56;
-  --pt-surface-raised: #323232;
-  --pt-text: #ececec;
-  --pt-text-muted: #b4b4b4;
-  --pt-text-subtle: #8b8b8b;
-  --pt-border: #424242;
-  --pt-border-strong: #565656;
-  --pt-primary: #f4f4f4;
-  --pt-primary-rgb: 244, 244, 244;
-  --pt-primary-strong: #ffffff;
-  --pt-primary-soft: #424242;
-  --pt-success: #10a37f;
-  --pt-success-rgb: 16, 163, 127;
-  --pt-focus: rgba(255, 255, 255, 0.18);
-  --pt-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.24);
-  --pt-shadow-md: 0 18px 46px rgba(0, 0, 0, 0.38);
-  --pt-radius-sm: 0.55rem;
-  --pt-radius: 0.75rem;
-  --pt-radius-lg: 1rem;
-  --pt-control-height: 2rem;
-  --pt-menu-bg: #2f2f2f;
-  --pytorrent-surface-radius: 1rem;
-  --bs-body-color-rgb: 236, 236, 236;
-  --bs-secondary-rgb: 180, 180, 180;
-  --bs-border-color-translucent: rgba(255, 255, 255, 0.09);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-forest"]:not([data-bs-theme="dark"]) {
-  --pt-page: #f4faf2;
-  --pt-page-rgb: 244,250,242;
-  --pt-surface: #ffffff;
-  --pt-surface-rgb: 255,255,255;
-  --pt-surface-soft: #e7f4e4;
-  --pt-surface-soft-rgb: 231, 244, 228;
-  --pt-surface-raised: #ffffff;
-  --pt-text: #172417;
-  --pt-text-muted: #61735e;
-  --pt-text-subtle: color-mix(in srgb, #61735e 78%, transparent);
-  --pt-border: #cce4c7;
-  --pt-border-strong: color-mix(in srgb, #cce4c7 76%, #172417);
-  --pt-primary: #2f7d32;
-  --pt-primary-rgb: 47,125,50;
-  --pt-primary-strong: #256329;
-  --pt-primary-soft: #dcf2d7;
-  --pt-focus: rgba(47,125,50, 0.22);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-forest"][data-bs-theme="dark"] {
-  --pt-page: #071109;
-  --pt-page-rgb: 7,17,9;
-  --pt-surface: #0f1f12;
-  --pt-surface-rgb: 15,31,18;
-  --pt-surface-soft: #152b18;
-  --pt-surface-soft-rgb: 21, 43, 24;
-  --pt-surface-raised: #0f1f12;
-  --pt-text: #d9f1dc;
-  --pt-text-muted: #95b79a;
-  --pt-text-subtle: color-mix(in srgb, #95b79a 78%, transparent);
-  --pt-border: #24472a;
-  --pt-border-strong: color-mix(in srgb, #24472a 76%, #d9f1dc);
-  --pt-primary: #4ade80;
-  --pt-primary-rgb: 74,222,128;
-  --pt-primary-strong: #bbf7d0;
-  --pt-primary-soft: #13381a;
-  --pt-focus: rgba(74,222,128, 0.28);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-amber"]:not([data-bs-theme="dark"]) {
-  --pt-page: #fff8ed;
-  --pt-page-rgb: 255,248,237;
-  --pt-surface: #ffffff;
-  --pt-surface-rgb: 255,255,255;
-  --pt-surface-soft: #ffefd6;
-  --pt-surface-soft-rgb: 255, 239, 214;
-  --pt-surface-raised: #ffffff;
-  --pt-text: #2c1d0b;
-  --pt-text-muted: #7a6750;
-  --pt-text-subtle: color-mix(in srgb, #7a6750 78%, transparent);
-  --pt-border: #f3d7aa;
-  --pt-border-strong: color-mix(in srgb, #f3d7aa 76%, #2c1d0b);
-  --pt-primary: #b45309;
-  --pt-primary-rgb: 180,83,9;
-  --pt-primary-strong: #92400e;
-  --pt-primary-soft: #ffecd0;
-  --pt-focus: rgba(180,83,9, 0.22);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-amber"][data-bs-theme="dark"] {
-  --pt-page: #140d05;
-  --pt-page-rgb: 20,13,5;
-  --pt-surface: #211607;
-  --pt-surface-rgb: 33,22,7;
-  --pt-surface-soft: #2b1d0b;
-  --pt-surface-soft-rgb: 43, 29, 11;
-  --pt-surface-raised: #211607;
-  --pt-text: #f5e9d6;
-  --pt-text-muted: #c3a780;
-  --pt-text-subtle: color-mix(in srgb, #c3a780 78%, transparent);
-  --pt-border: #4c3515;
-  --pt-border-strong: color-mix(in srgb, #4c3515 76%, #f5e9d6);
-  --pt-primary: #f59e0b;
-  --pt-primary-rgb: 245,158,11;
-  --pt-primary-strong: #fde68a;
-  --pt-primary-soft: #3a2609;
-  --pt-focus: rgba(245,158,11, 0.28);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-nord"]:not([data-bs-theme="dark"]) {
-  --pt-page: #f4f7fb;
-  --pt-page-rgb: 244,247,251;
-  --pt-surface: #ffffff;
-  --pt-surface-rgb: 255,255,255;
-  --pt-surface-soft: #e7edf5;
-  --pt-surface-soft-rgb: 231, 237, 245;
-  --pt-surface-raised: #ffffff;
-  --pt-text: #182334;
-  --pt-text-muted: #607089;
-  --pt-text-subtle: color-mix(in srgb, #607089 78%, transparent);
-  --pt-border: #d0d9e8;
-  --pt-border-strong: color-mix(in srgb, #d0d9e8 76%, #182334);
-  --pt-primary: #4c6a92;
-  --pt-primary-rgb: 76,106,146;
-  --pt-primary-strong: #365174;
-  --pt-primary-soft: #dfe8f4;
-  --pt-focus: rgba(76,106,146, 0.22);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-nord"][data-bs-theme="dark"] {
-  --pt-page: #0b111a;
-  --pt-page-rgb: 11,17,26;
-  --pt-surface: #111927;
-  --pt-surface-rgb: 17,25,39;
-  --pt-surface-soft: #172233;
-  --pt-surface-soft-rgb: 23, 34, 51;
-  --pt-surface-raised: #111927;
-  --pt-text: #d8dee9;
-  --pt-text-muted: #9aa8bc;
-  --pt-text-subtle: color-mix(in srgb, #9aa8bc 78%, transparent);
-  --pt-border: #2e3a4d;
-  --pt-border-strong: color-mix(in srgb, #2e3a4d 76%, #d8dee9);
-  --pt-primary: #88c0d0;
-  --pt-primary-rgb: 136,192,208;
-  --pt-primary-strong: #b6e3ee;
-  --pt-primary-soft: #132b3a;
-  --pt-focus: rgba(136,192,208, 0.28);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-crimson"]:not([data-bs-theme="dark"]) {
-  --pt-page: #fff5f7;
-  --pt-page-rgb: 255,245,247;
-  --pt-surface: #ffffff;
-  --pt-surface-rgb: 255,255,255;
-  --pt-surface-soft: #ffe4ea;
-  --pt-surface-soft-rgb: 255, 228, 234;
-  --pt-surface-raised: #ffffff;
-  --pt-text: #2b1118;
-  --pt-text-muted: #76545d;
-  --pt-text-subtle: color-mix(in srgb, #76545d 78%, transparent);
-  --pt-border: #f5c6d1;
-  --pt-border-strong: color-mix(in srgb, #f5c6d1 76%, #2b1118);
-  --pt-primary: #be123c;
-  --pt-primary-rgb: 190,18,60;
-  --pt-primary-strong: #9f1239;
-  --pt-primary-soft: #ffe1e9;
-  --pt-focus: rgba(190,18,60, 0.22);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-crimson"][data-bs-theme="dark"] {
-  --pt-page: #13070a;
-  --pt-page-rgb: 19,7,10;
-  --pt-surface: #211014;
-  --pt-surface-rgb: 33,16,20;
-  --pt-surface-soft: #2b151b;
-  --pt-surface-soft-rgb: 43, 21, 27;
-  --pt-surface-raised: #211014;
-  --pt-text: #f7dce2;
-  --pt-text-muted: #c096a1;
-  --pt-text-subtle: color-mix(in srgb, #c096a1 78%, transparent);
-  --pt-border: #4b2430;
-  --pt-border-strong: color-mix(in srgb, #4b2430 76%, #f7dce2);
-  --pt-primary: #fb7185;
-  --pt-primary-rgb: 251,113,133;
-  --pt-primary-strong: #fecdd3;
-  --pt-primary-soft: #3b111b;
-  --pt-focus: rgba(251,113,133, 0.28);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-sky"]:not([data-bs-theme="dark"]) {
-  --pt-page: #f2f9ff;
-  --pt-page-rgb: 242,249,255;
-  --pt-surface: #ffffff;
-  --pt-surface-rgb: 255,255,255;
-  --pt-surface-soft: #dff1ff;
-  --pt-surface-soft-rgb: 223, 241, 255;
-  --pt-surface-raised: #ffffff;
-  --pt-text: #102033;
-  --pt-text-muted: #567185;
-  --pt-text-subtle: color-mix(in srgb, #567185 78%, transparent);
-  --pt-border: #bddff5;
-  --pt-border-strong: color-mix(in srgb, #bddff5 76%, #102033);
-  --pt-primary: #0284c7;
-  --pt-primary-rgb: 2,132,199;
-  --pt-primary-strong: #0369a1;
-  --pt-primary-soft: #d7efff;
-  --pt-focus: rgba(2,132,199, 0.22);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-sky"][data-bs-theme="dark"] {
-  --pt-page: #06111a;
-  --pt-page-rgb: 6,17,26;
-  --pt-surface: #0d1c29;
-  --pt-surface-rgb: 13,28,41;
-  --pt-surface-soft: #12283a;
-  --pt-surface-soft-rgb: 18, 40, 58;
-  --pt-surface-raised: #0d1c29;
-  --pt-text: #d9ecf8;
-  --pt-text-muted: #91b4ca;
-  --pt-text-subtle: color-mix(in srgb, #91b4ca 78%, transparent);
-  --pt-border: #21435b;
-  --pt-border-strong: color-mix(in srgb, #21435b 76%, #d9ecf8);
-  --pt-primary: #38bdf8;
-  --pt-primary-rgb: 56,189,248;
-  --pt-primary-strong: #bae6fd;
-  --pt-primary-soft: #0b334d;
-  --pt-focus: rgba(56,189,248, 0.28);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-aurora"]:not([data-bs-theme="dark"]) {
-  --pt-page: #f5f7ff;
-  --pt-page-rgb: 245,247,255;
-  --pt-surface: #ffffff;
-  --pt-surface-rgb: 255,255,255;
-  --pt-surface-soft: #edf0fb;
-  --pt-surface-soft-rgb: 237, 240, 251;
-  --pt-surface-raised: #ffffff;
-  --pt-text: #182033;
-  --pt-text-muted: #65708a;
-  --pt-text-subtle: color-mix(in srgb, #65708a 78%, transparent);
-  --pt-border: #d8dcef;
-  --pt-border-strong: color-mix(in srgb, #d8dcef 76%, #182033);
-  --pt-primary: #6d5dfc;
-  --pt-primary-rgb: 109,93,252;
-  --pt-primary-strong: #4435c7;
-  --pt-primary-soft: #ebe8ff;
-  --pt-focus: rgba(109,93,252, 0.22);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-aurora"][data-bs-theme="dark"] {
-  --pt-page: #070a12;
-  --pt-page-rgb: 7,10,18;
-  --pt-surface: #101522;
-  --pt-surface-rgb: 16,21,34;
-  --pt-surface-soft: #171d2d;
-  --pt-surface-soft-rgb: 23, 29, 45;
-  --pt-surface-raised: #101522;
-  --pt-text: #e1e6f3;
-  --pt-text-muted: #97a2b8;
-  --pt-text-subtle: color-mix(in srgb, #97a2b8 78%, transparent);
-  --pt-border: #2b3449;
-  --pt-border-strong: color-mix(in srgb, #2b3449 76%, #e1e6f3);
-  --pt-primary: #9b8cff;
-  --pt-primary-rgb: 155,140,255;
-  --pt-primary-strong: #d2cbff;
-  --pt-primary-soft: #211d46;
-  --pt-focus: rgba(155,140,255, 0.28);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-obsidian"]:not([data-bs-theme="dark"]) {
-  --pt-page: #f3f5f6;
-  --pt-page-rgb: 243,245,246;
-  --pt-surface: #fbfcfc;
-  --pt-surface-rgb: 251,252,252;
-  --pt-surface-soft: #e8ecee;
-  --pt-surface-soft-rgb: 232, 236, 238;
-  --pt-surface-raised: #fbfcfc;
-  --pt-text: #171c21;
-  --pt-text-muted: #626d73;
-  --pt-text-subtle: color-mix(in srgb, #626d73 78%, transparent);
-  --pt-border: #cfd6da;
-  --pt-border-strong: color-mix(in srgb, #cfd6da 76%, #171c21);
-  --pt-primary: #0f766e;
-  --pt-primary-rgb: 15,118,110;
-  --pt-primary-strong: #0b5c56;
-  --pt-primary-soft: #dcefeb;
-  --pt-focus: rgba(15,118,110, 0.22);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-obsidian"][data-bs-theme="dark"] {
-  --pt-page: #07090b;
-  --pt-page-rgb: 7,9,11;
-  --pt-surface: #101417;
-  --pt-surface-rgb: 16,20,23;
-  --pt-surface-soft: #171c20;
-  --pt-surface-soft-rgb: 23, 28, 32;
-  --pt-surface-raised: #101417;
-  --pt-text: #d8dde0;
-  --pt-text-muted: #909ba1;
-  --pt-text-subtle: color-mix(in srgb, #909ba1 78%, transparent);
-  --pt-border: #2a3237;
-  --pt-border-strong: color-mix(in srgb, #2a3237 76%, #d8dde0);
-  --pt-primary: #35c9b5;
-  --pt-primary-rgb: 53,201,181;
-  --pt-primary-strong: #9beade;
-  --pt-primary-soft: #12332f;
-  --pt-focus: rgba(53,201,181, 0.28);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-sakura"]:not([data-bs-theme="dark"]) {
-  --pt-page: #fff8fa;
-  --pt-page-rgb: 255,248,250;
-  --pt-surface: #fffdfd;
-  --pt-surface-rgb: 255,253,253;
-  --pt-surface-soft: #faedf2;
-  --pt-surface-soft-rgb: 250, 237, 242;
-  --pt-surface-raised: #fffdfd;
-  --pt-text: #2f1d26;
-  --pt-text-muted: #80636f;
-  --pt-text-subtle: color-mix(in srgb, #80636f 78%, transparent);
-  --pt-border: #ead2dc;
-  --pt-border-strong: color-mix(in srgb, #ead2dc 76%, #2f1d26);
-  --pt-primary: #b54773;
-  --pt-primary-rgb: 181,71,115;
-  --pt-primary-strong: #7e2f50;
-  --pt-primary-soft: #f7e0e9;
-  --pt-focus: rgba(181,71,115, 0.22);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-sakura"][data-bs-theme="dark"] {
-  --pt-page: #130b10;
-  --pt-page-rgb: 19,11,16;
-  --pt-surface: #21131a;
-  --pt-surface-rgb: 33,19,26;
-  --pt-surface-soft: #2b1821;
-  --pt-surface-soft-rgb: 43, 24, 33;
-  --pt-surface-raised: #21131a;
-  --pt-text: #f0dfe7;
-  --pt-text-muted: #bea1ad;
-  --pt-text-subtle: color-mix(in srgb, #bea1ad 78%, transparent);
-  --pt-border: #4a2937;
-  --pt-border-strong: color-mix(in srgb, #4a2937 76%, #f0dfe7);
-  --pt-primary: #f08bb2;
-  --pt-primary-rgb: 240,139,178;
-  --pt-primary-strong: #ffd0e1;
-  --pt-primary-soft: #431c2d;
-  --pt-focus: rgba(240,139,178, 0.28);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-cobalt"]:not([data-bs-theme="dark"]) {
-  --pt-page: #f3f7fc;
-  --pt-page-rgb: 243,247,252;
-  --pt-surface: #ffffff;
-  --pt-surface-rgb: 255,255,255;
-  --pt-surface-soft: #e6eef9;
-  --pt-surface-soft-rgb: 230, 238, 249;
-  --pt-surface-raised: #ffffff;
-  --pt-text: #152238;
-  --pt-text-muted: #61728c;
-  --pt-text-subtle: color-mix(in srgb, #61728c 78%, transparent);
-  --pt-border: #cbd8ea;
-  --pt-border-strong: color-mix(in srgb, #cbd8ea 76%, #152238);
-  --pt-primary: #2563eb;
-  --pt-primary-rgb: 37,99,235;
-  --pt-primary-strong: #173e91;
-  --pt-primary-soft: #dfeaff;
-  --pt-focus: rgba(37,99,235, 0.22);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-cobalt"][data-bs-theme="dark"] {
-  --pt-page: #07101d;
-  --pt-page-rgb: 7,16,29;
-  --pt-surface: #0e1a2b;
-  --pt-surface-rgb: 14,26,43;
-  --pt-surface-soft: #15243a;
-  --pt-surface-soft-rgb: 21, 36, 58;
-  --pt-surface-raised: #0e1a2b;
-  --pt-text: #dce8f7;
-  --pt-text-muted: #94a9c4;
-  --pt-text-subtle: color-mix(in srgb, #94a9c4 78%, transparent);
-  --pt-border: #293d59;
-  --pt-border-strong: color-mix(in srgb, #293d59 76%, #dce8f7);
-  --pt-primary: #60a5fa;
-  --pt-primary-rgb: 96,165,250;
-  --pt-primary-strong: #c3ddff;
-  --pt-primary-soft: #122d54;
-  --pt-focus: rgba(96,165,250, 0.28);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-sandstone"]:not([data-bs-theme="dark"]) {
-  --pt-page: #f8f4ec;
-  --pt-page-rgb: 248,244,236;
-  --pt-surface: #fffdf8;
-  --pt-surface-rgb: 255,253,248;
-  --pt-surface-soft: #eee6d9;
-  --pt-surface-soft-rgb: 238, 230, 217;
-  --pt-surface-raised: #fffdf8;
-  --pt-text: #30281f;
-  --pt-text-muted: #75685a;
-  --pt-text-subtle: color-mix(in srgb, #75685a 78%, transparent);
-  --pt-border: #dcd0bf;
-  --pt-border-strong: color-mix(in srgb, #dcd0bf 76%, #30281f);
-  --pt-primary: #b35b36;
-  --pt-primary-rgb: 179,91,54;
-  --pt-primary-strong: #7c3b24;
-  --pt-primary-soft: #f3dfd3;
-  --pt-focus: rgba(179,91,54, 0.22);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-sandstone"][data-bs-theme="dark"] {
-  --pt-page: #15110d;
-  --pt-page-rgb: 21,17,13;
-  --pt-surface: #211a14;
-  --pt-surface-rgb: 33,26,20;
-  --pt-surface-soft: #2a2119;
-  --pt-surface-soft-rgb: 42, 33, 25;
-  --pt-surface-raised: #211a14;
-  --pt-text: #eadfd3;
-  --pt-text-muted: #b4a393;
-  --pt-text-subtle: color-mix(in srgb, #b4a393 78%, transparent);
-  --pt-border: #46382d;
-  --pt-border-strong: color-mix(in srgb, #46382d 76%, #eadfd3);
-  --pt-primary: #e48d64;
-  --pt-primary-rgb: 228,141,100;
-  --pt-primary-strong: #ffd0b7;
-  --pt-primary-soft: #43261a;
-  --pt-focus: rgba(228,141,100, 0.28);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-mint-glass"]:not([data-bs-theme="dark"]) {
-  --pt-page: #f1fbf8;
-  --pt-page-rgb: 241,251,248;
-  --pt-surface: #fbfffd;
-  --pt-surface-rgb: 251,255,253;
-  --pt-surface-soft: #def4ed;
-  --pt-surface-soft-rgb: 222, 244, 237;
-  --pt-surface-raised: #fbfffd;
-  --pt-text: #13312a;
-  --pt-text-muted: #58766e;
-  --pt-text-subtle: color-mix(in srgb, #58766e 78%, transparent);
-  --pt-border: #bfe2d8;
-  --pt-border-strong: color-mix(in srgb, #bfe2d8 76%, #13312a);
-  --pt-primary: #0f9f82;
-  --pt-primary-rgb: 15,159,130;
-  --pt-primary-strong: #086b59;
-  --pt-primary-soft: #d3f3e9;
-  --pt-focus: rgba(15,159,130, 0.22);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-mint-glass"][data-bs-theme="dark"] {
-  --pt-page: #061310;
-  --pt-page-rgb: 6,19,16;
-  --pt-surface: #0d201b;
-  --pt-surface-rgb: 13,32,27;
-  --pt-surface-soft: #132c25;
-  --pt-surface-soft-rgb: 19, 44, 37;
-  --pt-surface-raised: #0d201b;
-  --pt-text: #d8f0ea;
-  --pt-text-muted: #91b8ad;
-  --pt-text-subtle: color-mix(in srgb, #91b8ad 78%, transparent);
-  --pt-border: #254b42;
-  --pt-border-strong: color-mix(in srgb, #254b42 76%, #d8f0ea);
-  --pt-primary: #3dd6b7;
-  --pt-primary-rgb: 61,214,183;
-  --pt-primary-strong: #b3f7e9;
-  --pt-primary-soft: #0e3a31;
-  --pt-focus: rgba(61,214,183, 0.28);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-heritage"]:not([data-bs-theme="dark"]) {
-  --pt-page: #f3f3f3;
-  --pt-page-rgb: 243,243,243;
-  --pt-surface: #fff;
-  --pt-surface-rgb: 255,255,255;
-  --pt-surface-soft: #f5f5f5;
-  --pt-surface-soft-rgb: 245, 245, 245;
-  --pt-surface-raised: #fff;
-  --pt-text: #333;
-  --pt-text-muted: #666;
-  --pt-text-subtle: color-mix(in srgb, #666 78%, transparent);
-  --pt-border: #ccc;
-  --pt-border-strong: color-mix(in srgb, #ccc 76%, #333);
-  --pt-primary: #337ab7;
-  --pt-primary-rgb: 51,122,183;
-  --pt-primary-strong: #24557d;
-  --pt-primary-soft: #e8f2fb;
-  --pt-focus: rgba(51,122,183, 0.22);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-heritage"][data-bs-theme="dark"] {
-  --pt-page: #1d2227;
-  --pt-page-rgb: 29,34,39;
-  --pt-surface: #2a3036;
-  --pt-surface-rgb: 42,48,54;
-  --pt-surface-soft: #23292f;
-  --pt-surface-soft-rgb: 35, 41, 47;
-  --pt-surface-raised: #2a3036;
-  --pt-text: #e8e8e8;
-  --pt-text-muted: #b8c0c8;
-  --pt-text-subtle: color-mix(in srgb, #b8c0c8 78%, transparent);
-  --pt-border: #48515a;
-  --pt-border-strong: color-mix(in srgb, #48515a 76%, #e8e8e8);
-  --pt-primary: #5aa2d8;
-  --pt-primary-rgb: 90,162,216;
-  --pt-primary-strong: #a7d5f5;
-  --pt-primary-soft: #243d50;
-  --pt-focus: rgba(90,162,216, 0.28);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-slate-classic"]:not([data-bs-theme="dark"]) {
-  --pt-page: #eceff1;
-  --pt-page-rgb: 236,239,241;
-  --pt-surface: #fafafa;
-  --pt-surface-rgb: 250,250,250;
-  --pt-surface-soft: #e3e7ea;
-  --pt-surface-soft-rgb: 227, 231, 234;
-  --pt-surface-raised: #fafafa;
-  --pt-text: #2f353a;
-  --pt-text-muted: #68737d;
-  --pt-text-subtle: color-mix(in srgb, #68737d 78%, transparent);
-  --pt-border: #b9c0c6;
-  --pt-border-strong: color-mix(in srgb, #b9c0c6 76%, #2f353a);
-  --pt-primary: #4f6f8f;
-  --pt-primary-rgb: 79,111,143;
-  --pt-primary-strong: #39536c;
-  --pt-primary-soft: #e3ebf2;
-  --pt-focus: rgba(79,111,143, 0.22);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-slate-classic"][data-bs-theme="dark"] {
-  --pt-page: #20262b;
-  --pt-page-rgb: 32,38,43;
-  --pt-surface: #2d343a;
-  --pt-surface-rgb: 45,52,58;
-  --pt-surface-soft: #262d32;
-  --pt-surface-soft-rgb: 38, 45, 50;
-  --pt-surface-raised: #2d343a;
-  --pt-text: #e0e5e8;
-  --pt-text-muted: #aeb8bf;
-  --pt-text-subtle: color-mix(in srgb, #aeb8bf 78%, transparent);
-  --pt-border: #4c565f;
-  --pt-border-strong: color-mix(in srgb, #4c565f 76%, #e0e5e8);
-  --pt-primary: #7fa8cd;
-  --pt-primary-rgb: 127,168,205;
-  --pt-primary-strong: #c1dcf3;
-  --pt-primary-soft: #2d455a;
-  --pt-focus: rgba(127,168,205, 0.28);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-paper"]:not([data-bs-theme="dark"]) {
-  --pt-page: #f3efe7;
-  --pt-page-rgb: 243,239,231;
-  --pt-surface: #fffdf8;
-  --pt-surface-rgb: 255,253,248;
-  --pt-surface-soft: #ece6dc;
-  --pt-surface-soft-rgb: 236, 230, 220;
-  --pt-surface-raised: #fffdf8;
-  --pt-text: #2d2b28;
-  --pt-text-muted: #756e65;
-  --pt-text-subtle: color-mix(in srgb, #756e65 78%, transparent);
-  --pt-border: #d6cec1;
-  --pt-border-strong: color-mix(in srgb, #d6cec1 76%, #2d2b28);
-  --pt-primary: #315c8c;
-  --pt-primary-rgb: 49,92,140;
-  --pt-primary-strong: #27496e;
-  --pt-primary-soft: #e7edf4;
-  --pt-focus: rgba(49,92,140, 0.22);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-paper"][data-bs-theme="dark"] {
-  --pt-page: #1c1b19;
-  --pt-page-rgb: 28,27,25;
-  --pt-surface: #292724;
-  --pt-surface-rgb: 41,39,36;
-  --pt-surface-soft: #23211f;
-  --pt-surface-soft-rgb: 35, 33, 31;
-  --pt-surface-raised: #292724;
-  --pt-text: #ece8df;
-  --pt-text-muted: #b9b0a4;
-  --pt-text-subtle: color-mix(in srgb, #b9b0a4 78%, transparent);
-  --pt-border: #49443e;
-  --pt-border-strong: color-mix(in srgb, #49443e 76%, #ece8df);
-  --pt-primary: #8fb7e3;
-  --pt-primary-rgb: 143,183,227;
-  --pt-primary-strong: #c8def5;
-  --pt-primary-soft: #27384b;
-  --pt-focus: rgba(143,183,227, 0.28);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-violet"]:not([data-bs-theme="dark"]) {
-  --pt-page: #f7f6fb;
-  --pt-page-rgb: 247,246,251;
-  --pt-surface: #fff;
-  --pt-surface-rgb: 255,255,255;
-  --pt-surface-soft: #efedf6;
-  --pt-surface-soft-rgb: 239, 237, 246;
-  --pt-surface-raised: #fff;
-  --pt-text: #282532;
-  --pt-text-muted: #736d80;
-  --pt-text-subtle: color-mix(in srgb, #736d80 78%, transparent);
-  --pt-border: #ddd8ea;
-  --pt-border-strong: color-mix(in srgb, #ddd8ea 76%, #282532);
-  --pt-primary: #7654d8;
-  --pt-primary-rgb: 118,84,216;
-  --pt-primary-strong: #5437ad;
-  --pt-primary-soft: #eee9ff;
-  --pt-focus: rgba(118,84,216, 0.22);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-violet"][data-bs-theme="dark"] {
-  --pt-page: #111016;
-  --pt-page-rgb: 17,16,22;
-  --pt-surface: #1c1a24;
-  --pt-surface-rgb: 28,26,36;
-  --pt-surface-soft: #25222f;
-  --pt-surface-soft-rgb: 37, 34, 47;
-  --pt-surface-raised: #1c1a24;
-  --pt-text: #e8e5ef;
-  --pt-text-muted: #aaa4b7;
-  --pt-text-subtle: color-mix(in srgb, #aaa4b7 78%, transparent);
-  --pt-border: #3d384a;
-  --pt-border-strong: color-mix(in srgb, #3d384a 76%, #e8e5ef);
-  --pt-primary: #a68cf0;
-  --pt-primary-rgb: 166,140,240;
-  --pt-primary-strong: #d6caff;
-  --pt-primary-soft: #30264d;
-  --pt-focus: rgba(166,140,240, 0.28);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-ember"]:not([data-bs-theme="dark"]) {
-  --pt-page: #faf6f1;
-  --pt-page-rgb: 250,246,241;
-  --pt-surface: #fff;
-  --pt-surface-rgb: 255,255,255;
-  --pt-surface-soft: #f2e9df;
-  --pt-surface-soft-rgb: 242, 233, 223;
-  --pt-surface-raised: #fff;
-  --pt-text: #332a24;
-  --pt-text-muted: #78695d;
-  --pt-text-subtle: color-mix(in srgb, #78695d 78%, transparent);
-  --pt-border: #e0d2c5;
-  --pt-border-strong: color-mix(in srgb, #e0d2c5 76%, #332a24);
-  --pt-primary: #b75b2a;
-  --pt-primary-rgb: 183,91,42;
-  --pt-primary-strong: #873f1d;
-  --pt-primary-soft: #fae9dd;
-  --pt-focus: rgba(183,91,42, 0.22);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-ember"][data-bs-theme="dark"] {
-  --pt-page: #171210;
-  --pt-page-rgb: 23,18,16;
-  --pt-surface: #241d1a;
-  --pt-surface-rgb: 36,29,26;
-  --pt-surface-soft: #2d2420;
-  --pt-surface-soft-rgb: 45, 36, 32;
-  --pt-surface-raised: #241d1a;
-  --pt-text: #eee4de;
-  --pt-text-muted: #b9aaa2;
-  --pt-text-subtle: color-mix(in srgb, #b9aaa2 78%, transparent);
-  --pt-border: #4c3b34;
-  --pt-border-strong: color-mix(in srgb, #4c3b34 76%, #eee4de);
-  --pt-primary: #df8654;
-  --pt-primary-rgb: 223,134,84;
-  --pt-primary-strong: #f4b28d;
-  --pt-primary-soft: #47291d;
-  --pt-focus: rgba(223,134,84, 0.28);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-harbor"]:not([data-bs-theme="dark"]) {
-  --pt-page: #f2f7f7;
-  --pt-page-rgb: 242,247,247;
-  --pt-surface: #fff;
-  --pt-surface-rgb: 255,255,255;
-  --pt-surface-soft: #e5efef;
-  --pt-surface-soft-rgb: 229, 239, 239;
-  --pt-surface-raised: #fff;
-  --pt-text: #243334;
-  --pt-text-muted: #637879;
-  --pt-text-subtle: color-mix(in srgb, #637879 78%, transparent);
-  --pt-border: #cbdcdb;
-  --pt-border-strong: color-mix(in srgb, #cbdcdb 76%, #243334);
-  --pt-primary: #167a78;
-  --pt-primary-rgb: 22,122,120;
-  --pt-primary-strong: #0f5c5a;
-  --pt-primary-soft: #daf0ef;
-  --pt-focus: rgba(22,122,120, 0.22);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-harbor"][data-bs-theme="dark"] {
-  --pt-page: #0d1719;
-  --pt-page-rgb: 13,23,25;
-  --pt-surface: #162326;
-  --pt-surface-rgb: 22,35,38;
-  --pt-surface-soft: #1d2d30;
-  --pt-surface-soft-rgb: 29, 45, 48;
-  --pt-surface-raised: #162326;
-  --pt-text: #deebeb;
-  --pt-text-muted: #9bb0b2;
-  --pt-text-subtle: color-mix(in srgb, #9bb0b2 78%, transparent);
-  --pt-border: #30484c;
-  --pt-border-strong: color-mix(in srgb, #30484c 76%, #deebeb);
-  --pt-primary: #4eb8b2;
-  --pt-primary-rgb: 78,184,178;
-  --pt-primary-strong: #a5e1dd;
-  --pt-primary-soft: #173d3c;
-  --pt-focus: rgba(78,184,178, 0.28);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-bootstrap22"]:not([data-bs-theme="dark"]) {
-  --pt-page: #f5f5f5;
-  --pt-page-rgb: 245, 245, 245;
-  --pt-surface: #eeeeee;
-  --pt-surface-rgb: 238, 238, 238;
-  --pt-surface-soft: #ffffff;
-  --pt-surface-soft-rgb: 255, 255, 255;
-  --pt-surface-raised: #eeeeee;
-  --pt-text: #333333;
-  --pt-text-muted: #555555;
-  --pt-text-subtle: color-mix(in srgb, #555555 78%, transparent);
-  --pt-border: #c8c8c8;
-  --pt-border-strong: color-mix(in srgb, #c8c8c8 76%, #333333);
-  --pt-primary: #006dcc;
-  --pt-primary-rgb: 0, 109, 204;
-  --pt-primary-strong: color-mix(in srgb, #006dcc 76%, #0f172a);
-  --pt-primary-soft: color-mix(in srgb, #006dcc 14%, #eeeeee);
-  --pt-focus: rgba(0, 109, 204, 0.22);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-bootstrap22"][data-bs-theme="dark"] {
-  --pt-page: #1f252b;
-  --pt-page-rgb: 31, 37, 43;
-  --pt-surface: #2f363d;
-  --pt-surface-rgb: 47, 54, 61;
-  --pt-surface-soft: #252b31;
-  --pt-surface-soft-rgb: 37, 43, 49;
-  --pt-surface-raised: #2f363d;
-  --pt-text: #e6e6e6;
-  --pt-text-muted: #c7d0d8;
-  --pt-text-subtle: color-mix(in srgb, #c7d0d8 78%, transparent);
-  --pt-border: #4a535c;
-  --pt-border-strong: color-mix(in srgb, #4a535c 76%, #e6e6e6);
-  --pt-primary: #4aa3df;
-  --pt-primary-rgb: 74, 163, 223;
-  --pt-primary-strong: color-mix(in srgb, #4aa3df 72%, #ffffff);
-  --pt-primary-soft: color-mix(in srgb, #4aa3df 14%, #2f363d);
-  --pt-focus: rgba(74, 163, 223, 0.28);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-bootstrap22-inverse"]:not([data-bs-theme="dark"]) {
-  --pt-page: #eceff1;
-  --pt-page-rgb: 236, 239, 241;
-  --pt-surface: #d9dee2;
-  --pt-surface-rgb: 217, 222, 226;
-  --pt-surface-soft: #ffffff;
-  --pt-surface-soft-rgb: 255, 255, 255;
-  --pt-surface-raised: #d9dee2;
-  --pt-text: #2f2f2f;
-  --pt-text-muted: #4d5963;
-  --pt-text-subtle: color-mix(in srgb, #4d5963 78%, transparent);
-  --pt-border: #b8c0c7;
-  --pt-border-strong: color-mix(in srgb, #b8c0c7 76%, #2f2f2f);
-  --pt-primary: #2f96b4;
-  --pt-primary-rgb: 47, 150, 180;
-  --pt-primary-strong: color-mix(in srgb, #2f96b4 76%, #0f172a);
-  --pt-primary-soft: color-mix(in srgb, #2f96b4 14%, #d9dee2);
-  --pt-focus: rgba(47, 150, 180, 0.22);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-bootstrap22-inverse"][data-bs-theme="dark"] {
-  --pt-page: #161a1d;
-  --pt-page-rgb: 22, 26, 29;
-  --pt-surface: #252b30;
-  --pt-surface-rgb: 37, 43, 48;
-  --pt-surface-soft: #20262a;
-  --pt-surface-soft-rgb: 32, 38, 42;
-  --pt-surface-raised: #252b30;
-  --pt-text: #e7ecef;
-  --pt-text-muted: #c9d3da;
-  --pt-text-subtle: color-mix(in srgb, #c9d3da 78%, transparent);
-  --pt-border: #48535c;
-  --pt-border-strong: color-mix(in srgb, #48535c 76%, #e7ecef);
-  --pt-primary: #49afcd;
-  --pt-primary-rgb: 73, 175, 205;
-  --pt-primary-strong: color-mix(in srgb, #49afcd 72%, #ffffff);
-  --pt-primary-soft: color-mix(in srgb, #49afcd 14%, #252b30);
-  --pt-focus: rgba(73, 175, 205, 0.28);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-bootstrap3"]:not([data-bs-theme="dark"]) {
-  --pt-page: #f8f8f8;
-  --pt-page-rgb: 248, 248, 248;
-  --pt-surface: #eeeeee;
-  --pt-surface-rgb: 238, 238, 238;
-  --pt-surface-soft: #ffffff;
-  --pt-surface-soft-rgb: 255, 255, 255;
-  --pt-surface-raised: #eeeeee;
-  --pt-text: #333333;
-  --pt-text-muted: #555555;
-  --pt-text-subtle: color-mix(in srgb, #555555 78%, transparent);
-  --pt-border: #dddddd;
-  --pt-border-strong: color-mix(in srgb, #dddddd 76%, #333333);
-  --pt-primary: #337ab7;
-  --pt-primary-rgb: 51, 122, 183;
-  --pt-primary-strong: color-mix(in srgb, #337ab7 76%, #0f172a);
-  --pt-primary-soft: color-mix(in srgb, #337ab7 14%, #eeeeee);
-  --pt-focus: rgba(51, 122, 183, 0.22);
-  --pt-success: #5cb85c;
-  --pt-success-rgb: 92, 184, 92;
-  --pt-warning: #f0ad4e;
-  --pt-warning-rgb: 240, 173, 78;
-  --pt-danger: #d9534f;
-  --pt-danger-rgb: 217, 83, 79;
-  --pt-info: #5bc0de;
-  --pt-info-rgb: 91, 192, 222;
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-bootstrap3"][data-bs-theme="dark"] {
-  --pt-page: #1f252b;
-  --pt-page-rgb: 31, 37, 43;
-  --pt-surface: #2b333b;
-  --pt-surface-rgb: 43, 51, 59;
-  --pt-surface-soft: #252c33;
-  --pt-surface-soft-rgb: 37, 44, 51;
-  --pt-surface-raised: #2b333b;
-  --pt-text: #e7edf2;
-  --pt-text-muted: #bac4cd;
-  --pt-text-subtle: color-mix(in srgb, #bac4cd 78%, transparent);
-  --pt-border: #46515b;
-  --pt-border-strong: color-mix(in srgb, #46515b 76%, #e7edf2);
-  --pt-primary: #5dade2;
-  --pt-primary-rgb: 93, 173, 226;
-  --pt-primary-strong: color-mix(in srgb, #5dade2 72%, #ffffff);
-  --pt-primary-soft: color-mix(in srgb, #5dade2 14%, #2b333b);
-  --pt-focus: rgba(93, 173, 226, 0.28);
-  --pt-success: #70c770;
-  --pt-success-rgb: 112, 199, 112;
-  --pt-warning: #f4bd65;
-  --pt-warning-rgb: 244, 189, 101;
-  --pt-danger: #e26b67;
-  --pt-danger-rgb: 226, 107, 103;
-  --pt-info: #73cde6;
-  --pt-info-rgb: 115, 205, 230;
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-bootstrap3-inverse"]:not([data-bs-theme="dark"]) {
-  --pt-page: #eceff2;
-  --pt-page-rgb: 236, 239, 242;
-  --pt-surface: #dfe4e8;
-  --pt-surface-rgb: 223, 228, 232;
-  --pt-surface-soft: #ffffff;
-  --pt-surface-soft-rgb: 255, 255, 255;
-  --pt-surface-raised: #dfe4e8;
-  --pt-text: #2d3338;
-  --pt-text-muted: #4c5963;
-  --pt-text-subtle: color-mix(in srgb, #4c5963 78%, transparent);
-  --pt-border: #c5cdd4;
-  --pt-border-strong: color-mix(in srgb, #c5cdd4 76%, #2d3338);
-  --pt-primary: #428bca;
-  --pt-primary-rgb: 66, 139, 202;
-  --pt-primary-strong: color-mix(in srgb, #428bca 76%, #0f172a);
-  --pt-primary-soft: color-mix(in srgb, #428bca 14%, #dfe4e8);
-  --pt-focus: rgba(66, 139, 202, 0.22);
-  --pt-success: #5cb85c;
-  --pt-success-rgb: 92, 184, 92;
-  --pt-warning: #f0ad4e;
-  --pt-warning-rgb: 240, 173, 78;
-  --pt-danger: #d9534f;
-  --pt-danger-rgb: 217, 83, 79;
-  --pt-info: #5bc0de;
-  --pt-info-rgb: 91, 192, 222;
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="pytorrent-bootstrap3-inverse"][data-bs-theme="dark"] {
-  --pt-page: #151a1f;
-  --pt-page-rgb: 21, 26, 31;
-  --pt-surface: #232b33;
-  --pt-surface-rgb: 35, 43, 51;
-  --pt-surface-soft: #1d242b;
-  --pt-surface-soft-rgb: 29, 36, 43;
-  --pt-surface-raised: #232b33;
-  --pt-text: #edf2f6;
-  --pt-text-muted: #c3ccd4;
-  --pt-text-subtle: color-mix(in srgb, #c3ccd4 78%, transparent);
-  --pt-border: #3f4b56;
-  --pt-border-strong: color-mix(in srgb, #3f4b56 76%, #edf2f6);
-  --pt-primary: #6fb4eb;
-  --pt-primary-rgb: 111, 180, 235;
-  --pt-primary-strong: color-mix(in srgb, #6fb4eb 72%, #ffffff);
-  --pt-primary-soft: color-mix(in srgb, #6fb4eb 14%, #232b33);
-  --pt-focus: rgba(111, 180, 235, 0.28);
-  --pt-success: #7dd37d;
-  --pt-success-rgb: 125, 211, 125;
-  --pt-warning: #f6c572;
-  --pt-warning-rgb: 246, 197, 114;
-  --pt-danger: #ec7773;
-  --pt-danger-rgb: 236, 119, 115;
-  --pt-info: #83d8ee;
-  --pt-info-rgb: 131, 216, 238;
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="flatly"] {
-  --pt-page: color-mix(in srgb, #2c3e50 3%, #f3f5f8);
-  --pt-page-rgb: 243, 245, 248;
-  --pt-surface: #ffffff;
-  --pt-surface-rgb: 255, 255, 255;
-  --pt-surface-soft: color-mix(in srgb, #2c3e50 5%, #f7f8fa);
-  --pt-surface-soft-rgb: 247, 248, 250;
-  --pt-surface-raised: #ffffff;
-  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
-  --pt-border: color-mix(in srgb, #2c3e50 12%, #dfe4ea);
-  --pt-primary: #2c3e50;
-  --pt-primary-strong: color-mix(in srgb, #2c3e50 78%, #111827);
-  --pt-primary-rgb: 44, 62, 80;
-  --pt-primary-soft: color-mix(in srgb, #2c3e50 12%, var(--pt-surface));
-  --pt-focus: rgba(44, 62, 80, 0.22);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="flatly"][data-bs-theme="dark"] {
-  --pt-page: color-mix(in srgb, var(--pt-primary) 4%, #0b0e13);
-  --pt-page-rgb: 11, 14, 19;
-  --pt-surface: color-mix(in srgb, var(--pt-primary) 5%, #11161d);
-  --pt-surface-rgb: 17, 22, 29;
-  --pt-surface-soft: color-mix(in srgb, var(--pt-primary) 6%, #161c24);
-  --pt-surface-soft-rgb: 22, 28, 36;
-  --pt-surface-raised: color-mix(in srgb, var(--pt-primary) 7%, #19212b);
-  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
-  --pt-border: color-mix(in srgb, var(--pt-primary) 12%, #27313d);
-  --pt-primary: color-mix(in srgb, #2c3e50 72%, #ffffff);
-  --pt-primary-strong: color-mix(in srgb, var(--pt-primary) 78%, #ffffff);
-  --pt-primary-rgb: 44, 62, 80;
-  --pt-primary-soft: color-mix(in srgb, #2c3e50 18%, var(--pt-surface));
-  --pt-focus: rgba(44, 62, 80, 0.28);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="litera"] {
-  --pt-page: color-mix(in srgb, #4582ec 3%, #f3f5f8);
-  --pt-page-rgb: 243, 245, 248;
-  --pt-surface: #ffffff;
-  --pt-surface-rgb: 255, 255, 255;
-  --pt-surface-soft: color-mix(in srgb, #4582ec 5%, #f7f8fa);
-  --pt-surface-soft-rgb: 247, 248, 250;
-  --pt-surface-raised: #ffffff;
-  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
-  --pt-border: color-mix(in srgb, #4582ec 12%, #dfe4ea);
-  --pt-primary: #4582ec;
-  --pt-primary-strong: color-mix(in srgb, #4582ec 78%, #111827);
-  --pt-primary-rgb: 69, 130, 236;
-  --pt-primary-soft: color-mix(in srgb, #4582ec 12%, var(--pt-surface));
-  --pt-focus: rgba(69, 130, 236, 0.22);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="litera"][data-bs-theme="dark"] {
-  --pt-page: color-mix(in srgb, var(--pt-primary) 4%, #0b0e13);
-  --pt-page-rgb: 11, 14, 19;
-  --pt-surface: color-mix(in srgb, var(--pt-primary) 5%, #11161d);
-  --pt-surface-rgb: 17, 22, 29;
-  --pt-surface-soft: color-mix(in srgb, var(--pt-primary) 6%, #161c24);
-  --pt-surface-soft-rgb: 22, 28, 36;
-  --pt-surface-raised: color-mix(in srgb, var(--pt-primary) 7%, #19212b);
-  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
-  --pt-border: color-mix(in srgb, var(--pt-primary) 12%, #27313d);
-  --pt-primary: color-mix(in srgb, #4582ec 72%, #ffffff);
-  --pt-primary-strong: color-mix(in srgb, var(--pt-primary) 78%, #ffffff);
-  --pt-primary-rgb: 69, 130, 236;
-  --pt-primary-soft: color-mix(in srgb, #4582ec 18%, var(--pt-surface));
-  --pt-focus: rgba(69, 130, 236, 0.28);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="lumen"] {
-  --pt-page: color-mix(in srgb, #158cba 3%, #f3f5f8);
-  --pt-page-rgb: 243, 245, 248;
-  --pt-surface: #ffffff;
-  --pt-surface-rgb: 255, 255, 255;
-  --pt-surface-soft: color-mix(in srgb, #158cba 5%, #f7f8fa);
-  --pt-surface-soft-rgb: 247, 248, 250;
-  --pt-surface-raised: #ffffff;
-  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
-  --pt-border: color-mix(in srgb, #158cba 12%, #dfe4ea);
-  --pt-primary: #158cba;
-  --pt-primary-strong: color-mix(in srgb, #158cba 78%, #111827);
-  --pt-primary-rgb: 21, 140, 186;
-  --pt-primary-soft: color-mix(in srgb, #158cba 12%, var(--pt-surface));
-  --pt-focus: rgba(21, 140, 186, 0.22);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="lumen"][data-bs-theme="dark"] {
-  --pt-page: color-mix(in srgb, var(--pt-primary) 4%, #0b0e13);
-  --pt-page-rgb: 11, 14, 19;
-  --pt-surface: color-mix(in srgb, var(--pt-primary) 5%, #11161d);
-  --pt-surface-rgb: 17, 22, 29;
-  --pt-surface-soft: color-mix(in srgb, var(--pt-primary) 6%, #161c24);
-  --pt-surface-soft-rgb: 22, 28, 36;
-  --pt-surface-raised: color-mix(in srgb, var(--pt-primary) 7%, #19212b);
-  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
-  --pt-border: color-mix(in srgb, var(--pt-primary) 12%, #27313d);
-  --pt-primary: color-mix(in srgb, #158cba 72%, #ffffff);
-  --pt-primary-strong: color-mix(in srgb, var(--pt-primary) 78%, #ffffff);
-  --pt-primary-rgb: 21, 140, 186;
-  --pt-primary-soft: color-mix(in srgb, #158cba 18%, var(--pt-surface));
-  --pt-focus: rgba(21, 140, 186, 0.28);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="minty"] {
-  --pt-page: color-mix(in srgb, #78c2ad 3%, #f3f5f8);
-  --pt-page-rgb: 243, 245, 248;
-  --pt-surface: #ffffff;
-  --pt-surface-rgb: 255, 255, 255;
-  --pt-surface-soft: color-mix(in srgb, #78c2ad 5%, #f7f8fa);
-  --pt-surface-soft-rgb: 247, 248, 250;
-  --pt-surface-raised: #ffffff;
-  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
-  --pt-border: color-mix(in srgb, #78c2ad 12%, #dfe4ea);
-  --pt-primary: #78c2ad;
-  --pt-primary-strong: color-mix(in srgb, #78c2ad 78%, #111827);
-  --pt-primary-rgb: 120, 194, 173;
-  --pt-primary-soft: color-mix(in srgb, #78c2ad 12%, var(--pt-surface));
-  --pt-focus: rgba(120, 194, 173, 0.22);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="minty"][data-bs-theme="dark"] {
-  --pt-page: color-mix(in srgb, var(--pt-primary) 4%, #0b0e13);
-  --pt-page-rgb: 11, 14, 19;
-  --pt-surface: color-mix(in srgb, var(--pt-primary) 5%, #11161d);
-  --pt-surface-rgb: 17, 22, 29;
-  --pt-surface-soft: color-mix(in srgb, var(--pt-primary) 6%, #161c24);
-  --pt-surface-soft-rgb: 22, 28, 36;
-  --pt-surface-raised: color-mix(in srgb, var(--pt-primary) 7%, #19212b);
-  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
-  --pt-border: color-mix(in srgb, var(--pt-primary) 12%, #27313d);
-  --pt-primary: color-mix(in srgb, #78c2ad 72%, #ffffff);
-  --pt-primary-strong: color-mix(in srgb, var(--pt-primary) 78%, #ffffff);
-  --pt-primary-rgb: 120, 194, 173;
-  --pt-primary-soft: color-mix(in srgb, #78c2ad 18%, var(--pt-surface));
-  --pt-focus: rgba(120, 194, 173, 0.28);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="sketchy"] {
-  --pt-page: color-mix(in srgb, #333333 3%, #f3f5f8);
-  --pt-page-rgb: 243, 245, 248;
-  --pt-surface: #ffffff;
-  --pt-surface-rgb: 255, 255, 255;
-  --pt-surface-soft: color-mix(in srgb, #333333 5%, #f7f8fa);
-  --pt-surface-soft-rgb: 247, 248, 250;
-  --pt-surface-raised: #ffffff;
-  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
-  --pt-border: color-mix(in srgb, #333333 12%, #dfe4ea);
-  --pt-primary: #333333;
-  --pt-primary-strong: color-mix(in srgb, #333333 78%, #111827);
-  --pt-primary-rgb: 51, 51, 51;
-  --pt-primary-soft: color-mix(in srgb, #333333 12%, var(--pt-surface));
-  --pt-focus: rgba(51, 51, 51, 0.22);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="sketchy"][data-bs-theme="dark"] {
-  --pt-page: color-mix(in srgb, var(--pt-primary) 4%, #0b0e13);
-  --pt-page-rgb: 11, 14, 19;
-  --pt-surface: color-mix(in srgb, var(--pt-primary) 5%, #11161d);
-  --pt-surface-rgb: 17, 22, 29;
-  --pt-surface-soft: color-mix(in srgb, var(--pt-primary) 6%, #161c24);
-  --pt-surface-soft-rgb: 22, 28, 36;
-  --pt-surface-raised: color-mix(in srgb, var(--pt-primary) 7%, #19212b);
-  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
-  --pt-border: color-mix(in srgb, var(--pt-primary) 12%, #27313d);
-  --pt-primary: color-mix(in srgb, #333333 72%, #ffffff);
-  --pt-primary-strong: color-mix(in srgb, var(--pt-primary) 78%, #ffffff);
-  --pt-primary-rgb: 51, 51, 51;
-  --pt-primary-soft: color-mix(in srgb, #333333 18%, var(--pt-surface));
-  --pt-focus: rgba(51, 51, 51, 0.28);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="spacelab"] {
-  --pt-page: color-mix(in srgb, #446e9b 3%, #f3f5f8);
-  --pt-page-rgb: 243, 245, 248;
-  --pt-surface: #ffffff;
-  --pt-surface-rgb: 255, 255, 255;
-  --pt-surface-soft: color-mix(in srgb, #446e9b 5%, #f7f8fa);
-  --pt-surface-soft-rgb: 247, 248, 250;
-  --pt-surface-raised: #ffffff;
-  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
-  --pt-border: color-mix(in srgb, #446e9b 12%, #dfe4ea);
-  --pt-primary: #446e9b;
-  --pt-primary-strong: color-mix(in srgb, #446e9b 78%, #111827);
-  --pt-primary-rgb: 68, 110, 155;
-  --pt-primary-soft: color-mix(in srgb, #446e9b 12%, var(--pt-surface));
-  --pt-focus: rgba(68, 110, 155, 0.22);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="spacelab"][data-bs-theme="dark"] {
-  --pt-page: color-mix(in srgb, var(--pt-primary) 4%, #0b0e13);
-  --pt-page-rgb: 11, 14, 19;
-  --pt-surface: color-mix(in srgb, var(--pt-primary) 5%, #11161d);
-  --pt-surface-rgb: 17, 22, 29;
-  --pt-surface-soft: color-mix(in srgb, var(--pt-primary) 6%, #161c24);
-  --pt-surface-soft-rgb: 22, 28, 36;
-  --pt-surface-raised: color-mix(in srgb, var(--pt-primary) 7%, #19212b);
-  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
-  --pt-border: color-mix(in srgb, var(--pt-primary) 12%, #27313d);
-  --pt-primary: color-mix(in srgb, #446e9b 72%, #ffffff);
-  --pt-primary-strong: color-mix(in srgb, var(--pt-primary) 78%, #ffffff);
-  --pt-primary-rgb: 68, 110, 155;
-  --pt-primary-soft: color-mix(in srgb, #446e9b 18%, var(--pt-surface));
-  --pt-focus: rgba(68, 110, 155, 0.28);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="united"] {
-  --pt-page: color-mix(in srgb, #e95420 3%, #f3f5f8);
-  --pt-page-rgb: 243, 245, 248;
-  --pt-surface: #ffffff;
-  --pt-surface-rgb: 255, 255, 255;
-  --pt-surface-soft: color-mix(in srgb, #e95420 5%, #f7f8fa);
-  --pt-surface-soft-rgb: 247, 248, 250;
-  --pt-surface-raised: #ffffff;
-  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
-  --pt-border: color-mix(in srgb, #e95420 12%, #dfe4ea);
-  --pt-primary: #e95420;
-  --pt-primary-strong: color-mix(in srgb, #e95420 78%, #111827);
-  --pt-primary-rgb: 233, 84, 32;
-  --pt-primary-soft: color-mix(in srgb, #e95420 12%, var(--pt-surface));
-  --pt-focus: rgba(233, 84, 32, 0.22);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="united"][data-bs-theme="dark"] {
-  --pt-page: color-mix(in srgb, var(--pt-primary) 4%, #0b0e13);
-  --pt-page-rgb: 11, 14, 19;
-  --pt-surface: color-mix(in srgb, var(--pt-primary) 5%, #11161d);
-  --pt-surface-rgb: 17, 22, 29;
-  --pt-surface-soft: color-mix(in srgb, var(--pt-primary) 6%, #161c24);
-  --pt-surface-soft-rgb: 22, 28, 36;
-  --pt-surface-raised: color-mix(in srgb, var(--pt-primary) 7%, #19212b);
-  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
-  --pt-border: color-mix(in srgb, var(--pt-primary) 12%, #27313d);
-  --pt-primary: color-mix(in srgb, #e95420 72%, #ffffff);
-  --pt-primary-strong: color-mix(in srgb, var(--pt-primary) 78%, #ffffff);
-  --pt-primary-rgb: 233, 84, 32;
-  --pt-primary-soft: color-mix(in srgb, #e95420 18%, var(--pt-surface));
-  --pt-focus: rgba(233, 84, 32, 0.28);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="zephyr"] {
-  --pt-page: color-mix(in srgb, #3459e6 3%, #f3f5f8);
-  --pt-page-rgb: 243, 245, 248;
-  --pt-surface: #ffffff;
-  --pt-surface-rgb: 255, 255, 255;
-  --pt-surface-soft: color-mix(in srgb, #3459e6 5%, #f7f8fa);
-  --pt-surface-soft-rgb: 247, 248, 250;
-  --pt-surface-raised: #ffffff;
-  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
-  --pt-border: color-mix(in srgb, #3459e6 12%, #dfe4ea);
-  --pt-primary: #3459e6;
-  --pt-primary-strong: color-mix(in srgb, #3459e6 78%, #111827);
-  --pt-primary-rgb: 52, 89, 230;
-  --pt-primary-soft: color-mix(in srgb, #3459e6 12%, var(--pt-surface));
-  --pt-focus: rgba(52, 89, 230, 0.22);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="zephyr"][data-bs-theme="dark"] {
-  --pt-page: color-mix(in srgb, var(--pt-primary) 4%, #0b0e13);
-  --pt-page-rgb: 11, 14, 19;
-  --pt-surface: color-mix(in srgb, var(--pt-primary) 5%, #11161d);
-  --pt-surface-rgb: 17, 22, 29;
-  --pt-surface-soft: color-mix(in srgb, var(--pt-primary) 6%, #161c24);
-  --pt-surface-soft-rgb: 22, 28, 36;
-  --pt-surface-raised: color-mix(in srgb, var(--pt-primary) 7%, #19212b);
-  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
-  --pt-border: color-mix(in srgb, var(--pt-primary) 12%, #27313d);
-  --pt-primary: color-mix(in srgb, #3459e6 72%, #ffffff);
-  --pt-primary-strong: color-mix(in srgb, var(--pt-primary) 78%, #ffffff);
-  --pt-primary-rgb: 52, 89, 230;
-  --pt-primary-soft: color-mix(in srgb, #3459e6 18%, var(--pt-surface));
-  --pt-focus: rgba(52, 89, 230, 0.28);
+/* Translate a selected Bootstrap skin into the native PyTorrent design tokens. */
+html[data-ui-framework="pytorrent"][data-pytorrent-theme^="bootstrap:"] {
+  --pt-page: var(--bs-body-bg, #f8fafc);
+  --pt-page-rgb: var(--bs-body-bg-rgb, 248, 250, 252);
+  --pt-surface: var(--bs-secondary-bg, var(--bs-body-bg, #ffffff));
+  --pt-surface-rgb: var(--bs-secondary-bg-rgb, var(--bs-body-bg-rgb, 255, 255, 255));
+  --pt-surface-soft: var(--bs-tertiary-bg, var(--bs-secondary-bg, #f1f5f9));
+  --pt-surface-soft-rgb: var(--bs-tertiary-bg-rgb, var(--bs-secondary-bg-rgb, 241, 245, 249));
+  --pt-surface-raised: var(--bs-body-bg, #ffffff);
+  --pt-text: var(--bs-body-color, #0f172a);
+  --pt-text-muted: var(--bs-secondary-color, #64748b);
+  --pt-text-subtle: var(--bs-tertiary-color, var(--bs-secondary-color, #94a3b8));
+  --pt-border: var(--bs-border-color, #e2e8f0);
+  --pt-border-strong: color-mix(in srgb, var(--bs-border-color, #cbd5e1) 78%, var(--bs-body-color, #0f172a));
+  --pt-primary: var(--bs-primary, #2563eb);
+  --pt-primary-rgb: var(--bs-primary-rgb, 37, 99, 235);
+  --pt-primary-strong: color-mix(in srgb, var(--bs-primary, #2563eb) 82%, var(--bs-body-color, #0f172a));
+  --pt-primary-soft: var(--bs-primary-bg-subtle, color-mix(in srgb, var(--bs-primary, #2563eb) 12%, var(--bs-body-bg, #ffffff)));
+  --pt-success: var(--bs-success, #16a34a);
+  --pt-success-rgb: var(--bs-success-rgb, 22, 163, 74);
+  --pt-warning: var(--bs-warning, #d97706);
+  --pt-warning-rgb: var(--bs-warning-rgb, 217, 119, 6);
+  --pt-danger: var(--bs-danger, #dc2626);
+  --pt-danger-rgb: var(--bs-danger-rgb, 220, 38, 38);
+  --pt-info: var(--bs-info, #0284c7);
+  --pt-info-rgb: var(--bs-info-rgb, 2, 132, 199);
+  --pt-focus: rgba(var(--bs-primary-rgb, 37, 99, 235), 0.24);
+  --pt-shadow-sm: var(--bs-box-shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.08));
+  --pt-shadow-md: var(--bs-box-shadow, 0 14px 34px rgba(15, 23, 42, 0.14));
+  --pt-radius-sm: var(--bs-border-radius-sm, 0.375rem);
+  --pt-radius: var(--bs-border-radius, 0.5rem);
+  --pt-radius-lg: var(--bs-border-radius-lg, 0.75rem);
+  --pt-menu-bg: var(--bs-dropdown-bg, var(--bs-body-bg, #ffffff));
 }
 
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="dx-blazing-berry"] {
-  --pt-page: color-mix(in srgb, #c2185b 3%, #f3f5f8);
-  --pt-page-rgb: 243, 245, 248;
-  --pt-surface: #ffffff;
-  --pt-surface-rgb: 255, 255, 255;
-  --pt-surface-soft: color-mix(in srgb, #c2185b 5%, #f7f8fa);
-  --pt-surface-soft-rgb: 247, 248, 250;
-  --pt-surface-raised: #ffffff;
-  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
-  --pt-border: color-mix(in srgb, #c2185b 12%, #dfe4ea);
-  --pt-primary: #c2185b;
-  --pt-primary-strong: color-mix(in srgb, #c2185b 78%, #111827);
-  --pt-primary-rgb: 194, 24, 91;
-  --pt-primary-soft: color-mix(in srgb, #c2185b 12%, var(--pt-surface));
-  --pt-focus: rgba(194, 24, 91, 0.22);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="dx-blazing-berry"][data-bs-theme="dark"] {
-  --pt-page: color-mix(in srgb, var(--pt-primary) 4%, #0b0e13);
-  --pt-page-rgb: 11, 14, 19;
-  --pt-surface: color-mix(in srgb, var(--pt-primary) 5%, #11161d);
-  --pt-surface-rgb: 17, 22, 29;
-  --pt-surface-soft: color-mix(in srgb, var(--pt-primary) 6%, #161c24);
-  --pt-surface-soft-rgb: 22, 28, 36;
-  --pt-surface-raised: color-mix(in srgb, var(--pt-primary) 7%, #19212b);
-  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
-  --pt-border: color-mix(in srgb, var(--pt-primary) 12%, #27313d);
-  --pt-primary: color-mix(in srgb, #c2185b 72%, #ffffff);
-  --pt-primary-strong: color-mix(in srgb, var(--pt-primary) 78%, #ffffff);
-  --pt-primary-rgb: 194, 24, 91;
-  --pt-primary-soft: color-mix(in srgb, #c2185b 18%, var(--pt-surface));
-  --pt-focus: rgba(194, 24, 91, 0.28);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="dx-office-white"] {
-  --pt-page: color-mix(in srgb, #337ab7 3%, #f3f5f8);
-  --pt-page-rgb: 243, 245, 248;
-  --pt-surface: #ffffff;
-  --pt-surface-rgb: 255, 255, 255;
-  --pt-surface-soft: color-mix(in srgb, #337ab7 5%, #f7f8fa);
-  --pt-surface-soft-rgb: 247, 248, 250;
-  --pt-surface-raised: #ffffff;
-  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
-  --pt-border: color-mix(in srgb, #337ab7 12%, #dfe4ea);
-  --pt-primary: #337ab7;
-  --pt-primary-strong: color-mix(in srgb, #337ab7 78%, #111827);
-  --pt-primary-rgb: 51, 122, 183;
-  --pt-primary-soft: color-mix(in srgb, #337ab7 12%, var(--pt-surface));
-  --pt-focus: rgba(51, 122, 183, 0.22);
-}
 
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="dx-office-white"][data-bs-theme="dark"] {
-  --pt-page: color-mix(in srgb, var(--pt-primary) 4%, #0b0e13);
-  --pt-page-rgb: 11, 14, 19;
-  --pt-surface: color-mix(in srgb, var(--pt-primary) 5%, #11161d);
-  --pt-surface-rgb: 17, 22, 29;
-  --pt-surface-soft: color-mix(in srgb, var(--pt-primary) 6%, #161c24);
-  --pt-surface-soft-rgb: 22, 28, 36;
-  --pt-surface-raised: color-mix(in srgb, var(--pt-primary) 7%, #19212b);
-  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
-  --pt-border: color-mix(in srgb, var(--pt-primary) 12%, #27313d);
-  --pt-primary: color-mix(in srgb, #337ab7 72%, #ffffff);
-  --pt-primary-strong: color-mix(in srgb, var(--pt-primary) 78%, #ffffff);
-  --pt-primary-rgb: 51, 122, 183;
-  --pt-primary-soft: color-mix(in srgb, #337ab7 18%, var(--pt-surface));
-  --pt-focus: rgba(51, 122, 183, 0.28);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="dx-purple"] {
-  --pt-page: color-mix(in srgb, #6f42c1 3%, #f3f5f8);
-  --pt-page-rgb: 243, 245, 248;
-  --pt-surface: #ffffff;
-  --pt-surface-rgb: 255, 255, 255;
-  --pt-surface-soft: color-mix(in srgb, #6f42c1 5%, #f7f8fa);
-  --pt-surface-soft-rgb: 247, 248, 250;
-  --pt-surface-raised: #ffffff;
-  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
-  --pt-border: color-mix(in srgb, #6f42c1 12%, #dfe4ea);
-  --pt-primary: #6f42c1;
-  --pt-primary-strong: color-mix(in srgb, #6f42c1 78%, #111827);
-  --pt-primary-rgb: 111, 66, 193;
-  --pt-primary-soft: color-mix(in srgb, #6f42c1 12%, var(--pt-surface));
-  --pt-focus: rgba(111, 66, 193, 0.22);
-}
-
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="dx-purple"][data-bs-theme="dark"] {
-  --pt-page: color-mix(in srgb, var(--pt-primary) 4%, #0b0e13);
-  --pt-page-rgb: 11, 14, 19;
-  --pt-surface: color-mix(in srgb, var(--pt-primary) 5%, #11161d);
-  --pt-surface-rgb: 17, 22, 29;
-  --pt-surface-soft: color-mix(in srgb, var(--pt-primary) 6%, #161c24);
-  --pt-surface-soft-rgb: 22, 28, 36;
-  --pt-surface-raised: color-mix(in srgb, var(--pt-primary) 7%, #19212b);
-  --pt-border-strong: color-mix(in srgb, var(--pt-border) 76%, var(--pt-text));
-  --pt-border: color-mix(in srgb, var(--pt-primary) 12%, #27313d);
-  --pt-primary: color-mix(in srgb, #6f42c1 72%, #ffffff);
-  --pt-primary-strong: color-mix(in srgb, var(--pt-primary) 78%, #ffffff);
-  --pt-primary-rgb: 111, 66, 193;
-  --pt-primary-soft: color-mix(in srgb, #6f42c1 18%, var(--pt-surface));
-  --pt-focus: rgba(111, 66, 193, 0.28);
-}
 
 html[data-ui-framework="pytorrent"],
 html[data-ui-framework="pytorrent"] *,
@@ -1921,7 +413,7 @@ html[data-ui-framework="pytorrent"] .btn-link {
 }
 
 html[data-ui-framework="pytorrent"] .btn-sm,
-html[data-ui-framework="pytorrent"] .btn-group-sm > .btn {
+html[data-ui-framework="pytorrent"] .btn-group-sm>.btn {
   --bs-btn-padding-y: 0.24rem;
   --bs-btn-padding-x: 0.5rem;
   --bs-btn-font-size: 0.78rem;
@@ -1943,13 +435,13 @@ html[data-ui-framework="pytorrent"] .btn-group {
   vertical-align: middle;
 }
 
-html[data-ui-framework="pytorrent"] .btn-group > .btn:not(:first-child) {
+html[data-ui-framework="pytorrent"] .btn-group>.btn:not(:first-child) {
   margin-left: -1px;
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
 }
 
-html[data-ui-framework="pytorrent"] .btn-group > .btn:not(:last-child) {
+html[data-ui-framework="pytorrent"] .btn-group>.btn:not(:last-child) {
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
 }
@@ -2055,9 +547,9 @@ html[data-ui-framework="pytorrent"] .form-select {
 
 html[data-ui-framework="pytorrent"] .form-control-sm,
 html[data-ui-framework="pytorrent"] .form-select-sm,
-html[data-ui-framework="pytorrent"] .input-group-sm > .form-control,
-html[data-ui-framework="pytorrent"] .input-group-sm > .form-select,
-html[data-ui-framework="pytorrent"] .input-group-sm > .input-group-text {
+html[data-ui-framework="pytorrent"] .input-group-sm>.form-control,
+html[data-ui-framework="pytorrent"] .input-group-sm>.form-select,
+html[data-ui-framework="pytorrent"] .input-group-sm>.input-group-text {
   min-height: 1.58rem;
   padding-top: 0.18rem;
   padding-bottom: 0.18rem;
@@ -2065,7 +557,7 @@ html[data-ui-framework="pytorrent"] .input-group-sm > .input-group-text {
   border-radius: 0.34rem;
 }
 
-html[data-ui-framework="pytorrent"] .input-group-sm > .btn {
+html[data-ui-framework="pytorrent"] .input-group-sm>.btn {
   --bs-btn-padding-y: 0.3rem;
   --bs-btn-padding-x: 0.5rem;
   --bs-btn-font-size: 0.78rem;
@@ -2078,7 +570,7 @@ html[data-ui-framework="pytorrent"] textarea.form-control {
 }
 
 html[data-ui-framework="pytorrent"] .form-text,
-html[data-ui-framework="pytorrent"] .form-field > small {
+html[data-ui-framework="pytorrent"] .form-field>small {
   margin-top: 0.25rem;
   color: var(--pt-text-muted);
   font-size: 0.76rem;
@@ -2093,21 +585,21 @@ html[data-ui-framework="pytorrent"] .input-group {
   width: 100%;
 }
 
-html[data-ui-framework="pytorrent"] .input-group > .form-control,
-html[data-ui-framework="pytorrent"] .input-group > .form-select {
+html[data-ui-framework="pytorrent"] .input-group>.form-control,
+html[data-ui-framework="pytorrent"] .input-group>.form-select {
   position: relative;
   flex: 1 1 auto;
   width: 1%;
   min-width: 0;
 }
 
-html[data-ui-framework="pytorrent"] .input-group > :not(:first-child) {
+html[data-ui-framework="pytorrent"] .input-group> :not(:first-child) {
   margin-left: -1px;
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
 }
 
-html[data-ui-framework="pytorrent"] .input-group > :not(:last-child) {
+html[data-ui-framework="pytorrent"] .input-group> :not(:last-child) {
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
 }
@@ -2298,10 +790,6 @@ html[data-ui-framework="pytorrent"][data-bs-theme="dark"] .nav-pills .nav-link.a
   color: #c5d0ff;
 }
 
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="default-beta"][data-bs-theme="dark"] .nav-link.active,
-html[data-ui-framework="pytorrent"][data-pytorrent-theme="default-beta"][data-bs-theme="dark"] .nav-pills .nav-link.active {
-  color: var(--pt-primary-strong);
-}
 
 html[data-ui-framework="pytorrent"] .nav-tabs {
   gap: 0.2rem;
@@ -2319,11 +807,11 @@ html[data-ui-framework="pytorrent"] .nav-tabs .nav-link.active {
   border-color: var(--pt-border) var(--pt-border) var(--pt-surface);
 }
 
-html[data-ui-framework="pytorrent"] .tab-content > .tab-pane {
+html[data-ui-framework="pytorrent"] .tab-content>.tab-pane {
   display: none;
 }
 
-html[data-ui-framework="pytorrent"] .tab-content > .active {
+html[data-ui-framework="pytorrent"] .tab-content>.active {
   display: block;
 }
 
@@ -2386,8 +874,15 @@ html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"] .dropdown-menu.s
 }
 
 @keyframes pytorrent-menu-in {
-  from { opacity: 0; transform: translateY(-3px) scale(0.99); }
-  to { opacity: 1; transform: none; }
+  from {
+    opacity: 0;
+    transform: translateY(-3px) scale(0.99);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 html[data-ui-framework="pytorrent"] .dropdown-menu-end {
@@ -2547,7 +1042,7 @@ html[data-ui-framework="pytorrent"] .modal-dialog {
   pointer-events: none;
   opacity: 0;
   transform: translateY(10px) scale(0.985);
-  transition: opacity var(--pt-motion-base) ease, transform var(--pt-motion-base) cubic-bezier(.2,.75,.25,1);
+  transition: opacity var(--pt-motion-base) ease, transform var(--pt-motion-base) cubic-bezier(.2, .75, .25, 1);
 }
 
 html[data-ui-framework="pytorrent"] .modal.show .modal-dialog {
@@ -2560,8 +1055,15 @@ html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"] .modal.show .mod
 }
 
 @keyframes pytorrent-modal-in {
-  from { opacity: 0; transform: translateY(10px) scale(0.985); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 html[data-ui-framework="pytorrent"] .modal-dialog-centered {
@@ -2691,8 +1193,15 @@ html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"] .tab-pane.fade.a
 }
 
 @keyframes pytorrent-tab-in {
-  from { opacity: 0; transform: translateY(2px); }
-  to { opacity: 1; transform: none; }
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* Dense controls in data tables stay content-sized instead of stretching columns. */
@@ -2712,12 +1221,13 @@ html[data-ui-framework="pytorrent"] .file-priority-table .form-select.file-prior
 
 /* Keep compact desktop density without making touch controls hard to use. */
 @media (pointer: coarse) {
+
   html[data-ui-framework="pytorrent"] .form-control-sm,
   html[data-ui-framework="pytorrent"] .form-select-sm,
-  html[data-ui-framework="pytorrent"] .input-group-sm > .form-control,
-  html[data-ui-framework="pytorrent"] .input-group-sm > .form-select,
-  html[data-ui-framework="pytorrent"] .input-group-sm > .input-group-text,
-  html[data-ui-framework="pytorrent"] .input-group-sm > .btn {
+  html[data-ui-framework="pytorrent"] .input-group-sm>.form-control,
+  html[data-ui-framework="pytorrent"] .input-group-sm>.form-select,
+  html[data-ui-framework="pytorrent"] .input-group-sm>.input-group-text,
+  html[data-ui-framework="pytorrent"] .input-group-sm>.btn {
     min-height: 2rem;
   }
 
@@ -2737,14 +1247,14 @@ html[data-ui-framework="pytorrent"] .table {
   border-collapse: collapse;
 }
 
-html[data-ui-framework="pytorrent"] .table > :not(caption) > * > * {
+html[data-ui-framework="pytorrent"] .table> :not(caption)>*>* {
   padding: 0.48rem 0.56rem;
   color: inherit;
   background: transparent;
   border-bottom: 1px solid var(--pt-border);
 }
 
-html[data-ui-framework="pytorrent"] .table > thead {
+html[data-ui-framework="pytorrent"] .table>thead {
   color: var(--pt-text-muted);
   font-size: 0.78rem;
   font-weight: 700;
@@ -2755,11 +1265,11 @@ html[data-ui-framework="pytorrent"] .table th {
   text-align: inherit;
 }
 
-html[data-ui-framework="pytorrent"] .table-hover > tbody > tr:hover > * {
+html[data-ui-framework="pytorrent"] .table-hover>tbody>tr:hover>* {
   background: rgba(var(--bs-primary-rgb), 0.055);
 }
 
-html[data-ui-framework="pytorrent"] .table-sm > :not(caption) > * > * {
+html[data-ui-framework="pytorrent"] .table-sm> :not(caption)>*>* {
   padding: 0.32rem 0.42rem;
 }
 
@@ -2786,14 +1296,46 @@ html[data-ui-framework="pytorrent"] .badge {
   border-radius: 999px;
 }
 
-html[data-ui-framework="pytorrent"] .text-bg-primary { color: #fff !important; background: var(--pt-primary) !important; }
-html[data-ui-framework="pytorrent"] .text-bg-secondary { color: var(--pt-text) !important; background: var(--pt-surface-soft) !important; border: 1px solid var(--pt-border); }
-html[data-ui-framework="pytorrent"] .text-bg-success { color: #fff !important; background: var(--pt-success) !important; }
-html[data-ui-framework="pytorrent"] .text-bg-danger { color: #fff !important; background: var(--pt-danger) !important; }
-html[data-ui-framework="pytorrent"] .text-bg-warning { color: #241a08 !important; background: color-mix(in srgb, var(--pt-warning) 75%, white) !important; }
-html[data-ui-framework="pytorrent"] .text-bg-info { color: #fff !important; background: var(--pt-info) !important; }
-html[data-ui-framework="pytorrent"] .text-bg-dark { color: #fff !important; background: #202733 !important; }
-html[data-ui-framework="pytorrent"] .text-bg-light { color: #172033 !important; background: #f2f4f7 !important; }
+html[data-ui-framework="pytorrent"] .text-bg-primary {
+  color: #fff !important;
+  background: var(--pt-primary) !important;
+}
+
+html[data-ui-framework="pytorrent"] .text-bg-secondary {
+  color: var(--pt-text) !important;
+  background: var(--pt-surface-soft) !important;
+  border: 1px solid var(--pt-border);
+}
+
+html[data-ui-framework="pytorrent"] .text-bg-success {
+  color: #fff !important;
+  background: var(--pt-success) !important;
+}
+
+html[data-ui-framework="pytorrent"] .text-bg-danger {
+  color: #fff !important;
+  background: var(--pt-danger) !important;
+}
+
+html[data-ui-framework="pytorrent"] .text-bg-warning {
+  color: #241a08 !important;
+  background: color-mix(in srgb, var(--pt-warning) 75%, white) !important;
+}
+
+html[data-ui-framework="pytorrent"] .text-bg-info {
+  color: #fff !important;
+  background: var(--pt-info) !important;
+}
+
+html[data-ui-framework="pytorrent"] .text-bg-dark {
+  color: #fff !important;
+  background: #202733 !important;
+}
+
+html[data-ui-framework="pytorrent"] .text-bg-light {
+  color: #172033 !important;
+  background: #f2f4f7 !important;
+}
 
 html[data-ui-framework="pytorrent"] .alert {
   position: relative;
@@ -2805,10 +1347,24 @@ html[data-ui-framework="pytorrent"] .alert {
   border-radius: var(--pt-radius);
 }
 
-html[data-ui-framework="pytorrent"] .alert-secondary { background: var(--pt-surface-soft); }
-html[data-ui-framework="pytorrent"] .alert-info { background: rgba(var(--bs-info-rgb), 0.09); border-color: rgba(var(--bs-info-rgb), 0.28); }
-html[data-ui-framework="pytorrent"] .alert-warning { background: rgba(var(--bs-warning-rgb), 0.1); border-color: rgba(var(--bs-warning-rgb), 0.3); }
-html[data-ui-framework="pytorrent"] .alert-danger { background: rgba(var(--bs-danger-rgb), 0.09); border-color: rgba(var(--bs-danger-rgb), 0.3); }
+html[data-ui-framework="pytorrent"] .alert-secondary {
+  background: var(--pt-surface-soft);
+}
+
+html[data-ui-framework="pytorrent"] .alert-info {
+  background: rgba(var(--bs-info-rgb), 0.09);
+  border-color: rgba(var(--bs-info-rgb), 0.28);
+}
+
+html[data-ui-framework="pytorrent"] .alert-warning {
+  background: rgba(var(--bs-warning-rgb), 0.1);
+  border-color: rgba(var(--bs-warning-rgb), 0.3);
+}
+
+html[data-ui-framework="pytorrent"] .alert-danger {
+  background: rgba(var(--bs-danger-rgb), 0.09);
+  border-color: rgba(var(--bs-danger-rgb), 0.3);
+}
 
 html[data-ui-framework="pytorrent"] .progress {
   display: flex;
@@ -2854,7 +1410,9 @@ html[data-ui-framework="pytorrent"] .spinner-border-xs {
 }
 
 @keyframes pytorrent-spinner {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Grid and utility compatibility */
@@ -2865,7 +1423,7 @@ html[data-ui-framework="pytorrent"] .row {
   margin-left: -0.5rem;
 }
 
-html[data-ui-framework="pytorrent"] .row > * {
+html[data-ui-framework="pytorrent"] .row>* {
   flex-shrink: 0;
   width: 100%;
   max-width: 100%;
@@ -2880,43 +1438,152 @@ html[data-ui-framework="pytorrent"] .row > * {
   }
 }
 
-html[data-ui-framework="pytorrent"] .d-none { display: none !important; }
-html[data-ui-framework="pytorrent"] .d-flex { display: flex !important; }
-html[data-ui-framework="pytorrent"] .flex-wrap { flex-wrap: wrap !important; }
-html[data-ui-framework="pytorrent"] .align-items-center { align-items: center !important; }
-html[data-ui-framework="pytorrent"] .justify-content-between { justify-content: space-between !important; }
-html[data-ui-framework="pytorrent"] .gap-2 { gap: 0.5rem !important; }
-html[data-ui-framework="pytorrent"] .w-100 { width: 100% !important; }
-html[data-ui-framework="pytorrent"] .ms-auto { margin-left: auto !important; }
-html[data-ui-framework="pytorrent"] .me-auto { margin-right: auto !important; }
-html[data-ui-framework="pytorrent"] .ms-1 { margin-left: 0.25rem !important; }
-html[data-ui-framework="pytorrent"] .ms-2 { margin-left: 0.5rem !important; }
-html[data-ui-framework="pytorrent"] .me-1 { margin-right: 0.25rem !important; }
-html[data-ui-framework="pytorrent"] .me-2 { margin-right: 0.5rem !important; }
-html[data-ui-framework="pytorrent"] .mt-2 { margin-top: 0.5rem !important; }
-html[data-ui-framework="pytorrent"] .mt-3 { margin-top: 1rem !important; }
-html[data-ui-framework="pytorrent"] .mb-0 { margin-bottom: 0 !important; }
-html[data-ui-framework="pytorrent"] .mb-1 { margin-bottom: 0.25rem !important; }
-html[data-ui-framework="pytorrent"] .mb-2 { margin-bottom: 0.5rem !important; }
-html[data-ui-framework="pytorrent"] .mb-3 { margin-bottom: 1rem !important; }
-html[data-ui-framework="pytorrent"] .p-3 { padding: 1rem !important; }
-html[data-ui-framework="pytorrent"] .px-2 { padding-right: 0.5rem !important; padding-left: 0.5rem !important; }
-html[data-ui-framework="pytorrent"] .py-2 { padding-top: 0.5rem !important; padding-bottom: 0.5rem !important; }
-html[data-ui-framework="pytorrent"] .border-top { border-top: 1px solid var(--pt-border) !important; }
-html[data-ui-framework="pytorrent"] .border-bottom { border-bottom: 1px solid var(--pt-border) !important; }
-html[data-ui-framework="pytorrent"] .border-end { border-right: 1px solid var(--pt-border) !important; }
-html[data-ui-framework="pytorrent"] .shadow { box-shadow: var(--pt-shadow-sm) !important; }
+html[data-ui-framework="pytorrent"] .d-none {
+  display: none !important;
+}
+
+html[data-ui-framework="pytorrent"] .d-flex {
+  display: flex !important;
+}
+
+html[data-ui-framework="pytorrent"] .flex-wrap {
+  flex-wrap: wrap !important;
+}
+
+html[data-ui-framework="pytorrent"] .align-items-center {
+  align-items: center !important;
+}
+
+html[data-ui-framework="pytorrent"] .justify-content-between {
+  justify-content: space-between !important;
+}
+
+html[data-ui-framework="pytorrent"] .gap-2 {
+  gap: 0.5rem !important;
+}
+
+html[data-ui-framework="pytorrent"] .w-100 {
+  width: 100% !important;
+}
+
+html[data-ui-framework="pytorrent"] .ms-auto {
+  margin-left: auto !important;
+}
+
+html[data-ui-framework="pytorrent"] .me-auto {
+  margin-right: auto !important;
+}
+
+html[data-ui-framework="pytorrent"] .ms-1 {
+  margin-left: 0.25rem !important;
+}
+
+html[data-ui-framework="pytorrent"] .ms-2 {
+  margin-left: 0.5rem !important;
+}
+
+html[data-ui-framework="pytorrent"] .me-1 {
+  margin-right: 0.25rem !important;
+}
+
+html[data-ui-framework="pytorrent"] .me-2 {
+  margin-right: 0.5rem !important;
+}
+
+html[data-ui-framework="pytorrent"] .mt-2 {
+  margin-top: 0.5rem !important;
+}
+
+html[data-ui-framework="pytorrent"] .mt-3 {
+  margin-top: 1rem !important;
+}
+
+html[data-ui-framework="pytorrent"] .mb-0 {
+  margin-bottom: 0 !important;
+}
+
+html[data-ui-framework="pytorrent"] .mb-1 {
+  margin-bottom: 0.25rem !important;
+}
+
+html[data-ui-framework="pytorrent"] .mb-2 {
+  margin-bottom: 0.5rem !important;
+}
+
+html[data-ui-framework="pytorrent"] .mb-3 {
+  margin-bottom: 1rem !important;
+}
+
+html[data-ui-framework="pytorrent"] .p-3 {
+  padding: 1rem !important;
+}
+
+html[data-ui-framework="pytorrent"] .px-2 {
+  padding-right: 0.5rem !important;
+  padding-left: 0.5rem !important;
+}
+
+html[data-ui-framework="pytorrent"] .py-2 {
+  padding-top: 0.5rem !important;
+  padding-bottom: 0.5rem !important;
+}
+
+html[data-ui-framework="pytorrent"] .border-top {
+  border-top: 1px solid var(--pt-border) !important;
+}
+
+html[data-ui-framework="pytorrent"] .border-bottom {
+  border-bottom: 1px solid var(--pt-border) !important;
+}
+
+html[data-ui-framework="pytorrent"] .border-end {
+  border-right: 1px solid var(--pt-border) !important;
+}
+
+html[data-ui-framework="pytorrent"] .shadow {
+  box-shadow: var(--pt-shadow-sm) !important;
+}
+
 html[data-ui-framework="pytorrent"] .small,
-html[data-ui-framework="pytorrent"] small { font-size: 0.82em; }
-html[data-ui-framework="pytorrent"] .fw-bold { font-weight: 700 !important; }
+html[data-ui-framework="pytorrent"] small {
+  font-size: 0.82em;
+}
+
+html[data-ui-framework="pytorrent"] .fw-bold {
+  font-weight: 700 !important;
+}
+
 html[data-ui-framework="pytorrent"] .text-muted,
-html[data-ui-framework="pytorrent"] .text-secondary { color: var(--pt-text-muted) !important; }
-html[data-ui-framework="pytorrent"] .text-primary { color: var(--bs-primary) !important; }
-html[data-ui-framework="pytorrent"] .text-success { color: var(--bs-success) !important; }
-html[data-ui-framework="pytorrent"] .text-warning { color: var(--bs-warning-text-emphasis) !important; }
-html[data-ui-framework="pytorrent"] .text-danger { color: var(--bs-danger-text-emphasis) !important; }
-html[data-ui-framework="pytorrent"] .text-info { color: var(--bs-info) !important; }
-html[data-ui-framework="pytorrent"] .text-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html[data-ui-framework="pytorrent"] .text-secondary {
+  color: var(--pt-text-muted) !important;
+}
+
+html[data-ui-framework="pytorrent"] .text-primary {
+  color: var(--bs-primary) !important;
+}
+
+html[data-ui-framework="pytorrent"] .text-success {
+  color: var(--bs-success) !important;
+}
+
+html[data-ui-framework="pytorrent"] .text-warning {
+  color: var(--bs-warning-text-emphasis) !important;
+}
+
+html[data-ui-framework="pytorrent"] .text-danger {
+  color: var(--bs-danger-text-emphasis) !important;
+}
+
+html[data-ui-framework="pytorrent"] .text-info {
+  color: var(--bs-info) !important;
+}
+
+html[data-ui-framework="pytorrent"] .text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 html[data-ui-framework="pytorrent"] .visually-hidden {
   position: absolute !important;
   width: 1px !important;
@@ -2949,6 +1616,7 @@ html[data-ui-framework="pytorrent"] .visually-hidden {
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   html[data-ui-framework="pytorrent"] *,
   html[data-ui-framework="pytorrent"] *::before,
   html[data-ui-framework="pytorrent"] *::after {

@@ -36,7 +36,7 @@ def seed_default_user(conn: sqlite3.Connection) -> None:
     pref = conn.execute("SELECT id FROM user_preferences WHERE user_id=1").fetchone()
     if not pref:
         conn.execute(
-            "INSERT INTO user_preferences(user_id, theme, created_at, updated_at) VALUES(1, 'dark', ?, ?)",
+            "INSERT INTO user_preferences(user_id, theme, ui_framework, pytorrent_theme, created_at, updated_at) VALUES(1, 'dark', 'pytorrent', 'default', ?, ?)",
             (now, now),
         )
 

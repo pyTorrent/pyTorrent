@@ -1,0 +1,61 @@
+/* PyTorrent UI theme: graphite-studio */
+
+html[data-ui-framework="pytorrent"][data-pytorrent-theme="graphite-studio"]:not([data-bs-theme="dark"]) {
+  --pt-page: #f1f2f3;
+  --pt-page-rgb: 241, 242, 243;
+  --pt-surface: #fbfbfc;
+  --pt-surface-rgb: 251, 251, 252;
+  --pt-surface-soft: #e7e9ec;
+  --pt-surface-soft-rgb: 231, 233, 236;
+  --pt-surface-raised: #ffffff;
+  --pt-text: #202326;
+  --pt-text-muted: #656b73;
+  --pt-text-subtle: #9298a0;
+  --pt-border: #d2d5d9;
+  --pt-border-strong: #b8bdc3;
+  --pt-primary: #4b5563;
+  --pt-primary-rgb: 75, 85, 99;
+  --pt-primary-strong: #303740;
+  --pt-primary-soft: #e1e4e8;
+  --pt-success: #2f8f6b;
+  --pt-success-rgb: 47, 143, 107;
+  --pt-focus: rgba(75, 85, 99, 0.22);
+  --pt-shadow-sm: 0 1px 2px rgba(32, 35, 38, 0.05);
+  --pt-shadow-md: 0 14px 34px rgba(32, 35, 38, 0.14);
+  --pt-radius-sm: 0.34rem;
+  --pt-radius: 0.46rem;
+  --pt-radius-lg: 0.64rem;
+  --bs-body-color-rgb: 32, 35, 38;
+  --bs-secondary-rgb: 101, 107, 115;
+  --bs-border-color-translucent: rgba(32, 35, 38, 0.1);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-theme="graphite-studio"][data-bs-theme="dark"] {
+  --pt-page: #0b0c0e;
+  --pt-page-rgb: 11, 12, 14;
+  --pt-surface: #141619;
+  --pt-surface-rgb: 20, 22, 25;
+  --pt-surface-soft: #1d2024;
+  --pt-surface-soft-rgb: 29, 32, 36;
+  --pt-surface-raised: #181a1e;
+  --pt-text: #e7e9ec;
+  --pt-text-muted: #a4a9b0;
+  --pt-text-subtle: #747a82;
+  --pt-border: #30343a;
+  --pt-border-strong: #464b53;
+  --pt-primary: #c2c7ce;
+  --pt-primary-rgb: 194, 199, 206;
+  --pt-primary-strong: #f2f3f5;
+  --pt-primary-soft: #24282d;
+  --pt-success: #4ec095;
+  --pt-success-rgb: 78, 192, 149;
+  --pt-focus: rgba(194, 199, 206, 0.24);
+  --pt-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.34);
+  --pt-shadow-md: 0 18px 48px rgba(0, 0, 0, 0.5);
+  --pt-radius-sm: 0.34rem;
+  --pt-radius: 0.46rem;
+  --pt-radius-lg: 0.64rem;
+  --bs-body-color-rgb: 231, 233, 236;
+  --bs-secondary-rgb: 164, 169, 176;
+  --bs-border-color-translucent: rgba(255, 255, 255, 0.09);
+}

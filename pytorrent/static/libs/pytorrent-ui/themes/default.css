@@ -1,0 +1,58 @@
+/* PyTorrent UI theme: default */
+
+html[data-ui-framework="pytorrent"][data-pytorrent-theme="default"] {
+  --pt-page: #fafafa;
+  --pt-page-rgb: 250, 250, 250;
+  --pt-surface: #ffffff;
+  --pt-surface-rgb: 255, 255, 255;
+  --pt-surface-soft: #f4f4f5;
+  --pt-surface-soft-rgb: 244, 244, 245;
+  --pt-surface-raised: #ffffff;
+  --pt-text: #18181b;
+  --pt-text-muted: #71717a;
+  --pt-text-subtle: #a1a1aa;
+  --pt-border: #e4e4e7;
+  --pt-border-strong: #d4d4d8;
+  --pt-primary: #24b47e;
+  --pt-primary-rgb: 36, 180, 126;
+  --pt-primary-strong: #16875f;
+  --pt-primary-soft: #e9f8f1;
+  --pt-focus: rgba(36, 180, 126, 0.2);
+  --pt-shadow-sm: 0 1px 2px rgba(24, 24, 27, 0.05);
+  --pt-shadow-md: 0 16px 38px rgba(24, 24, 27, 0.12);
+  --bs-body-color-rgb: 24, 24, 27;
+  --bs-secondary-rgb: 113, 113, 122;
+  --bs-border-color-translucent: rgba(24, 24, 27, 0.1);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-theme="default"][data-bs-theme="dark"] {
+  --pt-page: #09090b;
+  --pt-page-rgb: 9, 9, 11;
+  --pt-surface: #111113;
+  --pt-surface-rgb: 17, 17, 19;
+  --pt-surface-soft: #18181b;
+  --pt-surface-soft-rgb: 24, 24, 27;
+  --pt-surface-raised: #141416;
+  --pt-text: #ededed;
+  --pt-text-muted: #a1a1aa;
+  --pt-text-subtle: #71717a;
+  --pt-border: #27272a;
+  --pt-border-strong: #3f3f46;
+  --pt-primary: #3ecf8e;
+  --pt-primary-rgb: 62, 207, 142;
+  --pt-primary-strong: #66dba8;
+  --pt-primary-soft: #10261c;
+  --pt-success: #3ecf8e;
+  --pt-success-rgb: 62, 207, 142;
+  --pt-focus: rgba(62, 207, 142, 0.22);
+  --pt-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --pt-shadow-md: 0 18px 48px rgba(0, 0, 0, 0.48);
+  --bs-body-color-rgb: 237, 237, 237;
+  --bs-secondary-rgb: 161, 161, 170;
+  --bs-border-color-translucent: rgba(255, 255, 255, 0.08);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-theme="default"][data-bs-theme="dark"] .nav-link.active,
+html[data-ui-framework="pytorrent"][data-pytorrent-theme="default"][data-bs-theme="dark"] .nav-pills .nav-link.active {
+  color: var(--pt-primary-strong);
+}

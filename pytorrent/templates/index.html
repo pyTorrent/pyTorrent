@@ -1,8 +1,8 @@
 <!doctype html>
 <html lang="en" data-bs-theme="{{ prefs.theme if prefs else 'dark' }}"
-  data-ui-framework="{{ prefs.ui_framework if prefs and prefs.ui_framework else 'bootstrap' }}"
+  data-ui-framework="{{ prefs.ui_framework if prefs and prefs.ui_framework else 'pytorrent' }}"
   data-bootstrap-skin="{{ prefs.bootstrap_theme if prefs and prefs.bootstrap_theme else 'default' }}"
-  data-pytorrent-theme="{{ prefs.pytorrent_theme if prefs and prefs.pytorrent_theme else 'default-beta' }}"
+  data-pytorrent-theme="{{ prefs.pytorrent_theme if prefs and prefs.pytorrent_theme else 'default' }}"
   data-pytorrent-motion="{% if not prefs or prefs.pytorrent_animations_enabled %}on{% else %}off{% endif %}"
   data-app-font="{{ prefs.font_family if prefs and prefs.font_family else 'default' }}"
   style="--ui-scale: {{ ((prefs.interface_scale if prefs and prefs.interface_scale else 80) / 100) }};">
@@ -13,11 +13,12 @@
   <title>pyTorrent</title>
   <link rel="icon" href="{{ static_url('favicon.svg') }}" type="image/svg+xml">
   <link rel="shortcut icon" href="{{ static_url('favicon.svg') }}" type="image/svg+xml">
-  <!-- Bootstrap remains the default UI. In PyTorrent mode both Bootstrap CSS and Bootstrap JS are replaced; existing Bootstrap-compatible markup is kept as a migration contract. -->
-  <link id="bootstrapBaseStylesheet" href="{{ bootstrap_theme_url('default') }}" rel="stylesheet"{% if prefs and prefs.ui_framework == 'pytorrent' %} disabled{% endif %}>
+  <!-- PyTorrent is the fresh-install default. Its runtime keeps Bootstrap-compatible markup so native PyTorrent themes and compatible Bootstrap theme CSS can both be used. -->
+  <link id="bootstrapBaseStylesheet" href="{{ bootstrap_theme_url('default') }}" rel="stylesheet"{% if (not prefs or prefs.ui_framework == 'pytorrent') and (not prefs or not prefs.pytorrent_theme.startswith('bootstrap:')) %} disabled{% endif %}>
   <link id="bootstrapThemeStylesheet" href="{{ bootstrap_theme_url(prefs.bootstrap_theme if prefs else 'default') }}"
-    rel="stylesheet"{% if prefs and prefs.ui_framework == 'pytorrent' %} disabled{% endif %}>
-  <link id="pytorrentFrameworkStylesheet" href="{{ static_url('pytorrent.css') }}" rel="stylesheet"{% if not prefs or prefs.ui_framework != 'pytorrent' %} disabled{% endif %}>
+    rel="stylesheet"{% if not prefs or prefs.ui_framework == 'pytorrent' %} disabled{% endif %}>
+  <link id="pytorrentFrameworkStylesheet" href="{{ static_url('pytorrent.css') }}" rel="stylesheet"{% if prefs and prefs.ui_framework != 'pytorrent' %} disabled{% endif %}>
+  <link id="pytorrentThemeStylesheet" href="{{ pytorrent_theme_url }}" rel="stylesheet"{% if prefs and prefs.ui_framework != 'pytorrent' %} disabled{% endif %}>
   <link href="{{ frontend_asset_url('fontawesome_css') }}" rel="stylesheet">
   <link href="{{ frontend_asset_url('font_css') }}" rel="stylesheet">
   <link href="{{ frontend_asset_url('flag_icons_css') }}" rel="stylesheet">
@@ -1107,9 +1108,9 @@
                               class="fa-solid fa-arrow-rotate-left"></i> Reset view defaults</button></div>
                         <div class="preferences-grid"><label class="form-field framework-preference-field"><span>UI framework</span><select
                               id="uiFrameworkSelect" class="form-select form-select-sm">{% for value, label in
-                              ui_frameworks.items() %}<option value="{{ value }}" {% if (prefs and prefs.ui_framework==value) or (not prefs and value=='bootstrap') %}selected{% endif %}>{{ label }}</option>{% endfor
+                              ui_frameworks.items() %}<option value="{{ value }}" {% if (prefs and prefs.ui_framework==value) or (not prefs and value=='pytorrent') %}selected{% endif %}>{{ label }}</option>{% endfor
                               %}</select><small id="uiFrameworkHelp">Bootstrap is the compatibility framework. PyTorrent (Beta) uses its own lightweight CSS and JavaScript runtime with a Tailwind-inspired default palette.</small></label><label id="uiThemeField" class="form-field"><span>Theme</span><select
-                              id="uiThemeSelect" class="form-select form-select-sm">{% if prefs and prefs.ui_framework == 'pytorrent' %}<optgroup label="PyTorrent-only themes · Beta">{% for value, label in pytorrent_dedicated_themes.items() %}<option value="{{ value }}" {% if prefs.pytorrent_theme==value %}selected{% endif %}>{{ label }}</option>{% endfor %}</optgroup><optgroup label="Universal themes · Bootstrap + PyTorrent">{% for value, label in bootstrap_themes.items() %}<option value="{{ value }}" {% if prefs.pytorrent_theme==value %}selected{% endif %}>{{ label }}</option>{% endfor %}</optgroup>{% else %}<optgroup label="Universal themes · Bootstrap + PyTorrent">{% for value, label in bootstrap_themes.items() %}<option value="{{ value }}" {% if prefs and prefs.bootstrap_theme==value %}selected{% endif %}>{{ label }}</option>{% endfor %}</optgroup>{% endif %}</select><small id="uiThemeHelp">PyTorrent-only themes are Beta. Universal themes are available in both UI frameworks.</small></label><label class="form-field"><span>Font</span><select
+                              id="uiThemeSelect" class="form-select form-select-sm">{% if not prefs or prefs.ui_framework == 'pytorrent' %}<optgroup label="PyTorrent themes · Beta">{% for value, label in pytorrent_themes.items() %}<option value="{{ value }}" {% if (prefs and prefs.pytorrent_theme==value) or (not prefs and value=='default') %}selected{% endif %}>{{ label }}</option>{% endfor %}</optgroup><optgroup label="Bootstrap themes">{% for value, label in bootstrap_themes.items() %}<option value="bootstrap:{{ value }}" {% if prefs and prefs.pytorrent_theme==('bootstrap:' ~ value) %}selected{% endif %}>{{ label }}</option>{% endfor %}</optgroup>{% else %}<optgroup label="Bootstrap themes">{% for value, label in bootstrap_themes.items() %}<option value="{{ value }}" {% if prefs and prefs.bootstrap_theme==value %}selected{% endif %}>{{ label }}</option>{% endfor %}</optgroup>{% endif %}</select><small id="uiThemeHelp">PyTorrent can use its native themes or any compatible Bootstrap theme while keeping the PyTorrent runtime.</small></label><label class="form-field"><span>Font</span><select
                               id="fontFamilySelect" class="form-select form-select-sm">{% for value, label in
                               font_families.items() %}<option value="{{ value }}" {% if prefs and
                                 prefs.font_family==value %}selected{% endif %}>{{ label }}</option>{% endfor
@@ -2354,8 +2355,8 @@
 
   <div id="toastHost" class="toast-host"></div>
   <script src="{{ frontend_asset_url('socket_io_js') }}"></script>
-  {% if prefs and prefs.ui_framework == 'pytorrent' %}
-  <script src="{{ static_url('js/pytorrentUi.js') }}"></script>
+  {% if not prefs or prefs.ui_framework == 'pytorrent' %}
+  <script src="{{ static_url('libs/pytorrent-ui/pytorrentUi.js') }}"></script>
   {% else %}
   <script src="{{ frontend_asset_url('bootstrap_js') }}"></script>
   {% endif %}

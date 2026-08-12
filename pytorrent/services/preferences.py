@@ -5,20 +5,33 @@ from . import auth
 from .frontend_assets import BOOTSTRAP_THEME_LABELS, PYTORRENT_FRAMEWORK_EXTRA_THEMES
 from .deletion import purge_profile
 
-# Theme availability is explicit: the legacy Bootstrap/Bootswatch/DevExpress and
-# app palettes are universal, while exactly three themes belong only to the
-# standalone PyTorrent framework. Keeping the universal keys identical lets a
-# user recognize the same palette when switching frameworks.
+# Theme assets stay separated by ownership: native PyTorrent themes live under
+# static/libs/pytorrent-ui/themes and extend static/pytorrent.css, while Bootstrap
+# themes keep their existing Bootstrap CSS files. The PyTorrent runtime can use
+# either group as a compatible visual skin.
 BOOTSTRAP_THEMES = BOOTSTRAP_THEME_LABELS
-UNIVERSAL_THEMES = BOOTSTRAP_THEMES
-PYTORRENT_DEDICATED_THEMES = {
-    "default-beta": "PyTorrent Default (Beta)",
-    **{f"pytorrent-{key}": label.replace("pyTorrent", "PyTorrent") for key, label in PYTORRENT_FRAMEWORK_EXTRA_THEMES.items()},
-}
 PYTORRENT_THEMES = {
-    **PYTORRENT_DEDICATED_THEMES,
-    **UNIVERSAL_THEMES,
+    "default": "PyTorrent Default (Beta)",
+    **{key: label.replace("pyTorrent", "PyTorrent") for key, label in PYTORRENT_FRAMEWORK_EXTRA_THEMES.items()},
 }
+PYTORRENT_BOOTSTRAP_THEME_PREFIX = "bootstrap:"
+
+
+def normalize_pytorrent_theme(value, fallback=None):
+    theme = str(value or "").strip()
+    if theme == "default-beta":
+        return "default"
+    if theme in PYTORRENT_THEMES:
+        return theme
+    if theme.startswith(PYTORRENT_BOOTSTRAP_THEME_PREFIX):
+        bootstrap_theme = theme[len(PYTORRENT_BOOTSTRAP_THEME_PREFIX):]
+        if bootstrap_theme in BOOTSTRAP_THEMES:
+            return f"{PYTORRENT_BOOTSTRAP_THEME_PREFIX}{bootstrap_theme}"
+    # Backward compatibility with older PyTorrent preferences which stored a
+    # compatible Bootstrap theme ID directly (for example pytorrent-ocean).
+    if theme in BOOTSTRAP_THEMES and theme not in PYTORRENT_THEMES:
+        return f"{PYTORRENT_BOOTSTRAP_THEME_PREFIX}{theme}"
+    return fallback
 
 UI_FRAMEWORKS = {
     "bootstrap": "Bootstrap",
@@ -628,9 +641,11 @@ def get_preferences(user_id: int | None = None, profile_id: int | None = None):
         pref = conn.execute("SELECT * FROM user_preferences WHERE user_id=?", (user_id,)).fetchone()
         if not pref:
             now = utcnow()
-            conn.execute("INSERT INTO user_preferences(user_id, theme, created_at, updated_at) VALUES(?, 'dark', ?, ?)", (user_id, now, now))
+            conn.execute("INSERT INTO user_preferences(user_id, theme, ui_framework, pytorrent_theme, created_at, updated_at) VALUES(?, 'dark', 'pytorrent', 'default', ?, ?)", (user_id, now, now))
             pref = conn.execute("SELECT * FROM user_preferences WHERE user_id=?", (user_id,)).fetchone()
         merged = dict(pref or {})
+        merged["ui_framework"] = merged.get("ui_framework") if merged.get("ui_framework") in UI_FRAMEWORKS else "pytorrent"
+        merged["pytorrent_theme"] = normalize_pytorrent_theme(merged.get("pytorrent_theme"), "default")
         if profile_id:
             merged.update(_seed_profile_preferences(conn, user_id, int(profile_id)))
     merged.update(get_disk_monitor_preferences(profile_id, user_id))
@@ -641,7 +656,7 @@ def save_preferences(data: dict, user_id: int | None = None, profile_id: int | N
     profile_id = profile_id or _active_profile_id_for_user(user_id)
     allowed_theme = data.get("theme") if data.get("theme") in {"light", "dark"} else None
     bootstrap_theme = data.get("bootstrap_theme") if data.get("bootstrap_theme") in BOOTSTRAP_THEMES else None
-    pytorrent_theme = data.get("pytorrent_theme") if data.get("pytorrent_theme") in PYTORRENT_THEMES else None
+    pytorrent_theme = normalize_pytorrent_theme(data.get("pytorrent_theme"), None)
     ui_framework = data.get("ui_framework") if data.get("ui_framework") in UI_FRAMEWORKS else None
     font_family = data.get("font_family") if data.get("font_family") in FONT_FAMILIES else None
     title_speed_enabled = data.get("title_speed_enabled")
@@ -699,7 +714,6 @@ def save_preferences(data: dict, user_id: int | None = None, profile_id: int | N
         if pytorrent_theme:
             conn.execute("UPDATE user_preferences SET pytorrent_theme=?, updated_at=? WHERE user_id=?", (pytorrent_theme, now, user_id))
         if ui_framework:
-            # Note: Bootstrap remains the safe default while the standalone PyTorrent CSS framework is developed as an opt-in beta.
             conn.execute("UPDATE user_preferences SET ui_framework=?, updated_at=? WHERE user_id=?", (ui_framework, now, user_id))
         if font_family:
             conn.execute("UPDATE user_preferences SET font_family=?, updated_at=? WHERE user_id=?", (font_family, now, user_id))

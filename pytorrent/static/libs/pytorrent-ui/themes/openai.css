@@ -1,0 +1,67 @@
+/* PyTorrent UI theme: openai */
+
+html[data-ui-framework="pytorrent"][data-pytorrent-theme="openai"]:not([data-bs-theme="dark"]) {
+  --pt-page: #f9f9f9;
+  --pt-page-rgb: 249, 249, 249;
+  --pt-surface: #ffffff;
+  --pt-surface-rgb: 255, 255, 255;
+  --pt-surface-soft: #f2f2f2;
+  --pt-surface-soft-rgb: 242, 242, 242;
+  --pt-surface-raised: #ffffff;
+  --pt-text: #0d0d0d;
+  --pt-text-muted: #5d5d5d;
+  --pt-text-subtle: #8f8f8f;
+  --pt-border: #e5e5e5;
+  --pt-border-strong: #d1d1d1;
+  --pt-primary: #0d0d0d;
+  --pt-primary-rgb: 13, 13, 13;
+  --pt-primary-strong: #2f2f2f;
+  --pt-primary-soft: #ececec;
+  --pt-success: #10a37f;
+  --pt-success-rgb: 16, 163, 127;
+  --pt-focus: rgba(13, 13, 13, 0.15);
+  --pt-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --pt-shadow-md: 0 12px 32px rgba(0, 0, 0, 0.1);
+  --pt-radius-sm: 0.55rem;
+  --pt-radius: 0.75rem;
+  --pt-radius-lg: 1rem;
+  --pt-control-height: 2rem;
+  --pt-menu-bg: #ffffff;
+  --pytorrent-surface-radius: 1rem;
+  --bs-body-color-rgb: 13, 13, 13;
+  --bs-secondary-rgb: 93, 93, 93;
+  --bs-border-color-translucent: rgba(0, 0, 0, 0.08);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-theme="openai"][data-bs-theme="dark"] {
+  --pt-page: #212121;
+  --pt-page-rgb: 33, 33, 33;
+  --pt-surface: #2f2f2f;
+  --pt-surface-rgb: 47, 47, 47;
+  --pt-surface-soft: #383838;
+  --pt-surface-soft-rgb: 56, 56, 56;
+  --pt-surface-raised: #323232;
+  --pt-text: #ececec;
+  --pt-text-muted: #b4b4b4;
+  --pt-text-subtle: #8b8b8b;
+  --pt-border: #424242;
+  --pt-border-strong: #565656;
+  --pt-primary: #f4f4f4;
+  --pt-primary-rgb: 244, 244, 244;
+  --pt-primary-strong: #ffffff;
+  --pt-primary-soft: #424242;
+  --pt-success: #10a37f;
+  --pt-success-rgb: 16, 163, 127;
+  --pt-focus: rgba(255, 255, 255, 0.18);
+  --pt-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.24);
+  --pt-shadow-md: 0 18px 46px rgba(0, 0, 0, 0.38);
+  --pt-radius-sm: 0.55rem;
+  --pt-radius: 0.75rem;
+  --pt-radius-lg: 1rem;
+  --pt-control-height: 2rem;
+  --pt-menu-bg: #2f2f2f;
+  --pytorrent-surface-radius: 1rem;
+  --bs-body-color-rgb: 236, 236, 236;
+  --bs-secondary-rgb: 180, 180, 180;
+  --bs-border-color-translucent: rgba(255, 255, 255, 0.09);
+}

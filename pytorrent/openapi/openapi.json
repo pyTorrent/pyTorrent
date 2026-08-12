@@ -1475,7 +1475,12 @@
           },
           "pytorrent_theme": {
             "description": "Theme used only by the PyTorrent UI framework.",
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "default",
+              "graphite-studio",
+              "openai"
+            ]
           },
           "pytorrent_animations_enabled": {
             "description": "Enable lightweight PyTorrent UI motion for modals, menus, tabs and controls.",

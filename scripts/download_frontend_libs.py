@@ -95,7 +95,7 @@ DEVEXPRESS_BOOTSTRAP_THEMES = {
     "purple": "Purple",
 }
 
-PYTORRENT_APP_THEMES = {
+PYTORRENT_BOOTSTRAP_THEMES = {
     "adaptive": "pyTorrent Adaptive",
     "ocean": "pyTorrent Ocean",
     "graphite": "pyTorrent Graphite",
@@ -136,15 +136,15 @@ BOOTSTRAP_THEME_DEFINITIONS = {
         }
         for theme, label in DEVEXPRESS_BOOTSTRAP_THEMES.items()
     },
-    # App-specific Bootstrap variable overrides. These sit on top of default Bootstrap.
+    # PyTorrent-branded Bootstrap themes. These are Bootstrap-only assets.
     **{
         f"pytorrent-{theme}": {
-            "label": f"Custom: {label}",
+            "label": f"Custom Bootstrap: {label}",
             "provider": "pytorrent",
             "local": f"{LIBS_STATIC_DIR}/pytorrent-themes/{theme}/bootstrap.min.css",
             "cdn": f"/static/{LIBS_STATIC_DIR}/pytorrent-themes/{theme}/bootstrap.min.css",
         }
-        for theme, label in PYTORRENT_APP_THEMES.items()
+        for theme, label in PYTORRENT_BOOTSTRAP_THEMES.items()
     },
 }
 
