@@ -2,6 +2,8 @@
   --app-font-family:
     Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   --ui-scale: 0.8;
+  --ui-scaled-viewport-width: 100vw;
+  --ui-scaled-viewport-height: 100dvh;
   --topbar: calc(50px * var(--ui-scale));
   --statusbar: calc(34px * var(--ui-scale));
   --mobile-filterbar-height: 132px;
@@ -669,6 +671,18 @@ body {
   cursor: pointer;
 }
 
+/* PyTorrent keeps the list header visually light at the top, then gives it a readable surface while scrolling. */
+html[data-ui-framework="pytorrent"] .table-wrap .torrent-table > thead > tr > th {
+  background: transparent;
+  box-shadow: none;
+  transition: background-color var(--app-motion-fast) ease, box-shadow var(--app-motion-fast) ease;
+}
+
+html[data-ui-framework="pytorrent"] .table-wrap.is-scrolled .torrent-table > thead > tr > th {
+  background: color-mix(in srgb, var(--pytorrent-table-header-bg, var(--bs-tertiary-bg)) 94%, transparent);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
+}
+
 .torrent-table thead th[data-sort]:hover,
 .torrent-table thead th.sorted {
   color: var(--bs-primary-text-emphasis);
@@ -1244,6 +1258,45 @@ body.resizing-details {
   background: var(--bs-body-bg);
   border: 1px solid var(--pytorrent-panel-border, var(--bs-border-color));
   border-radius: calc(var(--pytorrent-surface-radius, 0.75rem) + 0.12rem);
+}
+
+/* Interface scale applies to dialogs as a complete surface, not only the page behind them.
+   CSS zoom preserves Bootstrap/PyTorrent modal transforms while scaling controls, spacing and type together. */
+.modal-dialog {
+  zoom: var(--ui-scale);
+}
+
+@supports not (zoom: 1) {
+  .modal-dialog {
+    scale: var(--ui-scale);
+    transform-origin: center top;
+  }
+}
+
+@media (min-width: 576px) {
+  html:not([data-ui-framework="pytorrent"]) .modal-dialog {
+    max-width: min(var(--bs-modal-width, 500px), calc(var(--ui-scaled-viewport-width) - 2rem));
+  }
+
+  html[data-ui-framework="pytorrent"] .modal-dialog {
+    max-width: min(520px, calc(var(--ui-scaled-viewport-width) - 2rem));
+  }
+
+  html[data-ui-framework="pytorrent"] .modal-dialog.modal-lg {
+    max-width: min(800px, calc(var(--ui-scaled-viewport-width) - 2rem));
+  }
+
+  html[data-ui-framework="pytorrent"] .modal-dialog.modal-xl {
+    max-width: min(1140px, calc(var(--ui-scaled-viewport-width) - 2rem));
+  }
+}
+
+html:not([data-ui-framework="pytorrent"]) .modal-dialog-scrollable {
+  height: calc(var(--ui-scaled-viewport-height) - var(--bs-modal-margin, 0.5rem) - var(--bs-modal-margin, 0.5rem));
+}
+
+html[data-ui-framework="pytorrent"] .modal-dialog-scrollable .modal-content {
+  max-height: calc(var(--ui-scaled-viewport-height) - 2.4rem);
 }
 
 .modal-header,
@@ -2165,6 +2218,23 @@ body.mobile-mode .main-grid {
     display: none;
   }
 
+  .notification-history-wrap .notification-history-menu {
+    position: fixed !important;
+    top: calc(var(--topbar) + (8px * var(--ui-scale))) !important;
+    right: calc(8px * var(--ui-scale)) !important;
+    bottom: auto !important;
+    left: calc(8px * var(--ui-scale)) !important;
+    width: auto;
+    max-width: none;
+    max-height: calc(100dvh - var(--topbar) - var(--statusbar) - (16px * var(--ui-scale)));
+    margin: 0;
+    transform: none !important;
+  }
+
+  .notification-history-list {
+    max-height: calc(100dvh - var(--topbar) - var(--statusbar) - (64px * var(--ui-scale)));
+  }
+
   .connection-diagnostics-menu {
     /* Note: A fixed, inset panel cannot overflow the narrow mobile workspace even when the trigger sits near the edge. */
     position: fixed;
@@ -2703,14 +2773,42 @@ body.mobile-mode .mobile-card {
   width: 1px;
 }
 
-.file-priority-table> :not(caption)>*>* {
-  line-height: 1.15;
-  padding: 0.22rem 0.4rem;
+/* Files, Trackers and Peers share one global row density. The desktop rows are 10% tighter than before. */
+.peers-table,
+.tracker-table,
+.file-priority-table {
+  --detail-row-height: 27px;
+}
+
+.peers-table > :not(caption) > * > *,
+.tracker-table > :not(caption) > * > *,
+.file-priority-table > :not(caption) > * > * {
+  line-height: 1.2;
+  padding-bottom: 0.18rem;
+  padding-top: 0.18rem;
   vertical-align: middle;
 }
 
+/* Body cells stay compact enough for the 27px row while controls remain vertically centered. */
+.table.peers-table tbody > tr > *,
+.table.tracker-table tbody > tr > *,
+.table.file-priority-table tbody > tr > * {
+  padding-bottom: 0.05rem;
+  padding-top: 0.05rem;
+}
+
+.peers-table tbody tr,
+.tracker-table tbody tr,
 .file-priority-table tbody tr {
-  height: 30px;
+  height: var(--detail-row-height);
+}
+
+@media (pointer: coarse) {
+  .peers-table,
+  .tracker-table,
+  .file-priority-table {
+    --detail-row-height: 34px;
+  }
 }
 
 .file-priority-table .path {
@@ -2735,6 +2833,15 @@ body.mobile-mode .mobile-card {
   min-height: 24px;
   padding-bottom: 0.1rem;
   padding-top: 0.1rem;
+}
+
+/* The reduced square action buttons are a PyTorrent framework density choice.
+   Bootstrap keeps the original app button sizing/classes untouched. */
+html[data-ui-framework="pytorrent"] .file-priority-table .file-row-actions .btn-xs {
+  height: 1.35rem;
+  min-height: 1.35rem;
+  padding: 0;
+  width: 1.35rem;
 }
 
 .file-priority-table .file-media-info-blocked {
@@ -3634,15 +3741,18 @@ body.mobile-mode .mobile-filter-bar {
   flex-wrap: nowrap;
 }
 
-/* Note: The tracker delete button stays icon-only so it does not make tracker rows taller than peer rows. */
+/* Note: Tracker removal uses the same compact labeled danger action in every framework/theme without increasing row height. */
 .tracker-delete {
   align-items: center;
   display: inline-flex;
+  gap: 0.28rem;
   height: 1.35rem;
+  min-height: 1.35rem;
   justify-content: center;
   line-height: 1;
-  padding: 0;
-  width: 1.35rem;
+  padding: 0 0.38rem;
+  width: auto;
+  white-space: nowrap;
 }
 
 .tracker-toolbar {
@@ -4455,7 +4565,7 @@ body.sorting-preference-cards * {
   align-items: center;
   background: var(--bs-primary);
   border-radius: 0.8rem;
-  box-shadow: 0 0.55rem 1.4rem rgba(var(--bs-primary-rgb), 0.2);
+  box-shadow: none;
   color: #fff;
   display: inline-flex;
   font-size: 1.35rem;
@@ -7372,12 +7482,21 @@ body,
 /* App modal widths stay consistent while Bootstrap still handles full-screen mobile breakpoints. */
 .app-modal-dialog,
 .modal-dialog.modal-xl {
-  --bs-modal-width: min(1140px, calc(100vw - 2rem));
+  --bs-modal-width: min(1140px, calc(var(--ui-scaled-viewport-width) - 2rem));
 }
 
 @media (max-width: 575.98px) {
   .app-modal-dialog {
-    --bs-modal-width: 100vw;
+    --bs-modal-width: var(--ui-scaled-viewport-width);
+  }
+
+  .modal-dialog.modal-fullscreen-sm-down {
+    height: var(--ui-scaled-viewport-height);
+    width: var(--ui-scaled-viewport-width);
+  }
+
+  .modal-dialog.modal-fullscreen-sm-down .modal-content {
+    height: 100%;
   }
 }
 
@@ -7641,7 +7760,11 @@ body,
   }
 }
 
-/* Mobile torrent details */
+/* Mobile torrent details -----------------------------------------------------
+ * Shared by Bootstrap and PyTorrent. The mobile inspector follows the newer
+ * Storage browser / profile-transfer modal hierarchy and keeps dense data in
+ * expandable cards rather than a flat stack.
+ */
 .mobile-card-header {
   align-items: flex-start;
   display: flex;
@@ -7659,45 +7782,181 @@ body,
   min-width: 34px;
 }
 
-.mobile-details-modal .modal-header {
+.mobile-details-modal .modal-content {
+  overflow: hidden;
+}
+
+.mobile-details-modal .modal-header,
+.mobile-details-header {
   align-items: flex-start;
+  gap: 0.75rem;
+  padding-block: 0.95rem;
+}
+
+.mobile-details-header-copy {
+  min-width: 0;
+}
+
+.mobile-details-kicker {
+  color: var(--bs-secondary-color);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.065em;
+  margin-bottom: 0.14rem;
+  text-transform: uppercase;
 }
 
 .mobile-details-subtitle {
   color: var(--bs-secondary-color);
-  font-size: 0.82rem;
-  margin-top: 0.15rem;
-  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  margin-top: 0.18rem;
+  max-width: min(72vw, 52rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.mobile-details-summary,
+.mobile-details-body {
+  background: color-mix(in srgb, var(--bs-tertiary-bg) 56%, var(--bs-body-bg));
+  overflow-x: hidden;
+  padding: 0.8rem;
+}
+
+.mobile-details-layout {
+  display: grid;
+  gap: 0.72rem;
+}
+
+.mobile-details-loading {
+  align-items: center;
+  color: var(--bs-secondary-color);
+  display: flex;
+  gap: 0.55rem;
+  justify-content: center;
+  min-height: 9rem;
+}
+
 .mobile-details-section {
-  background: var(--bs-tertiary-bg);
+  background: var(--bs-body-bg);
   border: 1px solid var(--bs-border-color);
-  border-radius: 0.85rem;
-  margin-bottom: 0.85rem;
+  border-radius: 0.82rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.025);
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.mobile-details-section>h6,
+.mobile-details-collapsible>summary {
+  padding: 0.7rem 0.78rem;
+}
+
+.mobile-details-section h6 {
+  align-items: center;
+  display: flex;
+  gap: 0.58rem;
+  margin: 0;
+  min-width: 0;
+}
+
+.mobile-details-section-icon {
+  align-items: center;
+  background: rgba(var(--bs-primary-rgb), 0.09);
+  border: 1px solid rgba(var(--bs-primary-rgb), 0.14);
+  border-radius: 0.55rem;
+  color: var(--bs-primary);
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 1.8rem;
+  justify-content: center;
+  width: 1.8rem;
+}
+
+.mobile-details-section-title {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  font-size: 0.86rem;
+  gap: 0.08rem;
+  min-width: 0;
+}
+
+.mobile-details-section-title small {
+  color: var(--bs-secondary-color);
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
+.mobile-details-collapsible>summary {
+  cursor: pointer;
+  list-style: none;
+  transition: background-color 120ms ease;
+}
+
+.mobile-details-collapsible>summary:hover {
+  background: rgba(var(--bs-secondary-bg-rgb), 0.42);
+}
+
+.mobile-details-collapsible>summary::-webkit-details-marker {
+  display: none;
+}
+
+.mobile-details-collapsible>summary h6::after {
+  color: var(--bs-secondary-color);
+  content: '\f107';
+  flex: 0 0 auto;
+  font-family: 'Font Awesome 6 Free';
+  font-size: 0.78rem;
+  font-weight: 900;
+  margin-left: auto;
+  transition: transform 120ms ease;
+}
+
+.mobile-details-collapsible[open]>summary h6::after {
+  transform: rotate(180deg);
+}
+
+.mobile-details-section-body {
+  border-top: 1px solid var(--bs-border-color);
+  min-width: 0;
   padding: 0.75rem;
 }
 
+.mobile-details-summary {
+  margin-bottom: 0.72rem;
+}
+
 .mobile-details-name {
+  font-size: 0.9rem;
   font-weight: 700;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.55rem;
   overflow-wrap: anywhere;
+}
+
+.mobile-details-meta-grid {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: 1fr;
 }
 
 .mobile-details-path,
 .mobile-details-hash {
+  background: rgba(var(--bs-secondary-bg-rgb), 0.42);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.62rem;
   display: grid;
   gap: 0.2rem;
-  margin-top: 0.45rem;
+  min-width: 0;
+  padding: 0.55rem 0.62rem;
 }
 
 .mobile-details-path b,
 .mobile-details-hash b,
 .mobile-details-stat b {
   color: var(--bs-secondary-color);
-  font-size: 0.72rem;
-  letter-spacing: 0.03em;
+  font-size: 0.68rem;
+  letter-spacing: 0.035em;
   text-transform: uppercase;
 }
 
@@ -7708,66 +7967,27 @@ body,
 
 .mobile-details-stats {
   display: grid;
-  gap: 0.55rem;
+  gap: 0.48rem;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-bottom: 0.85rem;
+  margin: 0;
 }
 
 .mobile-details-stat {
-  background: rgba(var(--bs-secondary-bg-rgb), 0.55);
+  background: rgba(var(--bs-secondary-bg-rgb), 0.42);
   border: 1px solid var(--bs-border-color);
-  border-radius: 0.7rem;
+  border-radius: 0.62rem;
   min-width: 0;
-  padding: 0.6rem;
+  padding: 0.55rem 0.6rem;
 }
 
 .mobile-details-stat span {
   display: block;
-  margin-top: 0.2rem;
+  margin-top: 0.18rem;
   overflow-wrap: anywhere;
 }
 
-.mobile-details-section h6 {
-  align-items: center;
-  display: flex;
-  gap: 0.4rem;
-  justify-content: space-between;
-  margin: 0 0 0.65rem;
-}
-
-.mobile-details-section h6 small {
-  color: var(--bs-secondary-color);
-  font-size: 0.72rem;
-  font-weight: 500;
-}
-
-.mobile-details-collapsible>summary {
-  cursor: pointer;
-  list-style: none;
-}
-
-.mobile-details-collapsible>summary::-webkit-details-marker {
-  display: none;
-}
-
-.mobile-details-collapsible>summary h6 {
-  margin-bottom: 0;
-}
-
-.mobile-details-collapsible[open]>summary h6 {
-  margin-bottom: 0.65rem;
-}
-
-.mobile-details-collapsible>summary h6::after {
-  color: var(--bs-secondary-color);
-  content: '\f107';
-  font-family: 'Font Awesome 6 Free';
-  font-weight: 900;
-  margin-left: auto;
-}
-
-.mobile-details-collapsible[open]>summary h6::after {
-  content: '\f106';
+.mobile-details-section .responsive-table-wrap {
+  border-radius: 0.58rem;
 }
 
 .mobile-details-list {
@@ -7818,13 +8038,47 @@ body,
 }
 
 .mobile-details-warning {
-  font-size: 0.86rem;
+  font-size: 0.82rem;
+  margin: 0;
 }
 
 @media (min-width: 576px) {
+  .mobile-details-meta-grid {
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr);
+  }
+
   .mobile-details-stats {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+}
+
+@media (max-width: 575.98px) {
+  .mobile-details-header {
+    padding: 0.78rem 0.8rem;
+  }
+
+  .mobile-details-body {
+    padding: 0.62rem;
+  }
+
+  .mobile-details-subtitle {
+    max-width: calc(100vw - 5.25rem);
+  }
+
+  .mobile-details-section>h6,
+  .mobile-details-collapsible>summary {
+    padding: 0.62rem 0.68rem;
+  }
+
+  .mobile-details-section-body {
+    padding: 0.62rem;
+  }
+}
+
+/* PyTorrent's table-sm padding is slightly taller than the virtual row step; keep non-compact rows inside their 32px slot. */
+html[data-ui-framework="pytorrent"] body:not(.compact-torrent-list) .torrent-table.table-sm > :not(caption) > * > * {
+  padding-bottom: 0.18rem;
+  padding-top: 0.18rem;
 }
 
 /* Compact torrent list density. Font size is controlled only by the Torrent list font slider. */
@@ -7844,6 +8098,19 @@ body.compact-torrent-list .torrent-table> :not(caption)>*>* {
 body.compact-torrent-list .torrent-table .badge,
 body.compact-torrent-list .torrent-table .chip {
   padding: 0.08rem 0.34rem;
+}
+
+html[data-ui-framework="pytorrent"] body.compact-torrent-list .torrent-table .status-badge {
+  align-items: center;
+  justify-content: center;
+  min-height: 1rem;
+  padding-bottom: 0;
+  padding-top: 0;
+  line-height: 1;
+  vertical-align: middle;
+}
+html[data-ui-framework="pytorrent"] .torrent-table .status-badge > i.me-1 {
+  margin-right: 0 !important;
 }
 
 body.compact-torrent-list .torrent-table .row-check {
@@ -8063,14 +8330,12 @@ body.compact-torrent-list .mobile-progress .torrent-progress {
   margin-left: 0.25rem;
 }
 
-.profile-choice-list,
-.profile-transfer-list {
+.profile-choice-list {
   display: grid;
   gap: 0.5rem;
 }
 
-.profile-choice-card,
-.profile-transfer-card {
+.profile-choice-card {
   align-items: center;
   background: var(--bs-body-bg);
   border: 1px solid var(--bs-border-color);
@@ -8084,14 +8349,59 @@ body.compact-torrent-list .mobile-progress .torrent-progress {
 }
 
 .profile-choice-card:hover,
-.profile-choice-card.active,
-.profile-transfer-card:hover,
-.profile-transfer-card.active {
+.profile-choice-card.active {
   border-color: var(--bs-primary);
   box-shadow: 0 0 0 0.15rem rgba(var(--bs-primary-rgb), 0.12);
 }
 
-.profile-choice-card span,
+.profile-choice-card span {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.profile-choice-card small {
+  color: var(--bs-secondary-color);
+}
+
+.profile-transfer-list {
+  background: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.65rem;
+  display: block;
+  max-height: 17rem;
+  overflow: auto;
+}
+
+.profile-transfer-card {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--bs-border-color);
+  border-radius: 0;
+  color: var(--bs-body-color);
+  display: flex;
+  justify-content: space-between;
+  min-height: 2.8rem;
+  padding: 0.62rem 0.72rem;
+  text-align: left;
+  width: 100%;
+}
+
+.profile-transfer-card:last-child {
+  border-bottom: 0;
+}
+
+.profile-transfer-card:hover {
+  background: color-mix(in srgb, var(--bs-primary) 6%, transparent);
+}
+
+.profile-transfer-card.active {
+  background: color-mix(in srgb, var(--bs-primary) 10%, var(--bs-body-bg));
+  box-shadow: inset 3px 0 0 var(--bs-primary);
+}
+
 .profile-transfer-card span {
   align-items: center;
   display: inline-flex;
@@ -8099,15 +8409,171 @@ body.compact-torrent-list .mobile-progress .torrent-progress {
   min-width: 0;
 }
 
-.profile-choice-card small,
 .profile-transfer-card small {
   color: var(--bs-secondary-color);
+  margin-left: 0.8rem;
+  text-align: right;
+}
+
+.profile-transfer-modal .modal-content {
+  overflow: hidden;
+}
+
+.profile-transfer-header {
+  align-items: flex-start;
+  padding-block: 1rem;
+}
+
+.profile-transfer-kicker,
+.profile-transfer-field-label {
+  color: var(--bs-secondary-color);
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.profile-transfer-kicker {
+  margin-bottom: 0.18rem;
+}
+
+.profile-transfer-subtitle {
+  color: var(--bs-secondary-color);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  margin-top: 0.18rem;
+}
+
+.profile-transfer-body {
+  background: color-mix(in srgb, var(--bs-tertiary-bg) 55%, var(--bs-body-bg));
+  display: grid;
+  gap: 0.8rem;
+  min-height: 0;
+}
+
+.profile-transfer-summary-card,
+.profile-transfer-panel,
+.profile-transfer-validation-card {
+  background: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.75rem;
+}
+
+.profile-transfer-summary-card {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.75rem 0.8rem;
+}
+
+.profile-transfer-summary-heading,
+.profile-transfer-validation-heading {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.profile-transfer-summary-heading small,
+.profile-transfer-validation-heading small,
+.profile-transfer-panel-heading span {
+  color: var(--bs-secondary-color);
+  display: block;
+  font-size: 0.75rem;
+  margin-top: 0.12rem;
+}
+
+.profile-transfer-count {
+  background: var(--bs-tertiary-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 999px;
+  color: var(--bs-secondary-color);
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+  padding: 0.18rem 0.5rem;
+}
+
+.profile-transfer-count b {
+  color: var(--bs-body-color);
+}
+
+.profile-transfer-torrents {
+  background: var(--bs-tertiary-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.6rem;
+  display: grid;
+  gap: 0;
+  max-height: 8rem;
+  overflow: auto;
+  padding: 0;
+}
+
+.profile-transfer-torrents div {
+  align-items: center;
+  border-bottom: 1px solid var(--bs-border-color);
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 2.35rem;
+  min-width: 0;
+  padding: 0.42rem 0.65rem;
+}
+
+.profile-transfer-torrents div:last-child {
+  border-bottom: 0;
+}
+
+.profile-transfer-torrents > small {
+  color: var(--bs-secondary-color);
+  padding: 0.42rem 0.65rem;
+}
+
+.profile-transfer-torrents span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .profile-transfer-grid {
   display: grid;
-  gap: 1rem;
-  grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.85fr);
+  gap: 0.8rem;
+  grid-template-columns: minmax(0, 1.05fr) minmax(18rem, 0.95fr);
+}
+
+.profile-transfer-panel {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.profile-transfer-panel-heading {
+  border-bottom: 1px solid var(--bs-border-color);
+  padding: 0.7rem 0.8rem;
+}
+
+.profile-transfer-panel-heading strong {
+  font-size: 0.85rem;
+}
+
+.profile-transfer-panel-body {
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.75rem 0.8rem 0.8rem;
+}
+
+.profile-transfer-path-field .input-group,
+.profile-transfer-path-field .form-control {
+  min-width: 0;
+}
+
+.profile-transfer-path-field .form-control {
+  font-family: var(--bs-font-monospace, ui-monospace, monospace);
+}
+
+.profile-transfer-path-hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: -0.1rem;
 }
 
 .profile-transfer-switch {
@@ -8118,7 +8584,7 @@ body.compact-torrent-list .mobile-progress .torrent-progress {
   display: flex;
   gap: 0.75rem;
   min-height: 2.75rem;
-  padding: 0.55rem 0.85rem;
+  padding: 0.55rem 0.75rem;
 }
 
 .profile-transfer-switch .form-check-input {
@@ -8126,41 +8592,47 @@ body.compact-torrent-list .mobile-progress .torrent-progress {
   margin-left: 0;
 }
 
-.profile-transfer-torrents {
-  background: var(--bs-tertiary-bg);
-  border: 1px solid var(--bs-border-color);
-  border-radius: 0.65rem;
-  display: grid;
-  gap: 0.35rem;
-  max-height: 8rem;
-  overflow: auto;
-  padding: 0.65rem 0.75rem;
+.profile-transfer-option-stack {
+  align-content: start;
 }
 
-.profile-transfer-torrents div {
-  align-items: center;
+.profile-transfer-validation-card {
   display: grid;
-  gap: 0.5rem;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  min-width: 0;
-}
-
-.profile-transfer-torrents span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  gap: 0.6rem;
+  padding: 0.75rem 0.8rem;
 }
 
 .profile-transfer-disk {
   background: var(--bs-tertiary-bg);
   border: 1px solid var(--bs-border-color);
-  border-radius: 0.65rem;
+  border-radius: 0.6rem;
   font-size: 0.85rem;
-  padding: 0.65rem 0.75rem;
+  padding: 0.6rem 0.7rem;
 }
 
 .profile-transfer-permission {
   min-height: 1.2rem;
+  margin-top: 0 !important;
+}
+
+.profile-transfer-footer {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.profile-transfer-footer-note {
+  align-items: center;
+  color: var(--bs-secondary-color);
+  display: inline-flex;
+  font-size: 0.78rem;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.profile-transfer-footer-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.45rem;
 }
 
 .profile-choice-main {
@@ -8198,12 +8670,6 @@ body.compact-torrent-list .mobile-progress .torrent-progress {
   padding: 0.15rem 0.45rem;
 }
 
-.profile-transfer-path-hints {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-}
-
 @media (max-width: 767.98px) {
   .profile-choice-card {
     align-items: flex-start;
@@ -8215,11 +8681,39 @@ body.compact-torrent-list .mobile-progress .torrent-progress {
     justify-content: flex-start;
     margin-left: 0;
   }
-}
 
-@media (max-width: 767.98px) {
   .profile-transfer-grid {
     grid-template-columns: 1fr;
+  }
+
+  .profile-transfer-card {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .profile-transfer-card small {
+    margin-left: 0;
+    text-align: left;
+  }
+
+  .profile-transfer-summary-heading,
+  .profile-transfer-validation-heading,
+  .profile-transfer-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .profile-transfer-count {
+    align-self: flex-start;
+  }
+
+  .profile-transfer-footer-actions {
+    width: 100%;
+  }
+
+  .profile-transfer-footer-actions .btn {
+    flex: 1 1 0;
   }
 }
 
@@ -8897,7 +9391,7 @@ body.compact-torrent-list .mobile-progress .torrent-progress {
  * styles (torrent cards, tracker favicons, diagnostics or column manager).
  */
 .path-picker-modal .modal-dialog {
-  width: min(1120px, calc(100vw - 2rem));
+  width: min(1120px, calc(var(--ui-scaled-viewport-width) - 2rem));
 }
 
 .path-picker-modal .modal-content {
@@ -9184,7 +9678,7 @@ body.sorting-preference-cards .footer-pref-card {
 @media (max-width: 760px) {
   .path-picker-modal .modal-dialog {
     margin: 0.5rem;
-    width: calc(100vw - 1rem);
+    width: calc(var(--ui-scaled-viewport-width) - 1rem);
   }
 
   .path-location-heading,
@@ -9243,4 +9737,268 @@ body.sorting-preference-cards .footer-pref-card {
 .path-browser-panel .path-row.is-renaming .path-rename-form {
   grid-column: 1 / -1;
   width: 100%;
+}
+/* PyTorrent runtime polish: navigation sizing, switch alignment and virtual-list row isolation. */
+html[data-ui-framework="pytorrent"] .topbar .nav-btn.btn-xs {
+  min-height: 30px;
+  padding: 0.18rem 0.48rem;
+  font-size: 0.78rem;
+}
+
+/* A switch is one visual control: remove the inherited checkbox top margin so its label is truly centered. */
+html[data-ui-framework="pytorrent"] .form-switch {
+  align-items: center;
+}
+
+html[data-ui-framework="pytorrent"] .form-switch .form-check-input {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+/* PyTorrent non-compact torrent rows: the virtual slot and the painted row must be the same height.
+   The select cell contains a full-height flex wrapper; leaving table-cell padding on that one cell made
+   the browser render ~41px of hover/selection background inside a 34px virtual step. */
+html[data-ui-framework="pytorrent"] body:not(.compact-torrent-list) .torrent-table {
+  --torrent-row-height: 34px;
+}
+
+html[data-ui-framework="pytorrent"] body:not(.compact-torrent-list) .torrent-table tbody.torrent-virtual-body tr.torrent-virtual-row > td {
+  height: auto;
+  padding-top: 0.2rem;
+  padding-bottom: 0.2rem;
+}
+
+html[data-ui-framework="pytorrent"] body:not(.compact-torrent-list) .torrent-table tbody.torrent-virtual-body tr.torrent-virtual-row > td.sel {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+html[data-ui-framework="pytorrent"] body:not(.compact-torrent-list) .torrent-table tbody.torrent-virtual-body tr.torrent-virtual-row > td.sel .torrent-select-cell {
+  /* Subtract the 1px row separator so the complete cell box is exactly --torrent-row-height. */
+  height: calc(var(--torrent-row-height) - 1px);
+}
+
+
+/* Speed limits modal ---------------------------------------------------------
+ * Shared across Bootstrap and PyTorrent so bandwidth controls use the same
+ * hierarchy and card language as Storage browser and profile transfer.
+ */
+.speed-limit-modal .modal-dialog {
+  width: min(980px, calc(var(--ui-scaled-viewport-width) - 2rem));
+}
+
+.speed-limit-modal .modal-content {
+  overflow: hidden;
+}
+
+.speed-limit-header {
+  align-items: flex-start;
+  padding-block: 1rem;
+}
+
+.speed-limit-kicker {
+  color: var(--bs-secondary-color);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.18rem;
+  text-transform: uppercase;
+}
+
+.speed-limit-subtitle {
+  color: var(--bs-secondary-color);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  margin-top: 0.18rem;
+}
+
+.speed-limit-body {
+  background: color-mix(in srgb, var(--bs-tertiary-bg) 55%, var(--bs-body-bg));
+  display: grid;
+  gap: 0.8rem;
+  min-height: 0;
+}
+
+.speed-limit-grid {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.speed-limit-channel-card,
+.speed-limit-panel {
+  background: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.75rem;
+}
+
+.speed-limit-channel-card {
+  display: grid;
+  gap: 0.8rem;
+  padding: 0.85rem;
+}
+
+.speed-limit-card-heading {
+  align-items: center;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.speed-limit-card-heading strong,
+.speed-limit-panel-heading strong {
+  display: block;
+  font-size: 0.86rem;
+}
+
+.speed-limit-card-heading span,
+.speed-limit-panel-heading span {
+  color: var(--bs-secondary-color);
+  display: block;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  margin-top: 0.1rem;
+}
+
+.speed-limit-live-value {
+  background: var(--bs-tertiary-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 999px;
+  color: var(--bs-body-color);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  max-width: 10rem;
+  overflow: hidden;
+  padding: 0.38rem 0.55rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.speed-limit-number-field {
+  margin: 0;
+}
+
+.speed-limit-number-field > span {
+  color: var(--bs-secondary-color);
+  font-size: 0.72rem;
+  font-weight: 700;
+  margin-bottom: 0.3rem;
+}
+
+.speed-limit-channel-card .limit-slider-row {
+  margin: 0;
+}
+
+.speed-limit-channel-card .limit-slider-row .form-label {
+  align-items: center;
+  color: var(--bs-body-color);
+  display: flex;
+  font-size: 0.78rem;
+  font-weight: 650;
+  justify-content: space-between;
+  margin-bottom: 0.35rem;
+}
+
+.speed-limit-channel-card .limit-slider-row .form-label small {
+  color: var(--bs-secondary-color);
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
+.speed-limit-panel {
+  padding: 0.8rem;
+}
+
+.speed-limit-panel-heading {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  margin-bottom: 0.65rem;
+}
+
+.speed-limit-panel-heading-icon {
+  color: var(--bs-secondary-color);
+  opacity: 0.72;
+}
+
+.speed-limit-presets {
+  margin: 0;
+}
+
+html[data-ui-framework="pytorrent"] .speed-limit-presets .btn {
+  justify-content: center;
+  min-height: 2.15rem;
+}
+
+.speed-profile-panel.speed-limit-panel {
+  background: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.75rem;
+  padding: 0.8rem;
+}
+
+.speed-limit-footer {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.speed-limit-footer-note {
+  align-items: center;
+  color: var(--bs-secondary-color);
+  display: flex;
+  font-size: 0.75rem;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.speed-limit-footer-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.45rem;
+}
+
+@media (max-width: 767.98px) {
+  .speed-limit-modal .modal-dialog {
+    width: auto;
+  }
+
+  .speed-limit-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .speed-limit-presets {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .speed-limit-footer {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.65rem;
+  }
+
+  .speed-limit-footer-actions {
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 420px) {
+  .speed-limit-card-heading {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .speed-limit-live-value {
+    grid-column: auto;
+    justify-self: start;
+  }
+
+  .speed-limit-presets {
+    grid-template-columns: 1fr;
+  }
+
+  .speed-limit-footer-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
 }

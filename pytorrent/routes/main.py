@@ -9,7 +9,7 @@ import threading
 import zipfile
 
 from flask import Blueprint, render_template, Response, request, redirect, url_for, abort, send_file, stream_with_context
-from ..services.preferences import get_preferences, list_profiles, active_profile, get_profile, BOOTSTRAP_THEMES, PYTORRENT_THEMES, UI_FRAMEWORKS, FONT_FAMILIES
+from ..services.preferences import get_preferences, list_profiles, active_profile, get_profile, BOOTSTRAP_THEMES, PYTORRENT_THEMES, PYTORRENT_DEDICATED_THEMES, UI_FRAMEWORKS, FONT_FAMILIES
 from ..services import auth, pdf_preview_links, rtorrent, prometheus_metrics
 from ..config import PYTORRENT_TMP_DIR, SMART_QUEUE_LABEL, SMART_QUEUE_STALLED_LABEL, METRICS_PATH
 from ..services.frontend_assets import asset_path, bootstrap_css_path, static_hash
@@ -114,6 +114,7 @@ def _frontend_bootstrap_config(prefs: dict, profile: dict | None, current_user: 
         "easterEggClickImageUrl": str(prefs.get("easter_egg_click_image_url") or ""),
         "bootstrapThemes": BOOTSTRAP_THEMES,
         "pytorrentThemes": PYTORRENT_THEMES,
+        "pytorrentDedicatedThemes": PYTORRENT_DEDICATED_THEMES,
         "bootstrapThemeUrls": _bootstrap_theme_urls(),
         "fontFamilies": FONT_FAMILIES,
         "staticHash": static_hash(Path(current_app.static_folder or "")),
@@ -323,6 +324,7 @@ def index():
         active_profile=profile,
         bootstrap_themes=BOOTSTRAP_THEMES,
         pytorrent_themes=PYTORRENT_THEMES,
+        pytorrent_dedicated_themes=PYTORRENT_DEDICATED_THEMES,
         ui_frameworks=UI_FRAMEWORKS,
         font_families=FONT_FAMILIES,
         auth_enabled=auth.enabled(),

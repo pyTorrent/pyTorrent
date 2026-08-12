@@ -412,73 +412,97 @@
   </div>
 
   <!-- Note: Moves torrent entries to another accessible profile; data files are optional and require a separate permission check. -->
-  <div class="modal fade" id="profileTransferModal" tabindex="-1" aria-labelledby="profileTransferModalLabel"
+  <div class="modal fade profile-transfer-modal" id="profileTransferModal" tabindex="-1" aria-labelledby="profileTransferModalLabel"
     aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable app-modal-dialog">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable app-modal-dialog">
       <div class="modal-content">
-        <div class="modal-header">
-          <h5 id="profileTransferModalLabel" class="modal-title"><i class="fa-solid fa-right-left"></i> Move to another
-            profile</h5>
+        <div class="modal-header profile-transfer-header">
+          <div>
+            <div class="profile-transfer-kicker">Profile transfer</div>
+            <h5 id="profileTransferModalLabel" class="modal-title"><i class="fa-solid fa-right-left"></i> Move to another profile</h5>
+            <div class="profile-transfer-subtitle">Choose the destination, optional save path and what should happen after the transfer.</div>
+          </div>
           <button class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-        <div class="modal-body">
-          <div class="tool-note mb-3">Choose a writable destination profile. Torrent metadata can always be transferred
-            when profile access is valid; data files are moved only when the backend confirms the source rTorrent user
-            can write to the destination directory.</div>
-          <p class="small text-muted mb-2"><b id="profileTransferCount">0</b> selected torrent(s).</p>
-          <div id="profileTransferTorrentList" class="profile-transfer-torrents mb-3"></div>
+        <div class="modal-body profile-transfer-body">
+          <section class="profile-transfer-summary-card" aria-label="Selected torrents">
+            <div class="profile-transfer-summary-heading">
+              <div>
+                <span class="profile-transfer-field-label">Selected torrents</span>
+                <small>These torrent entries will be transferred to the destination profile.</small>
+              </div>
+              <span class="profile-transfer-count"><b id="profileTransferCount">0</b> selected</span>
+            </div>
+            <div id="profileTransferTorrentList" class="profile-transfer-torrents"></div>
+          </section>
+
           <input id="profileTransferTargetId" type="hidden">
           <div class="profile-transfer-grid">
-            <section>
-              <div class="automation-card-title">Destination profile</div>
-              <div id="profileTransferList" class="profile-transfer-list"><span
-                  class="spinner-border spinner-border-sm me-2"></span>Loading profiles...</div>
-              <label class="form-field mt-3"><span>Target save path</span>
-                <div class="input-group"><input id="profileTransferTargetPath" class="form-control"
-                    placeholder="Use target profile default path"><button class="btn btn-outline-secondary"
-                    data-profile-transfer-browse="1" type="button"><i class="fa-solid fa-folder-open"></i></button>
-                </div>
-              </label>
-              <div id="profileTransferPathHints" class="profile-transfer-path-hints mt-2"><span
-                  class="text-muted">Choose a profile to load safe target roots.</span></div>
+            <section class="profile-transfer-panel" aria-label="Destination profile">
+              <div class="profile-transfer-panel-heading">
+                <div><strong>Destination profile</strong><span>Select a writable rTorrent profile and an optional save path.</span></div>
+              </div>
+              <div class="profile-transfer-panel-body">
+                <div id="profileTransferList" class="profile-transfer-list"><span
+                    class="spinner-border spinner-border-sm me-2"></span>Loading profiles...</div>
+                <label class="form-field profile-transfer-path-field"><span>Target save path</span>
+                  <div class="input-group"><input id="profileTransferTargetPath" class="form-control"
+                      placeholder="Use target profile default path"><button class="btn btn-outline-secondary"
+                      data-profile-transfer-browse="1" type="button"><i class="fa-solid fa-folder-open"></i> Browse</button>
+                  </div>
+                </label>
+                <div id="profileTransferPathHints" class="profile-transfer-path-hints"><span
+                    class="text-muted">Choose a profile to load safe target roots.</span></div>
+              </div>
             </section>
-            <section>
-              <div class="automation-card-title">Transfer options</div>
-              <label class="form-check form-switch profile-transfer-switch">
-                <input id="profileTransferMoveData" class="form-check-input" type="checkbox">
-                <span class="form-check-label">Move data files too</span>
-              </label>
-              <label class="form-field mt-2"><span>Label after transfer</span><select id="profileTransferLabelMode"
-                  class="form-select">
-                  <option value="none">Keep current label</option>
-                  <option value="moved_from">Moved from source profile</option>
-                  <option value="moved_to">Moved to target profile</option>
-                  <option value="custom">Custom label</option>
-                </select></label>
-              <input id="profileTransferLabelValue" class="form-control mt-2 d-none" maxlength="120"
-                placeholder="Custom label">
-              <label class="form-field mt-2"><span>Action after transfer</span><select id="profileTransferPostAction"
-                  class="form-select">
-                  <option value="current">Keep current status</option>
-                  <option value="none">Safe default</option>
-                  <option value="start">Start</option>
-                  <option value="stop">Stop</option>
-                  <option value="pause">Pause</option>
-                  <option value="check">Force check</option>
-                </select></label>
-              <div id="profileTransferDiskInfo" class="profile-transfer-disk mt-3">Select a target profile to see
-                destination disk space.</div>
-              <div id="profileTransferPermissionNote" class="profile-transfer-permission form-text mt-2">Backend
-                validation decides whether data files can be moved. If not, only torrent metadata will be transferred.
+
+            <section class="profile-transfer-panel" aria-label="Transfer options">
+              <div class="profile-transfer-panel-heading">
+                <div><strong>Transfer options</strong><span>Control data movement, labeling and the target torrent state.</span></div>
+              </div>
+              <div class="profile-transfer-panel-body profile-transfer-option-stack">
+                <label class="form-check form-switch profile-transfer-switch">
+                  <input id="profileTransferMoveData" class="form-check-input" type="checkbox">
+                  <span class="form-check-label">Move data files too</span>
+                </label>
+                <label class="form-field"><span>Label after transfer</span><select id="profileTransferLabelMode"
+                    class="form-select">
+                    <option value="none">Keep current label</option>
+                    <option value="moved_from">Moved from source profile</option>
+                    <option value="moved_to">Moved to target profile</option>
+                    <option value="custom">Custom label</option>
+                  </select></label>
+                <input id="profileTransferLabelValue" class="form-control d-none" maxlength="120"
+                  placeholder="Custom label">
+                <label class="form-field"><span>Action after transfer</span><select id="profileTransferPostAction"
+                    class="form-select">
+                    <option value="current">Keep current status</option>
+                    <option value="none">Safe default</option>
+                    <option value="start">Start</option>
+                    <option value="stop">Stop</option>
+                    <option value="pause">Pause</option>
+                    <option value="check">Force check</option>
+                  </select></label>
               </div>
             </section>
           </div>
+
+          <section class="profile-transfer-validation-card" aria-label="Transfer validation">
+            <div class="profile-transfer-validation-heading">
+              <div><span class="profile-transfer-field-label">Destination validation</span><small>Disk space and data-move permission are checked for the selected target.</small></div>
+            </div>
+            <div id="profileTransferDiskInfo" class="profile-transfer-disk">Select a target profile to see destination disk space.</div>
+            <div id="profileTransferPermissionNote" class="profile-transfer-permission form-text">Backend validation decides whether data files can be moved. If not, only torrent metadata will be transferred.</div>
+          </section>
         </div>
-        <div class="modal-footer">
-          <button class="btn btn-outline-secondary" data-bs-dismiss="modal" type="button"><i
-              class="fa-solid fa-xmark"></i> Cancel</button>
-          <button id="profileTransferBtn" class="btn btn-primary" type="button"><i class="fa-solid fa-right-left"></i>
-            Move to profile</button>
+        <div class="modal-footer profile-transfer-footer">
+          <div class="profile-transfer-footer-note"><i class="fa-solid fa-shield-halved"></i><span>Transfer is queued only after destination validation.</span></div>
+          <div class="profile-transfer-footer-actions">
+            <button class="btn btn-outline-secondary" data-bs-dismiss="modal" type="button"><i
+                class="fa-solid fa-xmark"></i> Cancel</button>
+            <button id="profileTransferBtn" class="btn btn-primary" type="button"><i class="fa-solid fa-right-left"></i>
+              Move to profile</button>
+          </div>
         </div>
       </div>
     </div>
@@ -765,61 +789,83 @@
     </div>
   </div>
   <!-- Note: Restores the speed limit modal targeted by the footer limit button; existing speed limit API and slider handlers stay unchanged. -->
-  <div class="modal fade" id="speedModal" tabindex="-1">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+  <!-- Bandwidth controls use the same card-based modal language as Storage browser and profile transfer. -->
+  <div class="modal fade speed-limit-modal" id="speedModal" tabindex="-1" aria-labelledby="speedModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable app-modal-dialog">
       <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title"><i class="fa-solid fa-gauge-high"></i> Speed limits</h5>
-          <button class="btn-close" data-bs-dismiss="modal"></button>
+        <div class="modal-header speed-limit-header">
+          <div>
+            <div class="speed-limit-kicker">Bandwidth control</div>
+            <h5 id="speedModalLabel" class="modal-title"><i class="fa-solid fa-gauge-high"></i> Speed limits</h5>
+            <div class="speed-limit-subtitle">Set download and upload caps, use a quick preset or reuse a saved profile.</div>
+          </div>
+          <button class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-        <div class="modal-body">
-          <div class="row g-2">
-            <div class="col-md-6">
-              <label class="form-label">Download KiB/s</label>
-              <input id="limitDown" class="form-control" type="number" min="0">
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">Upload KiB/s</label>
-              <input id="limitUp" class="form-control" type="number" min="0">
-            </div>
+        <div class="modal-body speed-limit-body">
+          <div class="speed-limit-grid">
+            <section class="speed-limit-channel-card speed-limit-download" aria-label="Download limit">
+              <div class="speed-limit-card-heading">
+                <div><strong>Download</strong><span>Maximum incoming transfer speed.</span></div>
+                <b id="limitDownMbps" class="speed-limit-live-value">Unlimited</b>
+              </div>
+              <label class="form-field speed-limit-number-field"><span>Limit in KiB/s</span>
+                <input id="limitDown" class="form-control" type="number" min="0" inputmode="numeric">
+              </label>
+              <div class="limit-slider-row">
+                <label for="limitDownSlider" class="form-label"><span>Adjust in Mbit/s</span><small>0 = unlimited</small></label>
+                <input id="limitDownSlider" class="form-range limit-slider" type="range" min="0" max="2000" step="1"
+                  value="0" data-target="limitDown" data-output="limitDownMbps">
+              </div>
+            </section>
+
+            <section class="speed-limit-channel-card speed-limit-upload" aria-label="Upload limit">
+              <div class="speed-limit-card-heading">
+                <div><strong>Upload</strong><span>Maximum outgoing transfer speed.</span></div>
+                <b id="limitUpMbps" class="speed-limit-live-value">Unlimited</b>
+              </div>
+              <label class="form-field speed-limit-number-field"><span>Limit in KiB/s</span>
+                <input id="limitUp" class="form-control" type="number" min="0" inputmode="numeric">
+              </label>
+              <div class="limit-slider-row">
+                <label for="limitUpSlider" class="form-label"><span>Adjust in Mbit/s</span><small>0 = unlimited</small></label>
+                <input id="limitUpSlider" class="form-range limit-slider" type="range" min="0" max="2000" step="1"
+                  value="0" data-target="limitUp" data-output="limitUpMbps">
+              </div>
+            </section>
           </div>
-          <div class="limit-slider-panel mt-3">
-            <div class="limit-slider-row">
-              <label for="limitDownSlider" class="form-label">Custom download <b id="limitDownMbps">0 Mbit/s</b></label>
-              <input id="limitDownSlider" class="form-range limit-slider" type="range" min="0" max="2000" step="1"
-                value="0" data-target="limitDown" data-output="limitDownMbps">
+
+          <section class="speed-limit-panel" aria-label="Quick presets">
+            <div class="speed-limit-panel-heading">
+              <div><strong>Quick presets</strong><span>Apply the same cap to download and upload.</span></div>
             </div>
-            <div class="limit-slider-row">
-              <label for="limitUpSlider" class="form-label">Custom upload <b id="limitUpMbps">0 Mbit/s</b></label>
-              <input id="limitUpSlider" class="form-range limit-slider" type="range" min="0" max="2000" step="1"
-                value="0" data-target="limitUp" data-output="limitUpMbps">
+            <div class="preset-grid speed-limit-presets">
+              <button class="btn btn-sm btn-outline-secondary limit-preset" data-mbps="0"><i
+                  class="fa-solid fa-infinity"></i> Unlimited</button>
+              <button class="btn btn-sm btn-outline-secondary limit-preset" data-mbps="100"><i
+                  class="fa-solid fa-gauge"></i> 100 Mbit/s</button>
+              <button class="btn btn-sm btn-outline-secondary limit-preset" data-mbps="200"><i
+                  class="fa-solid fa-gauge"></i> 200 Mbit/s</button>
+              <button class="btn btn-sm btn-outline-secondary limit-preset" data-mbps="500"><i
+                  class="fa-solid fa-gauge-high"></i> 500 Mbit/s</button>
+              <button class="btn btn-sm btn-outline-secondary limit-preset" data-mbps="1000"><i
+                  class="fa-solid fa-gauge-high"></i> 1 Gbit/s</button>
+              <button class="btn btn-sm btn-outline-secondary limit-preset" data-mbps="2000"><i
+                  class="fa-solid fa-gauge-high"></i> 2 Gbit/s</button>
             </div>
-            <div class="small text-muted">0 means unlimited. Sliders use Mbit/s and save through the existing speed
-              limits API.</div>
-          </div>
-          <div class="preset-grid mt-3">
-            <button class="btn btn-sm btn-outline-secondary limit-preset" data-mbps="0"><i
-                class="fa-solid fa-infinity"></i> Unlimited</button>
-            <button class="btn btn-sm btn-outline-secondary limit-preset" data-mbps="100"><i
-                class="fa-solid fa-gauge"></i> 100 Mbit/s</button>
-            <button class="btn btn-sm btn-outline-secondary limit-preset" data-mbps="200"><i
-                class="fa-solid fa-gauge"></i> 200 Mbit/s</button>
-            <button class="btn btn-sm btn-outline-secondary limit-preset" data-mbps="500"><i
-                class="fa-solid fa-gauge-high"></i> 500 Mbit/s</button>
-            <button class="btn btn-sm btn-outline-secondary limit-preset" data-mbps="1000"><i
-                class="fa-solid fa-gauge-high"></i> 1 Gbit/s</button>
-            <button class="btn btn-sm btn-outline-secondary limit-preset" data-mbps="2000"><i
-                class="fa-solid fa-gauge-high"></i> 2 Gbit/s</button>
-          </div>
-          <div class="speed-profile-panel mt-3">
-            <div class="section-title mb-2"><i class="fa-solid fa-bookmark"></i> User speed profiles</div>
+          </section>
+
+          <section class="speed-profile-panel speed-limit-panel" aria-label="Saved speed profiles">
+            <div class="speed-limit-panel-heading">
+              <div><strong>User speed profiles</strong><span>Reuse named combinations without changing the active limit until you save.</span></div>
+              <i class="fa-solid fa-bookmark speed-limit-panel-heading-icon" aria-hidden="true"></i>
+            </div>
             <div class="speed-profile-controls">
               <select id="speedProfileSelect" class="form-select form-select-sm">
                 <option value="">Select saved profile...</option>
               </select>
               <button id="applySpeedProfileBtn" class="btn btn-sm btn-outline-primary" type="button"><i
                   class="fa-solid fa-check"></i> Use</button>
-              <button id="deleteSpeedProfileBtn" class="btn btn-sm btn-outline-danger" type="button"><i
+              <button id="deleteSpeedProfileBtn" class="btn btn-sm btn-outline-danger" type="button" title="Delete selected profile" aria-label="Delete selected speed profile"><i
                   class="fa-solid fa-trash"></i></button>
             </div>
             <div class="speed-profile-editor mt-2">
@@ -828,14 +874,15 @@
               <button id="saveSpeedProfileBtn" class="btn btn-sm btn-outline-primary" type="button"><i
                   class="fa-solid fa-floppy-disk"></i> Save current as profile</button>
             </div>
-            <div class="small text-muted mt-2">Profiles are your shortcuts. They do not change the active limit until
-              you choose one and save limits.</div>
-          </div>
+          </section>
         </div>
-        <div class="modal-footer">
-          <button class="btn btn-outline-secondary" data-bs-dismiss="modal"><i class="fa-solid fa-xmark"></i> Close</button>
-          <button id="saveSpeedBtn" class="btn btn-primary"><span class="btn-label"><i
-                class="fa-solid fa-floppy-disk"></i> Save limits</span></button>
+        <div class="modal-footer speed-limit-footer">
+          <div class="speed-limit-footer-note"><i class="fa-solid fa-circle-info"></i><span>Limits apply to the active rTorrent profile. 0 means unlimited.</span></div>
+          <div class="speed-limit-footer-actions">
+            <button class="btn btn-outline-secondary" data-bs-dismiss="modal"><i class="fa-solid fa-xmark"></i> Cancel</button>
+            <button id="saveSpeedBtn" class="btn btn-primary"><span class="btn-label"><i
+                  class="fa-solid fa-floppy-disk"></i> Save limits</span></button>
+          </div>
         </div>
       </div>
     </div>
@@ -1062,11 +1109,7 @@
                               id="uiFrameworkSelect" class="form-select form-select-sm">{% for value, label in
                               ui_frameworks.items() %}<option value="{{ value }}" {% if (prefs and prefs.ui_framework==value) or (not prefs and value=='bootstrap') %}selected{% endif %}>{{ label }}</option>{% endfor
                               %}</select><small id="uiFrameworkHelp">Bootstrap is the compatibility framework. PyTorrent (Beta) uses its own lightweight CSS and JavaScript runtime with a Tailwind-inspired default palette.</small></label><label id="uiThemeField" class="form-field"><span>Theme</span><select
-                              id="uiThemeSelect" class="form-select form-select-sm">{% if prefs and prefs.ui_framework == 'pytorrent' %}{% for value, label in
-                              pytorrent_themes.items() %}<option value="{{ value }}" {% if prefs.pytorrent_theme==value %}selected{% endif %}>{{ label }}</option>{% endfor %}{% else %}{% for value, label in
-                              bootstrap_themes.items() %}<option value="{{ value }}" {% if prefs and
-                                prefs.bootstrap_theme==value %}selected{% endif %}>{{ label }}</option>{% endfor %}{% endif
-                              %}</select><small id="uiThemeHelp">The selected theme is loaded natively by Bootstrap.</small></label><label class="form-field"><span>Font</span><select
+                              id="uiThemeSelect" class="form-select form-select-sm">{% if prefs and prefs.ui_framework == 'pytorrent' %}<optgroup label="PyTorrent-only themes · Beta">{% for value, label in pytorrent_dedicated_themes.items() %}<option value="{{ value }}" {% if prefs.pytorrent_theme==value %}selected{% endif %}>{{ label }}</option>{% endfor %}</optgroup><optgroup label="Universal themes · Bootstrap + PyTorrent">{% for value, label in bootstrap_themes.items() %}<option value="{{ value }}" {% if prefs.pytorrent_theme==value %}selected{% endif %}>{{ label }}</option>{% endfor %}</optgroup>{% else %}<optgroup label="Universal themes · Bootstrap + PyTorrent">{% for value, label in bootstrap_themes.items() %}<option value="{{ value }}" {% if prefs and prefs.bootstrap_theme==value %}selected{% endif %}>{{ label }}</option>{% endfor %}</optgroup>{% endif %}</select><small id="uiThemeHelp">PyTorrent-only themes are Beta. Universal themes are available in both UI frameworks.</small></label><label class="form-field"><span>Font</span><select
                               id="fontFamilySelect" class="form-select form-select-sm">{% for value, label in
                               font_families.items() %}<option value="{{ value }}" {% if prefs and
                                 prefs.font_family==value %}selected{% endif %}>{{ label }}</option>{% endfor

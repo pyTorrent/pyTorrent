@@ -72,6 +72,12 @@ PYTORRENT_APP_THEMES = {
 }
 
 
+PYTORRENT_FRAMEWORK_EXTRA_THEMES = {
+    "graphite-studio": "pyTorrent Graphite Studio (Beta)",
+    "openai": "pyTorrent OpenAI-inspired (Beta)",
+}
+
+
 BOOTSTRAP_THEME_DEFINITIONS = {
     "default": {
         "label": "Default Bootstrap",
@@ -100,7 +106,7 @@ BOOTSTRAP_THEME_DEFINITIONS = {
     # App-specific Bootstrap variable overrides. These sit on top of default Bootstrap.
     **{
         f"pytorrent-{theme}": {
-            "label": f"Custom: {label}",
+            "label": f"Universal custom: {label}",
             "provider": "pytorrent",
             "local": f"{LIBS_STATIC_DIR}/pytorrent-themes/{theme}/bootstrap.min.css",
             "cdn": f"/static/{LIBS_STATIC_DIR}/pytorrent-themes/{theme}/bootstrap.min.css",

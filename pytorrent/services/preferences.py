@@ -2,13 +2,22 @@ from __future__ import annotations
 import json
 from ..db import connect, utcnow, default_user_id
 from . import auth
-from .frontend_assets import BOOTSTRAP_THEME_LABELS, PYTORRENT_APP_THEMES
+from .frontend_assets import BOOTSTRAP_THEME_LABELS, PYTORRENT_FRAMEWORK_EXTRA_THEMES
 from .deletion import purge_profile
 
+# Theme availability is explicit: the legacy Bootstrap/Bootswatch/DevExpress and
+# app palettes are universal, while exactly three themes belong only to the
+# standalone PyTorrent framework. Keeping the universal keys identical lets a
+# user recognize the same palette when switching frameworks.
 BOOTSTRAP_THEMES = BOOTSTRAP_THEME_LABELS
-PYTORRENT_THEMES = {
+UNIVERSAL_THEMES = BOOTSTRAP_THEMES
+PYTORRENT_DEDICATED_THEMES = {
     "default-beta": "PyTorrent Default (Beta)",
-    **{f"pytorrent-{key}": label.replace("pyTorrent", "PyTorrent") for key, label in PYTORRENT_APP_THEMES.items()},
+    **{f"pytorrent-{key}": label.replace("pyTorrent", "PyTorrent") for key, label in PYTORRENT_FRAMEWORK_EXTRA_THEMES.items()},
+}
+PYTORRENT_THEMES = {
+    **PYTORRENT_DEDICATED_THEMES,
+    **UNIVERSAL_THEMES,
 }
 
 UI_FRAMEWORKS = {
