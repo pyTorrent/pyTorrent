@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import os
+import posixpath
 import random
 import socketserver
 import sqlite3
@@ -14,7 +15,6 @@ import threading
 import time
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
 from xmlrpc.client import Binary, Fault, dumps, loads
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -29,6 +29,24 @@ TRACKERS = [
 CLIENTS = ["qBittorrent/4.6", "Transmission/4.0", "libtorrent/2.0", "Deluge/2.1", "rtorrent/0.9"]
 LARGE_TORRENT_DETAIL_THRESHOLD = 50_000
 LARGE_TORRENT_TICK_BATCH = 5_000
+MOCK_CHUNK_SIZE = 4 * 1024 * 1024
+MOCK_BASE_DIRECTORIES = {
+    "/mock",
+    "/mock/downloads",
+    "/mock/downloads/movies",
+    "/mock/downloads/series",
+    "/mock/downloads/music",
+    "/mock/downloads/books",
+    "/mock/downloads/linux",
+    "/mock/downloads/archive",
+    "/mock/downloads/games",
+    "/mock/downloads/work",
+    "/mock/downloads/private",
+    "/mock/downloads/backup",
+    "/mock/downloads/incoming",
+    "/mock/downloads/completed",
+    "/mock/session",
+}
 
 
 def xmlrpc_safe(value: Any) -> Any:
@@ -64,11 +82,22 @@ class MockRtorrentState:
         self.persist = persist
         self.disk_total_bytes = max(1, int(disk_total_gb)) * 1024 * 1024 * 1024
         self.disk_used_percent = max(0.0, min(99.9, float(disk_used_percent)))
+        self.virtual_dirs: set[str] = set(MOCK_BASE_DIRECTORIES)
+        self.browse_jobs: dict[str, dict[str, str]] = {}
+        self.browse_outputs: dict[str, str] = {}
         self.config: dict[str, Any] = {
             "network.port_range": "49164-49164",
             "network.xmlrpc.size_limit": "16M",
+            "network.open_sockets": max(8, min(512, count // 2 + 12)),
+            "network.max_open_sockets": 600,
+            "network.open_files": max(12, min(1536, count + 24)),
+            "network.max_open_files": 2048,
+            "network.http.open": max(1, min(32, count // 80 + 2)),
+            "network.http.max_open": 64,
             "throttle.global_down.max_rate": 0,
             "throttle.global_up.max_rate": 0,
+            "throttle.max_downloads.global": 0,
+            "throttle.max_uploads.global": 0,
             "system.client_version": "mock-rtorrent/0.1",
             "system.library_version": "mock-libtorrent/0.13",
             "directory.default": "/mock/downloads",
@@ -131,6 +160,7 @@ class MockRtorrentState:
                 "trackers": rng.sample(TRACKERS, k=rng.randint(1, len(TRACKERS))),
                 "files": [] if self.large_mode else self.make_files(index, size, completed, rng),
                 "peers_list": [] if self.large_mode else self.make_peers(rng),
+                "file_priority_overrides": {},
             }
             self.torrents.append(torrent)
         self.reindex()
@@ -150,13 +180,17 @@ class MockRtorrentState:
             file_done = min(file_size, remaining_done)
             remaining_size -= file_size
             remaining_done -= file_done
-            chunks = max(1, file_size // (1024 * 1024))
+            range_first = sum(int(item["size"]) for item in files) // MOCK_CHUNK_SIZE
+            range_second = max(range_first + 1, (sum(int(item["size"]) for item in files) + file_size + MOCK_CHUNK_SIZE - 1) // MOCK_CHUNK_SIZE)
+            chunks = max(1, range_second - range_first)
             files.append({
                 "path": f"Mock Torrent {index + 1:05d}/file-{file_index + 1:03d}.bin",
                 "size": file_size,
                 "completed_chunks": int(chunks * (file_done / file_size)) if file_size else 0,
                 "size_chunks": chunks,
                 "priority": rng.choice([0, 1, 1, 2]),
+                "range_first": range_first,
+                "range_second": range_second,
             })
         return files
 
@@ -189,11 +223,93 @@ class MockRtorrentState:
         if not torrent:
             return []
         files = torrent.get("files") or []
-        if files:
-            return files
-        if not self.large_mode:
+        if not files and self.large_mode:
+            files = self.make_files(
+                int(torrent.get("mock_index") or 0),
+                int(torrent.get("size") or 1),
+                int(torrent.get("completed") or 0),
+                self.detail_rng(torrent, "files"),
+            )
+        if not files:
             return []
-        return self.make_files(int(torrent.get("mock_index") or 0), int(torrent.get("size") or 1), int(torrent.get("completed") or 0), self.detail_rng(torrent, "files"))
+        self.refresh_file_completion(torrent, files)
+        overrides = torrent.get("file_priority_overrides") or {}
+        for index, file in enumerate(files):
+            if str(index) in overrides:
+                file["priority"] = int(overrides[str(index)])
+        return files
+
+    def refresh_file_completion(self, torrent: dict[str, Any], files: list[dict[str, Any]]) -> None:
+        """Keep file completion counters aligned with the torrent's current downloaded bytes."""
+        self.ensure_file_ranges(files)
+        remaining_done = max(0, int(torrent.get("completed") or 0))
+        for file in files:
+            file_size = max(0, int(file.get("size") or 0))
+            file_done = min(file_size, remaining_done)
+            remaining_done = max(0, remaining_done - file_done)
+            size_chunks = max(1, int(file.get("size_chunks") or 1))
+            file["completed_chunks"] = size_chunks if file_size and file_done >= file_size else int(size_chunks * (file_done / file_size)) if file_size else 0
+
+    def ensure_file_ranges(self, files: list[dict[str, Any]]) -> None:
+        """Backfill chunk ranges for persisted mock files created by older versions."""
+        offset = 0
+        for file in files:
+            file_size = max(0, int(file.get("size") or 0))
+            range_first = offset // MOCK_CHUNK_SIZE
+            range_second = max(range_first + 1, (offset + file_size + MOCK_CHUNK_SIZE - 1) // MOCK_CHUNK_SIZE)
+            file.setdefault("range_first", range_first)
+            file.setdefault("range_second", range_second)
+            file["size_chunks"] = max(1, int(file.get("range_second") or range_second) - int(file.get("range_first") or range_first))
+            offset += file_size
+
+    def normalize_virtual_path(self, value: Any, default: str = "/mock/downloads") -> str:
+        """Normalize remote mock paths without allowing them to escape the synthetic filesystem."""
+        raw = str(value or default).strip() or default
+        if not raw.startswith("/"):
+            raw = posixpath.join(default, raw)
+        clean = posixpath.normpath(raw)
+        return clean if clean.startswith("/mock") else default
+
+    def known_directories(self) -> set[str]:
+        """Return synthetic directories plus current torrent directories and payload roots."""
+        known = set(self.virtual_dirs)
+        for torrent in self.torrents:
+            directory = self.normalize_virtual_path(torrent.get("directory"))
+            base_path = self.normalize_virtual_path(torrent.get("base_path"))
+            known.add(directory)
+            known.add(base_path)
+            current = directory
+            while current.startswith("/mock") and current not in {"/mock", "/"}:
+                current = posixpath.dirname(current.rstrip("/")) or "/"
+                if current.startswith("/mock"):
+                    known.add(current)
+        known.add("/mock")
+        return known
+
+    def direct_child_directories(self, path: str) -> list[str]:
+        """List first-level children for the mock path browser."""
+        base = self.normalize_virtual_path(path)
+        prefix = base.rstrip("/") + "/"
+        children: set[str] = set()
+        for candidate in self.known_directories():
+            if candidate == base or not candidate.startswith(prefix):
+                continue
+            remainder = candidate[len(prefix):]
+            name = remainder.split("/", 1)[0]
+            if name:
+                children.add(prefix + name)
+        return sorted(children, key=lambda item: posixpath.basename(item).lower())
+
+    def directory_is_empty(self, path: str) -> bool:
+        """Report whether a synthetic directory has no child directory or torrent payload."""
+        clean = self.normalize_virtual_path(path)
+        if self.direct_child_directories(clean):
+            return False
+        prefix = clean.rstrip("/") + "/"
+        for torrent in self.torrents:
+            if self.normalize_virtual_path(torrent.get("base_path")).startswith(prefix):
+                return False
+        return True
 
     def peer_rows(self, torrent: dict[str, Any] | None) -> list[list[Any]]:
         """Return stored peers or lazily generated peers for high-volume mocks."""
@@ -215,9 +331,12 @@ class MockRtorrentState:
         self.config.update(data.get("config") or {})
         self.seed = int(data.get("seed") or self.seed)
         self.torrents = list(data.get("torrents") or [])
+        self.virtual_dirs.update(self.normalize_virtual_path(path) for path in (data.get("virtual_dirs") or []))
         self.large_mode = len(self.torrents) >= LARGE_TORRENT_DETAIL_THRESHOLD
         for index, torrent in enumerate(self.torrents):
             torrent.setdefault("mock_index", index)
+            torrent.setdefault("file_priority_overrides", {})
+            self.ensure_file_ranges(torrent.get("files") or [])
             if self.large_mode:
                 torrent.setdefault("files", [])
                 torrent.setdefault("peers_list", [])
@@ -229,7 +348,16 @@ class MockRtorrentState:
             return
         self.state_file.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.state_file.with_suffix(".tmp")
-        tmp.write_text(json.dumps({"updated_at": human_now(), "seed": self.seed, "config": self.config, "torrents": self.torrents}), encoding="utf-8")
+        tmp.write_text(
+            json.dumps({
+                "updated_at": human_now(),
+                "seed": self.seed,
+                "config": self.config,
+                "virtual_dirs": sorted(self.virtual_dirs),
+                "torrents": self.torrents,
+            }),
+            encoding="utf-8",
+        )
         tmp.replace(self.state_file)
 
     def tick(self) -> None:
@@ -250,6 +378,11 @@ class MockRtorrentState:
             indices = [(start + offset) % total for offset in range(batch)]
         for index in indices:
             torrent = self.torrents[index]
+            hash_started = int(torrent.get("hashing_started_at") or 0)
+            if torrent.get("hashing") and hash_started and now - hash_started >= 3:
+                torrent["hashing"] = 0
+                if torrent.get("message") == "Hash check queued":
+                    torrent["message"] = ""
             if not torrent.get("state") or not torrent.get("is_active"):
                 torrent["down_rate"] = 0
                 torrent["up_rate"] = 0
@@ -268,6 +401,43 @@ class MockRtorrentState:
                     torrent["complete"] = 1
                     torrent["completed_at"] = now
             torrent["last_activity"] = now
+
+    def chunk_counts(self, torrent: dict[str, Any]) -> tuple[int, int]:
+        """Return total and completed piece counts for one mock torrent."""
+        size = max(0, int(torrent.get("size") or 0))
+        completed_bytes = max(0, min(size, int(torrent.get("completed") or 0)))
+        total = max(1, (size + MOCK_CHUNK_SIZE - 1) // MOCK_CHUNK_SIZE)
+        completed = total if completed_bytes >= size and size > 0 else min(total, completed_bytes // MOCK_CHUNK_SIZE)
+        return total, completed
+
+    @staticmethod
+    def bits_to_hex(bits: list[int]) -> str:
+        """Encode one-bit piece states using rTorrent's hexadecimal bitfield order."""
+        if not bits:
+            return ""
+        padded = list(bits)
+        while len(padded) % 4:
+            padded.append(0)
+        chars: list[str] = []
+        for index in range(0, len(padded), 4):
+            nibble = (padded[index] << 3) | (padded[index + 1] << 2) | (padded[index + 2] << 1) | padded[index + 3]
+            chars.append(format(nibble, "x"))
+        return "".join(chars)
+
+    def torrent_bitfield(self, torrent: dict[str, Any]) -> str:
+        """Return a deterministic piece completion map for the Chunks tab."""
+        total, completed = self.chunk_counts(torrent)
+        return self.bits_to_hex(([1] * completed) + ([0] * max(0, total - completed)))
+
+    def torrent_seen_bitfield(self, torrent: dict[str, Any]) -> str:
+        """Mark a sparse set of missing pieces as seen so the mock exercises every chunk status."""
+        total, completed = self.chunk_counts(torrent)
+        index_seed = int(torrent.get("mock_index") or 0)
+        bits = [0] * total
+        for index in range(completed, total):
+            if (index + index_seed) % 7 == 0:
+                bits[index] = 1
+        return self.bits_to_hex(bits)
 
     def torrent_row_value(self, torrent: dict[str, Any], field: str) -> Any:
         """Map rTorrent d.* fields to mock torrent values."""
@@ -288,6 +458,8 @@ class MockRtorrentState:
         """Handle the subset of rTorrent XML-RPC methods needed by pyTorrent."""
         with self.lock:
             self.tick()
+            if method in {"system.time", "system.time_seconds"}:
+                return int(time.time())
             if method in self.config:
                 return self.config[method]
             if method.endswith(".set") and method.replace(".set", "") in self.config:
@@ -316,12 +488,31 @@ class MockRtorrentState:
             if method.startswith("t."):
                 return self.call_tracker_method(method, args)
             if method.startswith("f.priority.set"):
-                return 0
+                return self.call_file_priority_set(args)
             if method.startswith("load.raw"):
                 return self.add_loaded_torrent(args)
             if method.startswith("execute"):
                 return self.call_execute(method, args)
             raise Fault(1, f"Mock method not implemented: {method}")
+
+    def call_file_priority_set(self, args: tuple[Any, ...]) -> int:
+        """Apply one rTorrent file priority update and preserve it across lazy file regeneration."""
+        target = str(args[0] if args else "")
+        torrent_hash, _, suffix = target.partition(":f")
+        if not suffix.isdigit():
+            raise Fault(1, f"Invalid mock file target: {target}")
+        torrent = self.by_hash.get(torrent_hash)
+        if not torrent:
+            raise Fault(1, f"Unknown torrent hash: {torrent_hash}")
+        index = int(suffix)
+        priority = max(0, min(3, int(args[1] if len(args) > 1 else 1)))
+        files = self.file_rows(torrent)
+        if index < 0 or index >= len(files):
+            raise Fault(1, f"Invalid mock file index: {index}")
+        files[index]["priority"] = priority
+        torrent.setdefault("file_priority_overrides", {})[str(index)] = priority
+        self.save()
+        return 0
 
 
     def disk_usage_output(self, path: str) -> str:
@@ -338,13 +529,33 @@ class MockRtorrentState:
         percent = int(round((used_kb / total_kb) * 100)) if total_kb else 0
         return f"OK\t{total_kb}\t{used_kb}\t{free_kb}\t{percent}\t{clean_path}\n"
 
-    def browse_output(self, path: str) -> str:
-        """Return a lightweight path browser response used by pyTorrent move/path pickers."""
-        clean_path = str(path or self.config.get("directory.default") or "/mock/downloads").rstrip("/") or "/"
-        dirs = ["movies", "series", "music", "linux", "archive", "incoming", "completed"]
-        lines = [f"D\t{name}\t{clean_path}/{name}" for name in dirs]
+    def browse_output(self, path: str, max_dirs: int = 3000) -> str:
+        """Return the current virtual directory tree in pyTorrent path-browser format."""
+        clean_path = self.normalize_virtual_path(path)
+        known_dirs = self.known_directories()
+        prefix = clean_path.rstrip("/") + "/"
+        all_dirs = sorted(
+            {
+                prefix + candidate[len(prefix):].split("/", 1)[0]
+                for candidate in known_dirs
+                if candidate != clean_path and candidate.startswith(prefix) and candidate[len(prefix):]
+            },
+            key=lambda item: posixpath.basename(item).lower(),
+        )
+        try:
+            limit = max(1, int(max_dirs or 3000))
+        except (TypeError, ValueError):
+            limit = 3000
+        visible_dirs = all_dirs[:limit]
+        nonempty_dirs = {posixpath.dirname(candidate.rstrip("/")) or "/" for candidate in known_dirs if candidate != "/mock"}
+        payload_roots = {self.normalize_virtual_path(torrent.get("base_path")) for torrent in self.torrents}
+        lines = [
+            f"D\t{posixpath.basename(full_path)}\t{full_path}\t{'0' if full_path in nonempty_dirs or full_path in payload_roots else '1'}"
+            for full_path in visible_dirs
+        ]
         total_kb, used_kb, free_kb, percent = self.disk_df_parts()
-        lines.append(f"M\t{len(dirs)}\t{len(self.torrents)}")
+        direct_payloads = sum(1 for torrent in self.torrents if self.normalize_virtual_path(torrent.get("directory")) == clean_path)
+        lines.append(f"M\t{len(all_dirs)}\t{direct_payloads}\t1\t0\t{limit}\t0\t\t0\t0")
         lines.append(f"F\t{total_kb} {used_kb} {free_kb} {percent}%")
         return "\n".join(lines)
 
@@ -359,6 +570,76 @@ class MockRtorrentState:
     def call_execute(self, method: str, args: tuple[Any, ...]) -> str:
         """Handle shell-backed rTorrent helpers used for disk and path monitoring."""
         marker_args = [str(item) for item in args]
+        if "pytorrent-access-check" in marker_args:
+            marker_index = marker_args.index("pytorrent-access-check")
+            known = self.known_directories()
+            for candidate in marker_args[marker_index + 1:]:
+                clean = self.normalize_virtual_path(candidate, default="")
+                if clean in known and clean != "/":
+                    return clean
+            return ""
+        if "pytorrent-browse-start" in marker_args:
+            marker_index = marker_args.index("pytorrent-browse-start")
+            values = marker_args[marker_index + 1:]
+            base = values[0] if values else str(self.config.get("directory.default") or "/mock/downloads")
+            max_dirs = int(values[1]) if len(values) > 1 and values[1].isdigit() else 3000
+            output_path = values[3] if len(values) > 3 else f"/tmp/pytorrent-mock-{time.time_ns()}.out"
+            status_path = values[4] if len(values) > 4 else f"{output_path}.status"
+            self.browse_outputs[output_path] = self.browse_output(base, max_dirs=max_dirs)
+            self.browse_jobs[status_path] = {"status": "OK", "output_path": output_path}
+            return "OK"
+        if "pytorrent-browse-poll" in marker_args:
+            marker_index = marker_args.index("pytorrent-browse-poll")
+            status_path = marker_args[marker_index + 1] if marker_index + 1 < len(marker_args) else ""
+            return (self.browse_jobs.get(status_path) or {}).get("status", "")
+        if "pytorrent-browse-read" in marker_args:
+            marker_index = marker_args.index("pytorrent-browse-read")
+            output_path = marker_args[marker_index + 1] if marker_index + 1 < len(marker_args) else ""
+            return self.browse_outputs.get(output_path, "ERR\tPath browse result is unavailable")
+        if "pytorrent-browse-clean" in marker_args:
+            marker_index = marker_args.index("pytorrent-browse-clean")
+            output_path = marker_args[marker_index + 1] if marker_index + 1 < len(marker_args) else ""
+            status_path = marker_args[marker_index + 2] if marker_index + 2 < len(marker_args) else ""
+            self.browse_outputs.pop(output_path, None)
+            self.browse_jobs.pop(status_path, None)
+            return ""
+        if "pytorrent-mkdir" in marker_args:
+            marker_index = marker_args.index("pytorrent-mkdir")
+            parent = self.normalize_virtual_path(marker_args[marker_index + 1] if marker_index + 1 < len(marker_args) else "")
+            target = self.normalize_virtual_path(marker_args[marker_index + 2] if marker_index + 2 < len(marker_args) else parent)
+            if parent not in self.known_directories() or posixpath.dirname(target.rstrip("/")) != parent:
+                return "ERR\tInvalid mock directory target"
+            self.virtual_dirs.add(target)
+            self.save()
+            return f"OK\t{target}"
+        if "pytorrent-rename-check" in marker_args:
+            marker_index = marker_args.index("pytorrent-rename-check")
+            source = self.normalize_virtual_path(marker_args[marker_index + 1] if marker_index + 1 < len(marker_args) else "")
+            if source not in self.known_directories():
+                return "ERR\tDirectory does not exist"
+            return f"OK\t{source}\t{1 if self.directory_is_empty(source) else 0}"
+        if "pytorrent-rename-dir" in marker_args:
+            marker_index = marker_args.index("pytorrent-rename-dir")
+            source = self.normalize_virtual_path(marker_args[marker_index + 1] if marker_index + 1 < len(marker_args) else "")
+            target = self.normalize_virtual_path(marker_args[marker_index + 2] if marker_index + 2 < len(marker_args) else "")
+            if source not in self.known_directories() or target in self.known_directories():
+                return "ERR\tInvalid mock rename target"
+            source_prefix = source.rstrip("/") + "/"
+            updated_dirs = set()
+            for directory in self.virtual_dirs:
+                if directory == source or directory.startswith(source_prefix):
+                    suffix = directory[len(source):]
+                    updated_dirs.add(target + suffix)
+                else:
+                    updated_dirs.add(directory)
+            self.virtual_dirs = updated_dirs
+            for torrent in self.torrents:
+                for key in ("directory", "base_path"):
+                    current = self.normalize_virtual_path(torrent.get(key))
+                    if current == source or current.startswith(source_prefix):
+                        torrent[key] = target + current[len(source):]
+            self.save()
+            return f"OK\t{target}"
         if "pytorrent-df" in marker_args:
             marker_index = marker_args.index("pytorrent-df")
             path = marker_args[marker_index + 1] if marker_index + 1 < len(marker_args) else str(self.config.get("directory.default") or "/mock/downloads")
@@ -368,6 +649,8 @@ class MockRtorrentState:
             path = marker_args[marker_index + 1] if marker_index + 1 < len(marker_args) else str(self.config.get("directory.default") or "/mock/downloads")
             return self.browse_output(path)
         script = " ".join(marker_args)
+        if '${HOME:-}' in script or "${HOME:-}" in script:
+            return "/mock"
         if "/proc/stat" in script and "/proc/meminfo" in script:
             return "17.4 61.2"
         if "df -Pk" in script:
@@ -392,10 +675,24 @@ class MockRtorrentState:
         readers = {
             "d.name": "name", "d.state": "state", "d.directory": "directory", "d.base_path": "base_path",
             "d.is_multi_file": "is_multi_file", "d.is_active": "is_active", "d.custom1": "label",
-            "d.bitfield": "bitfield",
+            "d.size_bytes": "size", "d.completed_bytes": "completed", "d.complete": "complete",
+            "d.ratio": "ratio", "d.priority": "priority", "d.message": "message", "d.hashing": "hashing",
         }
         if method in readers:
             return torrent.get(readers[method], "")
+        if method == "d.bitfield":
+            return self.torrent_bitfield(torrent)
+        if method == "d.chunks_seen":
+            return self.torrent_seen_bitfield(torrent)
+        if method == "d.chunk_size":
+            return MOCK_CHUNK_SIZE
+        if method == "d.size_chunks":
+            return self.chunk_counts(torrent)[0]
+        if method == "d.completed_chunks":
+            return self.chunk_counts(torrent)[1]
+        if method == "d.chunks_hashed":
+            total, completed = self.chunk_counts(torrent)
+            return max(completed, total // 2) if torrent.get("hashing") else (total if torrent.get("complete") else completed)
         if method == "d.custom1.set":
             torrent["label"] = str(args[1] if len(args) > 1 else "")
         elif method == "d.directory.set":
@@ -408,7 +705,7 @@ class MockRtorrentState:
         elif method in {"d.stop", "d.close", "d.pause"}:
             torrent.update({"state": 0, "is_active": 0, "down_rate": 0, "up_rate": 0})
         elif method == "d.check_hash":
-            torrent.update({"hashing": 1, "message": "Hash check queued"})
+            torrent.update({"hashing": 1, "hashing_started_at": int(time.time()), "message": "Hash check queued"})
         elif method == "d.update_priorities":
             return 0
         self.save()
@@ -447,14 +744,14 @@ class MockRtorrentState:
             if text.startswith("d.directory.set="):
                 directory = text.split("=", 1)[1]
         self.torrents.append({
-            "hash": torrent_hash, "name": f"Mock Added Torrent {index + 1}", "state": 1, "complete": 0,
+            "mock_index": index, "hash": torrent_hash, "name": f"Mock Added Torrent {index + 1}", "state": 1, "complete": 0,
             "size": size, "completed": 0, "ratio": 0, "up_rate": 0, "down_rate": 512_000,
             "up_total": 0, "down_total": 0, "peers": 8, "seeds": 12, "priority": 1,
             "directory": directory, "base_path": f"{directory}/Mock Added Torrent {index + 1}",
             "created": int(time.time()), "label": label, "ratio_group": "", "message": "",
             "hashing": 0, "is_active": 1, "is_multi_file": 1, "last_activity": int(time.time()),
             "completed_at": 0, "trackers": TRACKERS[:2], "files": self.make_files(index, size, 0, random.Random(index)),
-            "peers_list": self.make_peers(random.Random(index)),
+            "peers_list": self.make_peers(random.Random(index)), "file_priority_overrides": {},
         })
         self.reindex()
         self.save()
@@ -464,13 +761,14 @@ class MockRtorrentState:
 class ScgiXmlRpcHandler(socketserver.BaseRequestHandler):
     """Single-request SCGI netstring parser that returns XML-RPC responses."""
 
-    state: MockRtorrentState
-
     def handle(self) -> None:
         try:
             body = self.read_scgi_body()
             params, method = loads(body)
-            result = self.state.call(method, tuple(params))
+            state = getattr(self.server, "state", None)
+            if not isinstance(state, MockRtorrentState):
+                raise RuntimeError("Mock server state is unavailable")
+            result = state.call(method, tuple(params))
             payload = dumps((xmlrpc_safe(result),), methodresponse=True, allow_none=True).encode("utf-8")
         except Fault as exc:
             payload = dumps(exc, allow_none=True).encode("utf-8")
@@ -515,6 +813,7 @@ class ThreadingScgiServer(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
     daemon_threads = True
     request_queue_size = 128
+    state: MockRtorrentState
 
 
 def fallback_db_path() -> Path:
@@ -546,10 +845,21 @@ def register_profile(host: str, port: int, name: str) -> None:
     print(f"Registered pyTorrent profile '{name}' -> {scgi_url}")
 
 
+def profile_state_path(base_path: Path, index: int, total: int) -> Path:
+    """Give every mock profile its own persistence file while preserving the old single-profile path."""
+    if total <= 1:
+        return base_path
+    suffix = base_path.suffix or ".json"
+    stem = base_path.name[:-len(base_path.suffix)] if base_path.suffix else base_path.name
+    return base_path.with_name(f"{stem}-{index + 1}{suffix}")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run a large development rTorrent SCGI mock for pyTorrent.")
     parser.add_argument("--host", default="127.0.0.1", help="SCGI bind host. Default: 127.0.0.1")
     parser.add_argument("--port", type=int, default=5001, help="SCGI bind port. Default: 5001")
+    parser.add_argument("--profiles", type=int, default=int(os.getenv("PYTORRENT_MOCK_PROFILES", "1")), help="Number of independent mock rTorrent profiles to run. Default: 1")
+    parser.add_argument("--profile-port-step", type=int, default=1, help="Port increment between mock profiles. Default: 1")
     parser.add_argument("--count", type=int, default=int(os.getenv("PYTORRENT_MOCK_TORRENTS", "2500")), help="Number of generated torrents.")
     parser.add_argument("--seed", type=int, default=42, help="Deterministic data seed.")
     parser.add_argument("--persist", action="store_true", help="Persist mock state to JSON across restarts.")
@@ -557,25 +867,48 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--disk-total-gb", type=int, default=int(os.getenv("PYTORRENT_MOCK_DISK_TOTAL_GB", "4096")), help="Synthetic disk size exposed to pyTorrent disk monitor.")
     parser.add_argument("--disk-used-percent", type=float, default=float(os.getenv("PYTORRENT_MOCK_DISK_USED_PERCENT", "68")), help="Synthetic used disk percentage exposed to pyTorrent disk monitor.")
     parser.add_argument("--register-profile", action="store_true", help="Create or update a pyTorrent profile for this mock.")
-    parser.add_argument("--profile-name", default="Mock rTorrent", help="Profile name used with --register-profile.")
+    parser.add_argument("--profile-name", default="Mock rTorrent", help="Base profile name used with --register-profile; multiple profiles receive numeric suffixes.")
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    state = MockRtorrentState(count=args.count, seed=args.seed, state_file=args.state_file, persist=args.persist, disk_total_gb=args.disk_total_gb, disk_used_percent=args.disk_used_percent)
-    ScgiXmlRpcHandler.state = state
-    if args.register_profile:
-        register_profile(args.host, args.port, args.profile_name)
-    with ThreadingScgiServer((args.host, args.port), ScgiXmlRpcHandler) as server:
-        print(f"Mock rTorrent SCGI listening on scgi://{args.host}:{args.port}/RPC2 with {len(state.torrents)} torrents")
-        print(f"Mock disk monitor: {args.disk_total_gb} GiB total, {args.disk_used_percent}% used")
+    profile_count = max(1, min(32, int(args.profiles or 1)))
+    port_step = max(1, int(args.profile_port_step or 1))
+    servers: list[ThreadingScgiServer] = []
+    threads: list[threading.Thread] = []
+    try:
+        for index in range(profile_count):
+            port = int(args.port) + (index * port_step)
+            name = args.profile_name if profile_count == 1 else f"{args.profile_name} {index + 1}"
+            state = MockRtorrentState(
+                count=args.count,
+                seed=args.seed + index,
+                state_file=profile_state_path(args.state_file, index, profile_count),
+                persist=args.persist,
+                disk_total_gb=args.disk_total_gb,
+                disk_used_percent=min(99.9, args.disk_used_percent + (index * 3.0)),
+            )
+            server = ThreadingScgiServer((args.host, port), ScgiXmlRpcHandler)
+            server.state = state
+            servers.append(server)
+            if args.register_profile:
+                register_profile(args.host, port, name)
+            thread = threading.Thread(target=server.serve_forever, name=f"mock-rtorrent-{index + 1}", daemon=True)
+            thread.start()
+            threads.append(thread)
+            print(f"Mock rTorrent SCGI [{index + 1}/{profile_count}] listening on scgi://{args.host}:{port}/RPC2 with {len(state.torrents)} torrents")
+            print(f"  profile: {name}; disk: {args.disk_total_gb} GiB total, {state.disk_used_percent:.1f}% used")
         print("Use Ctrl+C to stop. Without --persist, changes live only until restart.")
-        try:
-            server.serve_forever()
-        except KeyboardInterrupt:
-            print("\nMock rTorrent stopped")
-            return 0
+        while True:
+            time.sleep(3600)
+    except KeyboardInterrupt:
+        print("\nMock rTorrent stopped")
+        return 0
+    finally:
+        for server in servers:
+            server.shutdown()
+            server.server_close()
     return 0
 
 

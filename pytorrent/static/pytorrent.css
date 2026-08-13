@@ -34,6 +34,16 @@ html[data-ui-framework="pytorrent"] {
   --pt-danger-rgb: 220, 38, 38;
   --pt-info: #0284c7;
   --pt-info-rgb: 2, 132, 199;
+  --pt-progress-start: color-mix(in srgb, var(--pt-info) 72%, var(--pt-primary));
+  --pt-progress-mid: var(--pt-primary);
+  --pt-progress-end: color-mix(in srgb, var(--pt-primary) 38%, var(--pt-success));
+  --pt-progress-complete: var(--pt-success);
+  --pt-progress-track: color-mix(in srgb, var(--pt-surface-soft) 90%, var(--pt-primary) 10%);
+  --torrent-progress-start: var(--pt-progress-start);
+  --torrent-progress-mid: var(--pt-progress-mid);
+  --torrent-progress-end: var(--pt-progress-end);
+  --torrent-progress-complete: var(--pt-progress-complete);
+  --torrent-progress-track: var(--pt-progress-track);
   --pt-focus: rgba(37, 99, 235, 0.22);
   --pt-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
   --pt-shadow-md: 0 14px 34px rgba(15, 23, 42, 0.14);
@@ -42,6 +52,29 @@ html[data-ui-framework="pytorrent"] {
   --pt-radius-lg: 0.75rem;
   --pt-control-height: 1.9rem;
   --pt-menu-bg: var(--pt-surface);
+  --pt-border-width: 1px;
+  --pt-primary-contrast: #ffffff;
+  --pt-primary-button-bg: var(--pt-primary);
+  --pt-primary-button-hover-bg: var(--pt-primary-strong);
+  --pt-button-radius: var(--pt-radius-sm);
+  --pt-button-radius-sm: 0.36rem;
+  --pt-button-radius-xs: 0.3rem;
+  --pt-button-border-width: var(--pt-border-width);
+  --pt-button-font-weight: 620;
+  --pt-button-letter-spacing: normal;
+  --pt-button-text-transform: none;
+  --pt-button-shadow: none;
+  --pt-button-hover-shadow: none;
+  --pt-button-hover-transform: none;
+  --pt-button-active-transform: translateY(1px);
+  --pt-control-radius: var(--pt-radius-sm);
+  --pt-control-radius-sm: 0.34rem;
+  --pt-control-border-width: var(--pt-border-width);
+  --pt-control-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+  --pt-menu-radius: var(--pt-radius);
+  --pt-menu-item-radius: 0.42rem;
+  --pt-nav-radius: var(--pt-radius-sm);
+  --pt-nav-active-color: var(--pt-primary-strong);
   --pt-motion-fast: 110ms;
   --pt-motion-base: 180ms;
 
@@ -76,6 +109,7 @@ html[data-ui-framework="pytorrent"][data-bs-theme="dark"] {
   --pt-focus: rgba(96, 165, 250, 0.28);
   --pt-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.28);
   --pt-shadow-md: 0 18px 46px rgba(0, 0, 0, 0.38);
+  --pt-primary-contrast: #0b1020;
 
 }
 
@@ -89,14 +123,25 @@ html[data-ui-framework="pytorrent"][data-bs-theme="dark"] {
  * PyTorrent themes and compatible Bootstrap themes can override them cleanly. */
 :where(html[data-ui-framework="pytorrent"]) {
   --pytorrent-page-bg: var(--pt-page);
+  --pytorrent-shell-bg: var(--pt-surface);
+  --pytorrent-shell-border: var(--pt-border);
+  --pytorrent-shell-border-width: var(--pt-border-width);
+  --pytorrent-shell-radius: var(--pt-radius-lg);
   --pytorrent-shell-shadow: var(--pt-shadow-md);
   --pytorrent-topbar-bg: var(--pt-surface);
   --pytorrent-sidebar-bg: var(--pt-surface);
+  --pytorrent-sidebar-filter-radius: var(--pt-radius);
   --pytorrent-statusbar-bg: var(--pt-surface-soft);
   --pytorrent-surface-bg: var(--pt-surface);
   --pytorrent-surface-radius: var(--pt-radius-lg);
   --pytorrent-panel-border: var(--pt-border);
+  --pytorrent-panel-border-width: var(--pt-border-width);
   --pytorrent-table-header-bg: var(--pt-surface-soft);
+  --pytorrent-table-header-idle-bg: transparent;
+  --pytorrent-table-header-idle-shadow: none;
+  --pytorrent-table-header-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
+  --pytorrent-selected-accent-width: 3px;
+  --pytorrent-details-bg: color-mix(in srgb, var(--pt-surface) 78%, transparent);
   --pytorrent-backdrop-filter: none;
 }
 
@@ -250,7 +295,7 @@ html[data-ui-framework="pytorrent"] .btn {
   --bs-btn-padding-y: 0.34rem;
   --bs-btn-padding-x: 0.62rem;
   --bs-btn-font-size: 0.84rem;
-  --bs-btn-border-radius: var(--pt-radius-sm);
+  --bs-btn-border-radius: var(--pt-button-radius);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -259,16 +304,18 @@ html[data-ui-framework="pytorrent"] .btn {
   padding: var(--bs-btn-padding-y) var(--bs-btn-padding-x);
   color: var(--bs-btn-color);
   font-size: var(--bs-btn-font-size);
-  font-weight: 620;
+  font-weight: var(--pt-button-font-weight);
+  letter-spacing: var(--pt-button-letter-spacing);
+  text-transform: var(--pt-button-text-transform);
   line-height: 1.15;
   text-align: center;
   vertical-align: middle;
   cursor: pointer;
   user-select: none;
-  border: 1px solid var(--bs-btn-border-color);
+  border: var(--pt-button-border-width) solid var(--bs-btn-border-color);
   border-radius: var(--bs-btn-border-radius);
   background: var(--bs-btn-bg);
-  box-shadow: none;
+  box-shadow: var(--pt-button-shadow);
   transition: background-color var(--pt-motion-base) ease, border-color var(--pt-motion-base) ease, color var(--pt-motion-base) ease, box-shadow var(--pt-motion-base) ease, transform var(--pt-motion-fast) ease;
 }
 
@@ -276,6 +323,8 @@ html[data-ui-framework="pytorrent"] .btn:hover:not(:disabled):not(.disabled) {
   color: var(--bs-btn-hover-color);
   background: var(--bs-btn-hover-bg);
   border-color: var(--bs-btn-hover-border-color);
+  box-shadow: var(--pt-button-hover-shadow);
+  transform: var(--pt-button-hover-transform);
 }
 
 html[data-ui-framework="pytorrent"] .btn:focus-visible {
@@ -288,7 +337,7 @@ html[data-ui-framework="pytorrent"] .btn.active {
   color: var(--bs-btn-active-color);
   background: var(--bs-btn-active-bg);
   border-color: var(--bs-btn-active-border-color);
-  transform: translateY(1px);
+  transform: var(--pt-button-active-transform);
 }
 
 html[data-ui-framework="pytorrent"] .btn:disabled,
@@ -301,21 +350,15 @@ html[data-ui-framework="pytorrent"] .btn.disabled {
 }
 
 html[data-ui-framework="pytorrent"] .btn-primary {
-  --bs-btn-color: #ffffff;
-  --bs-btn-bg: var(--pt-primary);
+  --bs-btn-color: var(--pt-primary-contrast);
+  --bs-btn-bg: var(--pt-primary-button-bg);
   --bs-btn-border-color: var(--pt-primary);
-  --bs-btn-hover-color: #ffffff;
-  --bs-btn-hover-bg: var(--pt-primary-strong);
+  --bs-btn-hover-color: var(--pt-primary-contrast);
+  --bs-btn-hover-bg: var(--pt-primary-button-hover-bg);
   --bs-btn-hover-border-color: var(--pt-primary-strong);
-  --bs-btn-active-color: #ffffff;
-  --bs-btn-active-bg: var(--pt-primary-strong);
+  --bs-btn-active-color: var(--pt-primary-contrast);
+  --bs-btn-active-bg: var(--pt-primary-button-hover-bg);
   --bs-btn-active-border-color: var(--pt-primary-strong);
-}
-
-html[data-ui-framework="pytorrent"][data-bs-theme="dark"] .btn-primary {
-  --bs-btn-color: #0b1020;
-  --bs-btn-hover-color: #0b1020;
-  --bs-btn-active-color: #0b1020;
 }
 
 html[data-ui-framework="pytorrent"] .btn-danger {
@@ -417,7 +460,7 @@ html[data-ui-framework="pytorrent"] .btn-group-sm>.btn {
   --bs-btn-padding-y: 0.24rem;
   --bs-btn-padding-x: 0.5rem;
   --bs-btn-font-size: 0.78rem;
-  --bs-btn-border-radius: 0.36rem;
+  --bs-btn-border-radius: var(--pt-button-radius-sm);
   min-height: 1.58rem;
 }
 
@@ -426,7 +469,7 @@ html[data-ui-framework="pytorrent"] .btn.btn-xs {
   --bs-btn-padding-y: 0.1rem;
   --bs-btn-padding-x: 0.34rem;
   --bs-btn-font-size: 0.74rem;
-  --bs-btn-border-radius: 0.3rem;
+  --bs-btn-border-radius: var(--pt-button-radius-xs);
   min-height: 1.35rem;
 }
 
@@ -504,10 +547,10 @@ html[data-ui-framework="pytorrent"] .form-select {
   line-height: 1.35;
   background-color: var(--pt-surface);
   background-clip: padding-box;
-  border: 1px solid var(--pt-border-strong);
-  border-radius: var(--pt-radius-sm);
+  border: var(--pt-control-border-width) solid var(--pt-border-strong);
+  border-radius: var(--pt-control-radius);
   outline: 0;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+  box-shadow: var(--pt-control-shadow);
   transition: border-color var(--pt-motion-base) ease, box-shadow var(--pt-motion-base) ease, background-color var(--pt-motion-base) ease;
 }
 
@@ -554,7 +597,7 @@ html[data-ui-framework="pytorrent"] .input-group-sm>.input-group-text {
   padding-top: 0.18rem;
   padding-bottom: 0.18rem;
   font-size: 0.76rem;
-  border-radius: 0.34rem;
+  border-radius: var(--pt-control-radius-sm);
 }
 
 html[data-ui-framework="pytorrent"] .input-group-sm>.btn {
@@ -610,8 +653,8 @@ html[data-ui-framework="pytorrent"] .input-group-text {
   padding: 0.44rem 0.62rem;
   color: var(--pt-text-muted);
   background: var(--pt-surface-soft);
-  border: 1px solid var(--pt-border-strong);
-  border-radius: var(--pt-radius-sm);
+  border: var(--pt-control-border-width) solid var(--pt-border-strong);
+  border-radius: var(--pt-control-radius);
 }
 
 html[data-ui-framework="pytorrent"] .form-check {
@@ -762,7 +805,7 @@ html[data-ui-framework="pytorrent"] .nav-link {
   font-weight: 600;
   line-height: 1.2;
   border: 1px solid transparent;
-  border-radius: var(--pt-radius-sm);
+  border-radius: var(--pt-nav-radius);
   background: transparent;
   cursor: pointer;
   transition: color var(--pt-motion-base) ease, background-color var(--pt-motion-base) ease, border-color var(--pt-motion-base) ease;
@@ -780,14 +823,9 @@ html[data-ui-framework="pytorrent"] .nav-link:focus-visible {
 
 html[data-ui-framework="pytorrent"] .nav-link.active,
 html[data-ui-framework="pytorrent"] .nav-pills .nav-link.active {
-  color: var(--pt-primary-strong);
+  color: var(--pt-nav-active-color);
   background: var(--pt-primary-soft);
   border-color: rgba(var(--bs-primary-rgb), 0.16);
-}
-
-html[data-ui-framework="pytorrent"][data-bs-theme="dark"] .nav-link.active,
-html[data-ui-framework="pytorrent"][data-bs-theme="dark"] .nav-pills .nav-link.active {
-  color: #c5d0ff;
 }
 
 
@@ -798,7 +836,7 @@ html[data-ui-framework="pytorrent"] .nav-tabs {
 
 html[data-ui-framework="pytorrent"] .nav-tabs .nav-link {
   margin-bottom: -1px;
-  border-radius: var(--pt-radius-sm) var(--pt-radius-sm) 0 0;
+  border-radius: var(--pt-nav-radius) var(--pt-nav-radius) 0 0;
 }
 
 html[data-ui-framework="pytorrent"] .nav-tabs .nav-link.active {
@@ -853,8 +891,8 @@ html[data-ui-framework="pytorrent"] .dropdown-menu {
   /* Note: Menus use a dedicated opaque surface and never inherit translucent shell effects. */
   background: var(--pt-menu-bg);
   background-image: none;
-  border: 1px solid var(--pt-border);
-  border-radius: var(--pt-radius);
+  border: var(--pt-border-width) solid var(--pt-border);
+  border-radius: var(--pt-menu-radius);
   box-shadow: var(--pt-shadow-md);
   opacity: 1;
   filter: none;
@@ -904,7 +942,7 @@ html[data-ui-framework="pytorrent"] .dropdown-item {
   white-space: nowrap;
   background: transparent;
   border: 0;
-  border-radius: 0.42rem;
+  border-radius: var(--pt-menu-item-radius);
   cursor: pointer;
 }
 
@@ -1370,7 +1408,7 @@ html[data-ui-framework="pytorrent"] .progress {
   display: flex;
   height: 0.5rem;
   overflow: hidden;
-  background: var(--pt-surface-soft);
+  background: var(--pt-progress-track);
   border-radius: 999px;
 }
 
@@ -1379,10 +1417,10 @@ html[data-ui-framework="pytorrent"] .progress-bar {
   flex-direction: column;
   justify-content: center;
   overflow: hidden;
-  color: #ffffff;
+  color: var(--pt-primary-contrast);
   text-align: center;
   white-space: nowrap;
-  background: var(--pt-primary);
+  background: var(--pt-progress-mid);
   transition: width var(--pt-motion-base) ease;
 }
 

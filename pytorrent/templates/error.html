@@ -1,15 +1,19 @@
 <!doctype html>
-<html lang="en" data-bs-theme="dark" data-bootstrap-skin="default">
+<html lang="en" data-bs-theme="dark" data-ui-framework="pytorrent" data-pytorrent-theme="default"
+  data-pytorrent-motion="on">
+
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>pyTorrent {{ code }}</title>
   <link rel="icon" href="{{ static_url('favicon.svg') }}" type="image/svg+xml">
   <link rel="shortcut icon" href="{{ static_url('favicon.svg') }}" type="image/svg+xml">
-  <link href="{{ bootstrap_theme_url('default') }}" rel="stylesheet">
+  <link href="{{ static_url('pytorrent.css') }}" rel="stylesheet">
+  <link href="{{ static_url('libs/pytorrent-ui/themes/default.css') }}" rel="stylesheet">
   <link href="{{ frontend_asset_url('fontawesome_css') }}" rel="stylesheet">
   <link href="{{ static_url('styles.css') }}" rel="stylesheet">
 </head>
+
 <body class="error-page">
   <main class="error-card" role="alert">
     <div class="error-brand"><i class="fa-solid fa-robot"></i> pyTorrent</div>
@@ -18,11 +22,13 @@
     <h1>{{ title }}</h1>
     <p>{{ message }}</p>
     <div class="error-actions">
-      <a class="btn btn-primary" href="{{ url_for('main.index') }}"><i class="fa-solid fa-house"></i> Back to dashboard</a>
-      <a class="btn btn-outline-secondary" href="{{ url_for('main.docs') }}"><i class="fa-solid fa-book"></i> API docs</a>
+      <a class="btn btn-primary" href="{{ url_for('main.index') }}"><i class="fa-solid fa-house"></i> Back to
+        dashboard</a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('main.docs') }}"><i class="fa-solid fa-book"></i> API
+        docs</a>
     </div>
   </main>
-  <!-- Note: Standalone pages reuse the same button interaction feedback as the dashboard. -->
   <script src="{{ static_url('js/actionFeedback.js') }}"></script>
 </body>
+
 </html>

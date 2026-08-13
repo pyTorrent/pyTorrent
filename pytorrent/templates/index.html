@@ -13,12 +13,21 @@
   <title>pyTorrent</title>
   <link rel="icon" href="{{ static_url('favicon.svg') }}" type="image/svg+xml">
   <link rel="shortcut icon" href="{{ static_url('favicon.svg') }}" type="image/svg+xml">
-  <!-- PyTorrent is the fresh-install default. Its runtime keeps Bootstrap-compatible markup so native PyTorrent themes and compatible Bootstrap theme CSS can both be used. -->
-  <link id="bootstrapBaseStylesheet" href="{{ bootstrap_theme_url('default') }}" rel="stylesheet"{% if (not prefs or prefs.ui_framework == 'pytorrent') and (not prefs or not prefs.pytorrent_theme.startswith('bootstrap:')) %} disabled{% endif %}>
-  <link id="bootstrapThemeStylesheet" href="{{ bootstrap_theme_url(prefs.bootstrap_theme if prefs else 'default') }}"
-    rel="stylesheet"{% if not prefs or prefs.ui_framework == 'pytorrent' %} disabled{% endif %}>
-  <link id="pytorrentFrameworkStylesheet" href="{{ static_url('pytorrent.css') }}" rel="stylesheet"{% if prefs and prefs.ui_framework != 'pytorrent' %} disabled{% endif %}>
-  <link id="pytorrentThemeStylesheet" href="{{ pytorrent_theme_url }}" rel="stylesheet"{% if prefs and prefs.ui_framework != 'pytorrent' %} disabled{% endif %}>
+  <!-- Note: Only the CSS required by the active UI framework is emitted. Compatible Bootstrap skins are loaded only when explicitly selected. -->
+  {% set active_ui_framework = prefs.ui_framework if prefs and prefs.ui_framework else 'pytorrent' %}
+  {% set normalized_pytorrent_theme = normalized_pytorrent_theme if normalized_pytorrent_theme else 'default' %}
+  {% set pytorrent_uses_bootstrap_skin = active_ui_framework == 'pytorrent' and normalized_pytorrent_theme.startswith('bootstrap:') %}
+  {% if active_ui_framework == 'bootstrap' or pytorrent_uses_bootstrap_skin %}
+  <link id="bootstrapBaseStylesheet" href="{{ bootstrap_theme_url('default') }}" rel="stylesheet">
+  {% endif %}
+  {% if active_ui_framework == 'bootstrap' %}
+  <link id="bootstrapThemeStylesheet" href="{{ bootstrap_theme_url(prefs.bootstrap_theme if prefs else 'default') }}" rel="stylesheet">
+  {% endif %}
+  {% if active_ui_framework == 'pytorrent' %}
+  <link id="pytorrentFrameworkStylesheet" href="{{ static_url('pytorrent.css') }}" rel="stylesheet">
+  <link id="pytorrentThemeStylesheet" href="{{ pytorrent_theme_url }}" rel="stylesheet">
+  {% endif %}
+  <meta id="uiFrameworkStylesheetEnd">
   <link href="{{ frontend_asset_url('fontawesome_css') }}" rel="stylesheet">
   <link href="{{ frontend_asset_url('font_css') }}" rel="stylesheet">
   <link href="{{ frontend_asset_url('flag_icons_css') }}" rel="stylesheet">
@@ -889,26 +898,57 @@
     </div>
   </div>
 
-  <div class="modal fade" id="labelModal" tabindex="-1">
-    <div class="modal-dialog">
+  <!-- Note: Set labels keeps the existing label actions while using the same card-based modal hierarchy as the newer app dialogs. -->
+  <div class="modal fade label-modal" id="labelModal" tabindex="-1" aria-labelledby="labelModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
       <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title"><i class="fa-solid fa-tags"></i> Set labels</h5><button class="btn-close"
-            data-bs-dismiss="modal"></button>
+        <div class="modal-header label-modal-header">
+          <div>
+            <div class="label-modal-kicker">Torrent labels</div>
+            <h5 id="labelModalLabel" class="modal-title"><i class="fa-solid fa-tags"></i> Set labels</h5>
+            <div class="label-modal-subtitle">Create, reuse and apply labels to the current torrent selection.</div>
+          </div>
+          <button class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-        <div class="modal-body"><label class="form-label small text-muted">Add new label</label>
-          <div class="input-group mb-3"><input id="labelInput" class="form-control"
-              placeholder="Label name, or several separated by comma"><button id="addLabelToSelectionBtn"
-              class="btn btn-outline-primary" type="button"><i class="fa-solid fa-plus"></i> Add</button></div>
-          <div class="section-title"><i class="fa-solid fa-tags"></i> Selected labels</div>
-          <div id="selectedLabelList" class="chips mb-3"></div>
-          <div class="section-title"><i class="fa-solid fa-bookmark"></i> Saved labels</div>
-          <div id="labelList" class="chips mt-2"></div>
+        <div class="modal-body label-modal-body">
+          <section class="label-modal-card" aria-label="Add labels">
+            <div class="label-modal-card-heading">
+              <div><strong>Add labels</strong><span>Enter one label or several separated by comma.</span></div>
+              <i class="fa-solid fa-plus label-modal-card-icon" aria-hidden="true"></i>
+            </div>
+            <div class="input-group label-modal-input-group">
+              <span class="input-group-text"><i class="fa-solid fa-tag"></i></span>
+              <input id="labelInput" class="form-control" placeholder="Label name, or several separated by comma" autocomplete="off">
+              <button id="addLabelToSelectionBtn" class="btn btn-outline-primary" type="button"><i class="fa-solid fa-plus"></i> Add</button>
+            </div>
+          </section>
+
+          <div class="label-modal-grid">
+            <section class="label-modal-card" aria-label="Selected labels">
+              <div class="label-modal-card-heading">
+                <div><strong>Selected labels</strong><span>These labels will be applied when you confirm.</span></div>
+                <i class="fa-solid fa-tags label-modal-card-icon" aria-hidden="true"></i>
+              </div>
+              <div id="selectedLabelList" class="chips label-modal-chips"></div>
+            </section>
+
+            <section class="label-modal-card" aria-label="Saved labels">
+              <div class="label-modal-card-heading">
+                <div><strong>Saved labels</strong><span>Click a saved label to add or remove it from the selection.</span></div>
+                <i class="fa-solid fa-bookmark label-modal-card-icon" aria-hidden="true"></i>
+              </div>
+              <div id="labelList" class="chips label-modal-chips"></div>
+            </section>
+          </div>
         </div>
-        <div class="modal-footer"><button id="clearLabelsBtn" class="btn btn-outline-secondary me-auto"><i
-              class="fa-solid fa-eraser"></i> Clear labels</button><button class="btn btn-outline-secondary"
-            data-bs-dismiss="modal"><i class="fa-solid fa-xmark"></i> Close</button><button id="saveLabelBtn"
-            class="btn btn-primary"><i class="fa-solid fa-check"></i> Apply</button></div>
+        <div class="modal-footer label-modal-footer">
+          <div class="label-modal-footer-note"><i class="fa-solid fa-circle-info"></i><span>Selected label chips can be removed before applying.</span></div>
+          <div class="label-modal-footer-actions">
+            <button id="clearLabelsBtn" class="btn btn-outline-secondary"><i class="fa-solid fa-eraser"></i> Clear labels</button>
+            <button class="btn btn-outline-secondary" data-bs-dismiss="modal"><i class="fa-solid fa-xmark"></i> Close</button>
+            <button id="saveLabelBtn" class="btn btn-primary"><i class="fa-solid fa-check"></i> Apply labels</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>

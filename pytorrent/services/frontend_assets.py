@@ -75,6 +75,12 @@ PYTORRENT_BOOTSTRAP_THEMES = {
 PYTORRENT_FRAMEWORK_EXTRA_THEMES = {
     "graphite-studio": "pyTorrent Graphite Studio (Beta)",
     "openai": "pyTorrent OpenAI-inspired (Beta)",
+    "railway": "pyTorrent Railway-inspired (Beta)",
+    "candycode": "pyTorrent Candycode-inspired (Beta)",
+    "syntax": "pyTorrent Syntax-inspired (Beta)",
+    "midnight-terminal": "pyTorrent Midnight Terminal (Beta)",
+    "paper-ink": "pyTorrent Paper & Ink (Beta)",
+    "sunset-grid": "pyTorrent Sunset Grid (Beta)",
 }
 
 
