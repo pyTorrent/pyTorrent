@@ -1,5 +1,10 @@
 /* PyTorrent UI theme: Tailwind Syntax-inspired */
 
+html[data-ui-framework="pytorrent"][data-pytorrent-theme="syntax"] {
+  /* Note: Compact badges and progress meters keep this theme's corner character in both light and dark modes. */
+  --pt-compact-radius: 999px;
+}
+
 html[data-ui-framework="pytorrent"][data-pytorrent-theme="syntax"]:not([data-bs-theme="dark"]) {
   --pt-page: #f8fafc;
   --pt-page-rgb: 248, 250, 252;

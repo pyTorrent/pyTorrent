@@ -1,5 +1,10 @@
 /* PyTorrent UI theme: Candycode-inspired */
 
+html[data-ui-framework="pytorrent"][data-pytorrent-theme="candycode"] {
+  /* Note: Compact badges and progress meters keep this theme's corner character in both light and dark modes. */
+  --pt-compact-radius: 999px;
+}
+
 html[data-ui-framework="pytorrent"][data-pytorrent-theme="candycode"]:not([data-bs-theme="dark"]) {
   --pt-page: #fff8ef;
   --pt-page-rgb: 255, 248, 239;

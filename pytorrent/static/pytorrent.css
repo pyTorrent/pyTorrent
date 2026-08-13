@@ -67,13 +67,22 @@ html[data-ui-framework="pytorrent"] {
   --pt-button-hover-shadow: none;
   --pt-button-hover-transform: none;
   --pt-button-active-transform: translateY(1px);
+  /* Note: Compact status elements use a smaller optical radius than buttons, while chips can keep the theme's stronger shape. */
+  --pt-compact-radius: 0.18rem;
+  --pt-badge-radius: var(--pt-compact-radius);
+  --pt-chip-radius: var(--pt-button-radius-xs);
   --pt-control-radius: var(--pt-radius-sm);
   --pt-control-radius-sm: 0.34rem;
+  --pt-progress-radius: var(--pt-compact-radius);
   --pt-control-border-width: var(--pt-border-width);
   --pt-control-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
   --pt-menu-radius: var(--pt-radius);
   --pt-menu-item-radius: 0.42rem;
   --pt-nav-radius: var(--pt-radius-sm);
+  /* Note: Top-level shells and regular surfaces follow the theme's menu geometry instead of using an oversized large radius. */
+  --pt-shell-radius: var(--pt-menu-radius);
+  --pt-surface-radius: var(--pt-menu-radius);
+  --pt-surface-inset-radius: var(--pt-control-radius);
   --pt-nav-active-color: var(--pt-primary-strong);
   --pt-motion-fast: 110ms;
   --pt-motion-base: 180ms;
@@ -146,6 +155,21 @@ html[data-ui-framework="pytorrent"][data-bs-theme="dark"] {
 }
 
 :where(html[data-ui-framework="pytorrent"]:not([data-pytorrent-theme^="bootstrap:"])) {
+  /* Note: Dynamic corner geometry is native to PyTorrent themes; Bootstrap skins keep their original radii. */
+  --pytorrent-shell-radius: var(--pt-shell-radius);
+  --pytorrent-surface-radius: var(--pt-surface-radius);
+  --pytorrent-native-shell-radius: var(--pytorrent-shell-radius);
+  --pytorrent-native-surface-radius: var(--pytorrent-surface-radius);
+  --pytorrent-inset-radius: var(--pt-surface-inset-radius);
+  --pytorrent-control-radius: var(--pt-control-radius-sm);
+  --pytorrent-control-radius-sm: var(--pt-control-radius-sm);
+  --pytorrent-button-radius-sm: var(--pt-button-radius-sm);
+  --pytorrent-button-radius-xs: var(--pt-button-radius-xs);
+  --pytorrent-menu-item-radius: var(--pt-menu-item-radius);
+  --pytorrent-nav-radius: var(--pt-nav-radius);
+  --pytorrent-badge-radius: var(--pt-badge-radius);
+  --pytorrent-chip-radius: var(--pt-chip-radius);
+  --pytorrent-progress-radius: var(--pt-progress-radius);
   --bs-body-bg: var(--pt-page);
   --bs-body-bg-rgb: var(--pt-page-rgb);
   --bs-body-color: var(--pt-text);
@@ -495,7 +519,7 @@ html[data-ui-framework="pytorrent"] .btn-close {
   height: 1.9rem;
   padding: 0;
   border: 0;
-  border-radius: 0.46rem;
+  border-radius: var(--pytorrent-button-radius-sm, 0.46rem);
   background: transparent;
   color: var(--pt-text-muted);
   cursor: pointer;
@@ -670,7 +694,7 @@ html[data-ui-framework="pytorrent"] .form-check-input {
   vertical-align: top;
   background: var(--pt-surface);
   border: 1px solid var(--pt-border-strong);
-  border-radius: 0.3rem;
+  border-radius: var(--pytorrent-control-radius-sm, 0.3rem);
   cursor: pointer;
   transition: background-color var(--pt-motion-base) ease, border-color var(--pt-motion-base) ease, box-shadow var(--pt-motion-base) ease;
 }
@@ -989,7 +1013,7 @@ html[data-ui-framework="pytorrent"] .tooltip-inner {
   text-align: center;
   background: #202733;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 0.42rem;
+  border-radius: var(--pytorrent-menu-item-radius, 0.42rem);
   box-shadow: var(--pt-shadow-sm);
 }
 
@@ -1331,7 +1355,7 @@ html[data-ui-framework="pytorrent"] .badge {
   line-height: 1;
   white-space: nowrap;
   vertical-align: baseline;
-  border-radius: 999px;
+  border-radius: var(--pytorrent-badge-radius, 999px);
 }
 
 html[data-ui-framework="pytorrent"] .text-bg-primary {
@@ -1409,7 +1433,7 @@ html[data-ui-framework="pytorrent"] .progress {
   height: 0.5rem;
   overflow: hidden;
   background: var(--pt-progress-track);
-  border-radius: 999px;
+  border-radius: var(--pytorrent-progress-radius, 999px);
 }
 
 html[data-ui-framework="pytorrent"] .progress-bar {

@@ -1,5 +1,10 @@
 /* PyTorrent UI theme: Sunset Grid */
 
+html[data-ui-framework="pytorrent"][data-pytorrent-theme="sunset-grid"] {
+  /* Note: Compact badges and progress meters keep this theme's corner character in both light and dark modes. */
+  --pt-compact-radius: 0.34rem;
+}
+
 html[data-ui-framework="pytorrent"][data-pytorrent-theme="sunset-grid"]:not([data-bs-theme="dark"]) {
   --pt-page: #fff4f1;
   --pt-page-rgb: 255, 244, 241;

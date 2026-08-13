@@ -1,5 +1,10 @@
 /* PyTorrent UI theme: Railway-inspired */
 
+html[data-ui-framework="pytorrent"][data-pytorrent-theme="railway"] {
+  /* Note: Compact badges and progress meters keep this theme's corner character in both light and dark modes. */
+  --pt-compact-radius: 0.26rem;
+}
+
 html[data-ui-framework="pytorrent"][data-pytorrent-theme="railway"]:not([data-bs-theme="dark"]) {
   --pt-page: #f7f7f8;
   --pt-page-rgb: 247, 247, 248;

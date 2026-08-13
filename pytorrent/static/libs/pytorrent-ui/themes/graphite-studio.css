@@ -1,5 +1,10 @@
 /* PyTorrent UI theme: graphite-studio */
 
+html[data-ui-framework="pytorrent"][data-pytorrent-theme="graphite-studio"] {
+  /* Note: Compact badges and progress meters keep this theme's corner character in both light and dark modes. */
+  --pt-compact-radius: 0.16rem;
+}
+
 html[data-ui-framework="pytorrent"][data-pytorrent-theme="graphite-studio"]:not([data-bs-theme="dark"]) {
   --pt-page: #f1f2f3;
   --pt-page-rgb: 241, 242, 243;

@@ -1,5 +1,10 @@
 /* PyTorrent UI theme: Midnight Terminal */
 
+html[data-ui-framework="pytorrent"][data-pytorrent-theme="midnight-terminal"] {
+  /* Note: Compact badges and progress meters keep this theme's corner character in both light and dark modes. */
+  --pt-compact-radius: 0.08rem;
+}
+
 html[data-ui-framework="pytorrent"][data-pytorrent-theme="midnight-terminal"]:not([data-bs-theme="dark"]) {
   --pt-page: #eef5ef;
   --pt-page-rgb: 238, 245, 239;

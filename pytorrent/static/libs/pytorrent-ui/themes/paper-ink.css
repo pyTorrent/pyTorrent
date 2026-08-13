@@ -1,5 +1,10 @@
 /* PyTorrent UI theme: Paper & Ink */
 
+html[data-ui-framework="pytorrent"][data-pytorrent-theme="paper-ink"] {
+  /* Note: Compact badges and progress meters keep this theme's corner character in both light and dark modes. */
+  --pt-compact-radius: 0.12rem;
+}
+
 html[data-ui-framework="pytorrent"][data-pytorrent-theme="paper-ink"]:not([data-bs-theme="dark"]) {
   --pt-page: #eeeae1;
   --pt-page-rgb: 238, 234, 225;

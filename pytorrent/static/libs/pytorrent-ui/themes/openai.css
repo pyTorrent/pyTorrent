@@ -1,5 +1,10 @@
 /* PyTorrent UI theme: openai */
 
+html[data-ui-framework="pytorrent"][data-pytorrent-theme="openai"] {
+  /* Note: Compact badges and progress meters keep this theme's corner character in both light and dark modes. */
+  --pt-compact-radius: 0.28rem;
+}
+
 html[data-ui-framework="pytorrent"][data-pytorrent-theme="openai"]:not([data-bs-theme="dark"]) {
   --pt-page: #f9f9f9;
   --pt-page-rgb: 249, 249, 249;
