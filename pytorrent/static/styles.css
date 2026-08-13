@@ -2188,10 +2188,12 @@ html[data-ui-framework="pytorrent"] .modal-dialog-scrollable .modal-content {
   font-size: 0.78rem;
 }
 
+/* Note: Mobile list visibility is owned by the responsive layout instead of Bootstrap's d-none utility, whose !important rule can hide rendered torrent cards. */
 .mobile-list {
+  background: var(--bs-body-bg);
+  display: none;
   overflow: auto;
   padding: 0.55rem;
-  background: var(--bs-body-bg);
 }
 
 .mobile-card {
@@ -3637,12 +3639,12 @@ html[data-ui-framework="pytorrent"] .file-priority-table .file-row-actions .btn-
 }
 
 body.mobile-mode .mobile-filter-bar {
-  display: block !important;
+  display: block;
 }
 
 @media (max-width: 900px) {
   #mobileFilterBar {
-    display: block !important;
+    display: block;
   }
 
   .topbar .badge {
