@@ -34,6 +34,8 @@ html[data-ui-framework="pytorrent"][data-pytorrent-theme="syntax"]:not([data-bs-
   --pt-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
   --pt-shadow-md: 0 14px 34px rgba(15, 23, 42, 0.12);
   --pt-primary-contrast: #ffffff;
+  /* Note: Theme-aware status labels use black in light mode and white in dark mode independently from button contrast. */
+  --pytorrent-theme-success-badge-color: #000000;
   --pt-button-radius: 999px;
   --pt-button-radius-sm: 999px;
   --pt-button-radius-xs: 999px;
@@ -84,6 +86,7 @@ html[data-ui-framework="pytorrent"][data-pytorrent-theme="syntax"][data-bs-theme
   --pt-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --pt-shadow-md: 0 18px 44px rgba(0, 0, 0, 0.4);
   --pt-primary-contrast: #082f49;
+  --pytorrent-theme-success-badge-color: #ffffff;
   --pt-button-radius: 999px;
   --pt-button-radius-sm: 999px;
   --pt-button-radius-xs: 999px;
