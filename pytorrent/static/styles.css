@@ -3632,16 +3632,11 @@ html[data-ui-framework="pytorrent"] .file-priority-table .file-row-actions .btn-
   background: rgba(var(--bs-body-bg-rgb), 0.96);
 }
 
-.mobile-filter-actions,
-.mobile-filter-select-row,
-.mobile-sort-select-row {
+.mobile-filter-actions {
   align-items: center;
   display: flex;
-  gap: 0.35rem;
-}
-
-.mobile-filter-actions {
   flex-wrap: wrap;
+  gap: 0.35rem;
   margin-bottom: 0.4rem;
 }
 
@@ -3660,6 +3655,9 @@ html[data-ui-framework="pytorrent"] .file-priority-table .file-row-actions .btn-
 
 .mobile-filter-select-row,
 .mobile-sort-select-row {
+  align-items: center;
+  display: flex;
+  gap: 0.35rem;
   min-width: 0;
 }
 
