@@ -4,6 +4,7 @@
   data-bootstrap-skin="{{ prefs.bootstrap_theme if prefs and prefs.bootstrap_theme else 'default' }}"
   data-pytorrent-theme="{{ prefs.pytorrent_theme if prefs and prefs.pytorrent_theme else 'default' }}"
   data-pytorrent-motion="{% if not prefs or prefs.pytorrent_animations_enabled %}on{% else %}off{% endif %}"
+  data-theme-status-accents="{% if prefs and prefs.theme_status_accents_enabled %}on{% else %}off{% endif %}"
   data-app-font="{{ prefs.font_family if prefs and prefs.font_family else 'default' }}"
   style="--ui-scale: {{ ((prefs.interface_scale if prefs and prefs.interface_scale else 80) / 100) }};">
 
@@ -1171,7 +1172,14 @@
                               id="compactTorrentListEnabled" class="form-check-input" type="checkbox" {% if not prefs or
                               prefs.compact_torrent_list_enabled %}checked{% endif %}><span
                               class="form-check-label">Compact torrent list</span><small>Uses lower rows and smaller
-                              list elements on desktop and mobile so more torrents fit on screen.</small></label><label id="pytorrentAnimationsField"
+                              list elements on desktop and mobile so more torrents fit on screen.</small></label>
+                          <!-- Note: Theme status accents are optional so the legacy dark-to-green progress palette remains the default across frameworks. -->
+                          <label class="browser-speed-pref form-check form-switch">
+                            <input id="themeStatusAccentsEnabled" class="form-check-input" type="checkbox" {% if prefs and prefs.theme_status_accents_enabled %}checked{% endif %}>
+                            <span class="form-check-label">Theme colors for progress and success badges</span>
+                            <small>Off keeps the shared dark-to-green progress palette and standard success badges. On uses the active theme palette in PyTorrent and Bootstrap.</small>
+                          </label>
+                          <label id="pytorrentAnimationsField"
                             class="browser-speed-pref form-check form-switch{% if not prefs or prefs.ui_framework != 'pytorrent' %} d-none{% endif %}"><input
                               id="pytorrentAnimationsEnabled" class="form-check-input" type="checkbox" {% if not prefs or prefs.pytorrent_animations_enabled %}checked{% endif %}><span
                               class="form-check-label">Interface animations</span><small>PyTorrent only. Uses short, lightweight motion for modals, menus, tabs and controls. Disable it for instant transitions.</small></label></div>

@@ -8,11 +8,21 @@
   --statusbar: calc(34px * var(--ui-scale));
   --mobile-filterbar-height: 132px;
   --sidebar: calc(270px * var(--ui-scale));
-  --torrent-progress-start: color-mix(in srgb, var(--bs-info) 72%, var(--bs-primary));
-  --torrent-progress-mid: var(--bs-primary);
-  --torrent-progress-end: color-mix(in srgb, var(--bs-primary) 38%, var(--bs-success));
-  --torrent-progress-complete: var(--bs-success);
-  --torrent-progress-track: color-mix(in srgb, var(--bs-tertiary-bg) 90%, var(--bs-primary) 10%);
+  /* Note: Status progress defaults to one framework-independent dark-to-green palette; Appearance can opt into theme-provided tokens. */
+  --legacy-progress-start: #343a40;
+  --legacy-progress-mid: #276749;
+  --legacy-progress-end: #198754;
+  --legacy-progress-complete: #198754;
+  --torrent-progress-start: var(--legacy-progress-start);
+  --torrent-progress-mid: var(--legacy-progress-mid);
+  --torrent-progress-end: var(--legacy-progress-end);
+  --torrent-progress-complete: var(--legacy-progress-complete);
+  --torrent-progress-track: color-mix(in srgb, var(--bs-tertiary-bg) 92%, var(--bs-body-color) 8%);
+  --status-progress-fill: var(--torrent-progress-complete);
+  --status-progress-contrast: #fff;
+  --status-progress-text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --status-success-badge-bg: var(--bs-success);
+  --status-success-badge-color: #fff;
   --pytorrent-page-bg: var(--bs-body-bg);
   --pytorrent-shell-bg: var(--bs-body-bg);
   --pytorrent-shell-border: var(--bs-border-color);
@@ -39,6 +49,34 @@
   --app-motion-fast: 100ms;
   --app-motion-base: 140ms;
   --app-motion-slow: 160ms;
+}
+
+html[data-bs-theme="dark"] {
+  --legacy-progress-start: #495057;
+  --legacy-progress-mid: #2f7954;
+  --legacy-progress-end: #36a86b;
+  --legacy-progress-complete: #36a86b;
+}
+
+html[data-theme-status-accents="on"] {
+  /* Note: Theme mode consumes optional PyTorrent theme hooks first and falls back to the active Bootstrap-compatible palette. */
+  --torrent-progress-start: var(--pytorrent-theme-progress-start, color-mix(in srgb, var(--bs-primary) 28%, var(--bs-tertiary-bg) 72%));
+  --torrent-progress-mid: var(--pytorrent-theme-progress-mid, var(--bs-primary));
+  --torrent-progress-end: var(--pytorrent-theme-progress-end, color-mix(in srgb, var(--bs-primary) 82%, var(--bs-body-color) 18%));
+  --torrent-progress-complete: var(--pytorrent-theme-progress-complete, var(--bs-primary));
+  --torrent-progress-track: var(--pytorrent-theme-progress-track, color-mix(in srgb, var(--bs-tertiary-bg) 86%, var(--bs-primary) 14%));
+  --status-progress-fill: var(--pytorrent-theme-progress-fill, var(--torrent-progress-complete));
+  --status-progress-contrast: var(--pytorrent-theme-success-badge-color, var(--pt-primary-contrast, #fff));
+  --status-progress-text-shadow: none;
+  --status-success-badge-bg: var(--pytorrent-theme-success-badge-bg, var(--bs-primary));
+  --status-success-badge-color: var(--pytorrent-theme-success-badge-color, var(--pt-primary-contrast, #fff));
+}
+
+html[data-theme-status-accents="on"] .badge.text-bg-success,
+html[data-theme-status-accents="on"] .badge.bg-success,
+html[data-theme-status-accents="on"] .badge.badge-success {
+  color: var(--status-success-badge-color) !important;
+  background: var(--status-success-badge-bg) !important;
 }
 
 html:not([data-ui-framework="pytorrent"])[data-bs-theme="dark"]:not([data-bootstrap-skin^="pytorrent-"]) {
@@ -3349,7 +3387,7 @@ html[data-ui-framework="pytorrent"] .file-priority-table .file-row-actions .btn-
   display: block;
   width: 0;
   height: 100%;
-  background: #22c55e;
+  background: var(--status-progress-fill);
   transition: width var(--app-motion-base) ease;
 }
 
@@ -3530,8 +3568,8 @@ html[data-ui-framework="pytorrent"] .file-priority-table .file-row-actions .btn-
 }
 
 .torrent-progress.is-complete>span {
-  color: #fff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  color: var(--status-progress-contrast);
+  text-shadow: var(--status-progress-text-shadow);
 }
 
 .peer-progress {
@@ -8912,7 +8950,7 @@ body.compact-torrent-list .mobile-progress .torrent-progress {
 }
 
 .smart-simulation-point-progress {
-  background: rgba(var(--bs-primary-rgb), 0.12);
+  background: var(--torrent-progress-track);
   border-radius: var(--pytorrent-progress-radius, 999px);
   display: block;
   height: 0.28rem;
@@ -8921,7 +8959,7 @@ body.compact-torrent-list .mobile-progress .torrent-progress {
 }
 
 .smart-simulation-point-progress span {
-  background: var(--bs-primary);
+  background: var(--status-progress-fill);
   display: block;
   height: 100%;
   min-width: 0.16rem;

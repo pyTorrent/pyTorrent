@@ -677,6 +677,7 @@ def save_preferences(data: dict, user_id: int | None = None, profile_id: int | N
     torrent_list_font_size = data.get("torrent_list_font_size")
     compact_torrent_list_enabled = data.get("compact_torrent_list_enabled")
     pytorrent_animations_enabled = data.get("pytorrent_animations_enabled")
+    theme_status_accents_enabled = data.get("theme_status_accents_enabled")
     detail_panel_height = data.get("detail_panel_height")
     default_download_path = data.get("default_download_path")
     download_location_mode = data.get("download_location_mode")
@@ -772,6 +773,9 @@ def save_preferences(data: dict, user_id: int | None = None, profile_id: int | N
         if pytorrent_animations_enabled is not None:
             # Note: Motion is a PyTorrent-framework preference; Bootstrap keeps its native behavior.
             conn.execute("UPDATE user_preferences SET pytorrent_animations_enabled=?, updated_at=? WHERE user_id=?", (1 if pytorrent_animations_enabled else 0, now, user_id))
+        if theme_status_accents_enabled is not None:
+            # Note: This visual preference is shared by PyTorrent and Bootstrap and defaults to the legacy status palette.
+            conn.execute("UPDATE user_preferences SET theme_status_accents_enabled=?, updated_at=? WHERE user_id=?", (1 if theme_status_accents_enabled else 0, now, user_id))
         if detail_panel_height is not None:
             try:
                 height = int(detail_panel_height or 255)

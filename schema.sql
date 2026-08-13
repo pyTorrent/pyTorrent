@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS user_preferences (
   ui_framework TEXT DEFAULT 'pytorrent',
   pytorrent_theme TEXT DEFAULT 'default',
   pytorrent_animations_enabled INTEGER DEFAULT 1,
+  theme_status_accents_enabled INTEGER DEFAULT 0,
   font_family TEXT DEFAULT 'default',
   active_rtorrent_id INTEGER,
   keyboard_json TEXT,

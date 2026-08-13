@@ -39,11 +39,6 @@ html[data-ui-framework="pytorrent"] {
   --pt-progress-end: color-mix(in srgb, var(--pt-primary) 38%, var(--pt-success));
   --pt-progress-complete: var(--pt-success);
   --pt-progress-track: color-mix(in srgb, var(--pt-surface-soft) 90%, var(--pt-primary) 10%);
-  --torrent-progress-start: var(--pt-progress-start);
-  --torrent-progress-mid: var(--pt-progress-mid);
-  --torrent-progress-end: var(--pt-progress-end);
-  --torrent-progress-complete: var(--pt-progress-complete);
-  --torrent-progress-track: var(--pt-progress-track);
   --pt-focus: rgba(37, 99, 235, 0.22);
   --pt-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
   --pt-shadow-md: 0 14px 34px rgba(15, 23, 42, 0.14);
@@ -551,6 +546,7 @@ html[data-ui-framework="pytorrent"] .btn-close:hover {
 }
 
 /* Forms */
+/* Note: Native form controls inherit the application font so the font selector matches every other select and input. */
 html[data-ui-framework="pytorrent"] .form-label {
   display: inline-block;
   margin-bottom: 0.38rem;
@@ -566,6 +562,7 @@ html[data-ui-framework="pytorrent"] .form-select {
   min-height: var(--pt-control-height);
   padding: 0.32rem 0.52rem;
   color: var(--pt-text);
+  font-family: inherit;
   font-size: 0.82rem;
   font-weight: 450;
   line-height: 1.35;
@@ -1157,7 +1154,8 @@ html[data-ui-framework="pytorrent"] .modal-content {
   pointer-events: auto;
   background: var(--pt-surface-raised);
   border: 1px solid var(--pt-border);
-  border-radius: var(--pt-radius-lg);
+  /* Note: Modal corners follow the shared application surface geometry so theme radius changes propagate consistently. */
+  border-radius: var(--pytorrent-surface-radius, var(--pt-surface-radius, var(--pt-radius)));
   box-shadow: var(--pt-shadow-md);
   outline: 0;
 }
@@ -1432,7 +1430,7 @@ html[data-ui-framework="pytorrent"] .progress {
   display: flex;
   height: 0.5rem;
   overflow: hidden;
-  background: var(--pt-progress-track);
+  background: var(--torrent-progress-track);
   border-radius: var(--pytorrent-progress-radius, 999px);
 }
 
@@ -1441,10 +1439,10 @@ html[data-ui-framework="pytorrent"] .progress-bar {
   flex-direction: column;
   justify-content: center;
   overflow: hidden;
-  color: var(--pt-primary-contrast);
+  color: var(--status-progress-contrast);
   text-align: center;
   white-space: nowrap;
-  background: var(--pt-progress-mid);
+  background: var(--status-progress-fill);
   transition: width var(--pt-motion-base) ease;
 }
 

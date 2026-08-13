@@ -37,6 +37,15 @@ html[data-ui-framework="pytorrent"][data-pytorrent-theme="candycode"]:not([data-
   --pt-primary-contrast: #26121c;
   --pt-primary-button-bg: linear-gradient(120deg, #ffd84d 0%, #ff7a59 45%, #f04488 100%);
   --pt-primary-button-hover-bg: linear-gradient(120deg, #ffe267 0%, #ff8a70 45%, #f65b9a 100%);
+  /* Note: Theme-aware status accents reuse Candycode's signature candy gradient instead of semantic success green. */
+  --pytorrent-theme-progress-start: #ffd84d;
+  --pytorrent-theme-progress-mid: #ff7a59;
+  --pytorrent-theme-progress-end: #f04488;
+  --pytorrent-theme-progress-complete: #f04488;
+  --pytorrent-theme-progress-track: color-mix(in srgb, #ffe9dc 82%, #f04488 18%);
+  --pytorrent-theme-progress-fill: linear-gradient(120deg, #ffd84d 0%, #ff7a59 45%, #f04488 100%);
+  --pytorrent-theme-success-badge-bg: linear-gradient(120deg, #ffd84d 0%, #ff7a59 45%, #f04488 100%);
+  --pytorrent-theme-success-badge-color: #26121c;
   --pt-button-radius: 999px;
   --pt-button-radius-sm: 999px;
   --pt-button-radius-xs: 999px;
@@ -92,6 +101,14 @@ html[data-ui-framework="pytorrent"][data-pytorrent-theme="candycode"][data-bs-th
   --pt-primary-contrast: #1e1018;
   --pt-primary-button-bg: linear-gradient(120deg, #ffd84d 0%, #ff7a59 45%, #ff5ba3 100%);
   --pt-primary-button-hover-bg: linear-gradient(120deg, #ffe369 0%, #ff8d74 45%, #ff78b3 100%);
+  --pytorrent-theme-progress-start: #ffd84d;
+  --pytorrent-theme-progress-mid: #ff7a59;
+  --pytorrent-theme-progress-end: #ff5ba3;
+  --pytorrent-theme-progress-complete: #ff5ba3;
+  --pytorrent-theme-progress-track: color-mix(in srgb, #211820 78%, #ff5ba3 22%);
+  --pytorrent-theme-progress-fill: linear-gradient(120deg, #ffd84d 0%, #ff7a59 45%, #ff5ba3 100%);
+  --pytorrent-theme-success-badge-bg: linear-gradient(120deg, #ffd84d 0%, #ff7a59 45%, #ff5ba3 100%);
+  --pytorrent-theme-success-badge-color: #1e1018;
   --pt-button-radius: 999px;
   --pt-button-radius-sm: 999px;
   --pt-button-radius-xs: 999px;

@@ -121,6 +121,7 @@ def _frontend_bootstrap_config(prefs: dict, profile: dict | None, current_user: 
         "bootstrapTheme": str(prefs.get("bootstrap_theme") or "default"),
         "pytorrentTheme": str(prefs.get("pytorrent_theme") or "default"),
         "pytorrentAnimationsEnabled": flag("pytorrent_animations_enabled", True),
+        "themeStatusAccentsEnabled": flag("theme_status_accents_enabled"),
         "uiFramework": str(prefs.get("ui_framework") or "pytorrent"),
         "fontFamily": str(prefs.get("font_family") or "default"),
         "footerItems": _bootstrap_json_value(prefs.get("footer_items_json"), {}, dict),
