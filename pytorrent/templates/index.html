@@ -504,6 +504,16 @@
             </div>
             <div id="profileTransferDiskInfo" class="profile-transfer-disk">Select a target profile to see destination disk space.</div>
             <div id="profileTransferPermissionNote" class="profile-transfer-permission form-text">Backend validation decides whether data files can be moved. If not, only torrent metadata will be transferred.</div>
+            <!-- Note: Outside-root destinations stay visible as a warning and require an explicit in-modal acknowledgement before transfer. -->
+            <div id="profileTransferOutsideRootWarning" class="profile-transfer-outside-warning d-none" role="alert" aria-live="polite">
+              <div class="profile-transfer-outside-warning-copy">
+                <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+                <div><strong>Outside configured download roots</strong><span id="profileTransferOutsideRootMessage">This path requires explicit confirmation.</span></div>
+              </div>
+              <button id="profileTransferOutsideRootConfirmBtn" class="btn btn-sm btn-outline-warning" type="button">
+                <i class="fa-solid fa-shield-halved"></i> Use this path anyway
+              </button>
+            </div>
           </section>
         </div>
         <div class="modal-footer profile-transfer-footer">

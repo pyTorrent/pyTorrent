@@ -604,28 +604,24 @@ def _profile_transfer_payload(source_profile: dict, data: dict, *, require_hashe
     requested_target_path = str(data.get("target_path") or data.get("path") or "").strip()
     target_path = _clean_remote_transfer_path(requested_target_path or default_target_path)
     inside_allowed_root = bool(roots and any(_path_inside_root(target_path, root) for root in roots))
-    if not inside_allowed_root:
-        # Note: A chosen target path must stay inside the target profile roots even for metadata-only transfers.
-        if requested_target_path:
-            raise ValueError("Target path is outside the target profile download roots")
-        target_path = default_target_path
-        inside_allowed_root = bool(roots and any(_path_inside_root(target_path, root) for root in roots))
+    target_outside_roots = bool(requested_target_path and not inside_allowed_root)
+    allow_outside_roots = data.get("allow_outside_roots") is True
+
+    target_profile_write_check = {"ok": False, "message": "not required", "path": target_path}
+    if target_outside_roots:
+        # Note: Configured download roots are a safety boundary, not an OS permission boundary; outside paths are probed on the target rTorrent host before an explicit override is accepted.
+        target_profile_write_check = rtorrent.remote_can_write_directory(target_profile, target_path)
 
     requested_move_data = bool(data.get("move_data"))
     move_data = requested_move_data
-    write_check = {"ok": False, "message": "not requested"}
+    write_check = {"ok": False, "message": "not requested", "path": target_path}
     downgrade_reason = ""
     if requested_move_data:
-        if not inside_allowed_root:
-            move_data = False
-            downgrade_reason = "Target path is outside the target profile download roots"
-            write_check = {"ok": False, "message": downgrade_reason, "path": target_path}
-        else:
-            # Note: Data moves are allowed only when the source rTorrent OS user can write to the target profile path.
-            write_check = rtorrent.remote_can_write_directory(source_profile, target_path)
-            move_data = bool(write_check.get("ok"))
-            if not move_data:
-                downgrade_reason = str(write_check.get("message") or write_check.get("error") or "Target path is not writable by the source rTorrent user")
+        # Note: Physical moves run through the source rTorrent process, so its filesystem permission is checked independently from the target profile override.
+        write_check = rtorrent.remote_can_write_directory(source_profile, target_path)
+        move_data = bool(write_check.get("ok"))
+        if not move_data:
+            downgrade_reason = str(write_check.get("message") or write_check.get("error") or "Target path is not writable by the source rTorrent user")
 
     return {
         "hashes": hashes,
@@ -637,7 +633,13 @@ def _profile_transfer_payload(source_profile: dict, data: dict, *, require_hashe
         "move_data_downgraded": bool(requested_move_data and not move_data),
         "move_data_downgrade_reason": downgrade_reason,
         "target_allowed_roots": roots,
+        "target_inside_allowed_roots": inside_allowed_root,
+        "target_outside_roots": target_outside_roots,
+        "allow_outside_roots": allow_outside_roots,
+        "outside_roots_confirmation_required": bool(target_outside_roots and not allow_outside_roots),
+        "outside_roots_can_confirm": bool(target_outside_roots and target_profile_write_check.get("ok")),
         "target_write_check": write_check,
+        "target_profile_write_check": target_profile_write_check,
         "label_mode": str(data.get("label_mode") or "none").strip(),
         "label_value": str(data.get("label_value") or "").strip(),
         "post_action": str(data.get("post_action") or "current").strip(),
@@ -645,7 +647,16 @@ def _profile_transfer_payload(source_profile: dict, data: dict, *, require_hashe
 
 
 def _validated_profile_transfer_payload(source_profile: dict, data: dict) -> dict:
-    return _profile_transfer_payload(source_profile, data, require_hashes=True)
+    payload = _profile_transfer_payload(source_profile, data, require_hashes=True)
+    if payload.get("target_outside_roots"):
+        # Note: Outside-root transfers remain blocked at the action endpoint until the target profile is writable and the caller sends an explicit confirmation flag.
+        target_check = payload.get("target_profile_write_check") or {}
+        if not target_check.get("ok"):
+            reason = str(target_check.get("message") or target_check.get("error") or "target path is not writable")
+            raise ValueError(f"Target path is outside the target profile download roots and is not writable by the target rTorrent profile: {reason}")
+        if payload.get("outside_roots_confirmation_required"):
+            raise ValueError("Target path is outside the target profile download roots. Confirm the outside-root destination before continuing")
+    return payload
 
 
 @bp.post("/torrents/profile_transfer/validate")
@@ -664,6 +675,12 @@ def profile_transfer_validate():
             "move_data_downgraded": bool(payload["move_data_downgraded"]),
             "move_data_downgrade_reason": payload.get("move_data_downgrade_reason") or "",
             "target_write_check": payload.get("target_write_check") or {},
+            "target_profile_write_check": payload.get("target_profile_write_check") or {},
+            "target_inside_allowed_roots": bool(payload.get("target_inside_allowed_roots")),
+            "target_outside_roots": bool(payload.get("target_outside_roots")),
+            "allow_outside_roots": bool(payload.get("allow_outside_roots")),
+            "outside_roots_confirmation_required": bool(payload.get("outside_roots_confirmation_required")),
+            "outside_roots_can_confirm": bool(payload.get("outside_roots_can_confirm")),
             "disk": rtorrent.disk_usage_for_paths(target_profile, [payload["target_path"]], mode="selected", selected_path=payload["target_path"]),
             "target_allowed_roots": payload.get("target_allowed_roots") or [],
         })

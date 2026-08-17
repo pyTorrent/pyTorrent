@@ -8680,8 +8680,56 @@ body.compact-torrent-list .mobile-progress .torrent-progress {
 }
 
 .profile-transfer-permission {
-  min-height: 1.2rem;
   margin-top: 0 !important;
+  min-height: 1.2rem;
+}
+
+.profile-transfer-outside-warning {
+  align-items: center;
+  background: rgba(var(--bs-warning-rgb), 0.1);
+  border: 1px solid rgba(var(--bs-warning-rgb), 0.34);
+  border-radius: var(--pytorrent-inset-radius, 0.6rem);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: space-between;
+  padding: 0.65rem 0.7rem;
+}
+
+.profile-transfer-outside-warning-copy {
+  align-items: flex-start;
+  display: flex;
+  flex: 1 1 22rem;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.profile-transfer-outside-warning-copy > i {
+  color: var(--bs-warning);
+  flex: 0 0 auto;
+  margin-top: 0.12rem;
+}
+
+.profile-transfer-outside-warning-copy div {
+  display: grid;
+  gap: 0.14rem;
+  min-width: 0;
+}
+
+.profile-transfer-outside-warning-copy strong {
+  font-size: 0.82rem;
+}
+
+.profile-transfer-outside-warning-copy span {
+  color: var(--bs-secondary-color);
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.profile-transfer-outside-warning .btn {
+  flex: 0 1 auto;
+  margin-left: auto;
+  white-space: nowrap;
 }
 
 .profile-transfer-footer {

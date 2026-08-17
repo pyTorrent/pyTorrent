@@ -17,6 +17,9 @@ html[data-ui-framework="pytorrent"][data-pytorrent-theme="default"] {
   --pt-primary-rgb: 36, 180, 126;
   --pt-primary-strong: #16875f;
   --pt-primary-soft: #e9f8f1;
+  /* Note: Downloading stays blue while success/seeding remains green. */
+  --pt-downloading: #2563eb;
+  --pt-downloading-contrast: #ffffff;
   /* Note: Theme-aware status labels use black in light mode; dark mode overrides this token to white. */
   --pytorrent-theme-success-badge-color: #000000;
   --pt-focus: rgba(36, 180, 126, 0.2);
@@ -44,6 +47,8 @@ html[data-ui-framework="pytorrent"][data-pytorrent-theme="default"][data-bs-them
   --pt-primary-rgb: 62, 207, 142;
   --pt-primary-strong: #66dba8;
   --pt-primary-soft: #10261c;
+  --pt-downloading: #60a5fa;
+  --pt-downloading-contrast: #0b1020;
   --pytorrent-theme-success-badge-color: #ffffff;
   --pt-success: #3ecf8e;
   --pt-success-rgb: 62, 207, 142;

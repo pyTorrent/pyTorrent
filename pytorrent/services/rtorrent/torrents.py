@@ -133,6 +133,44 @@ def _is_post_check_watched(profile_id: int, torrent_hash: str) -> bool:
     return age >= _POST_CHECK_WATCH_MIN_SECONDS
 
 
+def register_redownload_recovery(profile_id: int, torrent_hash: str, restore_mode: str) -> None:
+    """Remember the state that must be restored after the asynchronous re-download hash check."""
+    # Note: The watcher is registered before d.check_hash so even a very fast hash pass cannot lose the requested final state.
+    if int(profile_id or 0) <= 0 or not torrent_hash:
+        return
+    _REDOWNLOAD_RECOVERY_WATCH.setdefault(int(profile_id), {})[str(torrent_hash)] = {
+        "started_at": time.time(),
+        "restore_mode": str(restore_mode or "running"),
+        "attempts": 0,
+        "check_seen": False,
+    }
+
+
+def _clear_redownload_recovery(profile_id: int, torrent_hash: str) -> None:
+    """Remove a completed or expired re-download recovery watcher."""
+    # Note: Empty per-profile maps are removed too, keeping the process-wide runtime state bounded.
+    profile_watch = _REDOWNLOAD_RECOVERY_WATCH.get(int(profile_id))
+    if not profile_watch:
+        return
+    profile_watch.pop(str(torrent_hash), None)
+    if not profile_watch:
+        _REDOWNLOAD_RECOVERY_WATCH.pop(int(profile_id), None)
+
+
+def _redownload_recovery_entry(profile_id: int, torrent_hash: str) -> dict | None:
+    """Return a live re-download watcher and discard stale entries."""
+    # Note: Recovery state is intentionally ephemeral; an old process state must never affect a later unrelated hash check.
+    profile_watch = _REDOWNLOAD_RECOVERY_WATCH.get(int(profile_id)) or {}
+    entry = profile_watch.get(str(torrent_hash))
+    if not entry:
+        return None
+    age = time.time() - float(entry.get("started_at") or 0)
+    if age > _REDOWNLOAD_RECOVERY_WATCH_TTL_SECONDS:
+        _clear_redownload_recovery(profile_id, torrent_hash)
+        return None
+    return entry
+
+
 def _label_names(value: str) -> list[str]:
     names: list[str] = []
     for part in str(value or "").replace(";", ",").replace("|", ",").split(","):
@@ -195,21 +233,119 @@ def _cleanup_post_check_label_if_ready(c: ScgiRtorrentClient, row: dict) -> bool
     return True
 
 
+def _apply_runtime_state_to_row(row: dict, runtime: dict) -> None:
+    """Refresh UI state fields after an in-poll rTorrent recovery command."""
+    # Note: The cache must receive the state returned after recovery rather than the stale state fetched before the RPC calls.
+    state = int(runtime.get("state") or 0)
+    active = int(runtime.get("active") or 0)
+    opened = int(runtime.get("open") or 0)
+    paused = bool(runtime.get("paused"))
+    post_check = bool(runtime.get("post_check"))
+    queued = bool(runtime.get("queued"))
+    row.update({
+        "state": state,
+        "active": active,
+        "open": opened,
+        "paused": paused,
+        "queued": queued,
+        "post_check": post_check,
+        "label": str(runtime.get("label") if runtime.get("label") is not None else row.get("label") or ""),
+    })
+    if int(row.get("hashing") or 0) > 0:
+        row["status"] = "Checking"
+    elif post_check:
+        row["status"] = "Post-check"
+    elif paused:
+        row["status"] = "Paused"
+    elif queued and not bool(row.get("complete")):
+        row["status"] = "Queued"
+    elif bool(row.get("complete")) and state:
+        row["status"] = "Seeding"
+    elif state:
+        row["status"] = "Downloading"
+    else:
+        row["status"] = "Stopped"
+
+
+def _restore_redownload_state(c: ScgiRtorrentClient, torrent_hash: str, restore_mode: str) -> dict:
+    """Restore the torrent state after a re-download hash check has finished."""
+    # Note: Running torrents use the existing Stop -> Open -> Start recovery path, while paused/stopped torrents keep their previous intent.
+    h = str(torrent_hash or "")
+    mode = str(restore_mode or "running")
+    if mode == "running":
+        result = start_or_resume_hash(c, h, prefer_start=True)
+        result["restore_mode"] = mode
+        return result
+    if mode == "paused":
+        result = pause_hash(c, h)
+        result["restore_mode"] = mode
+        return result
+
+    result: dict = {"hash": h, "restore_mode": mode, "commands": []}
+    try:
+        c.call("d.stop", h)
+        result["commands"].append("d.stop")
+        if mode == "stopped_open":
+            c.call("d.open", h)
+            result["commands"].append("d.open")
+        else:
+            c.call("d.close", h)
+            result["commands"].append("d.close")
+        after = _download_runtime_state(c, h)
+        result["after"] = after
+        expected_open = mode == "stopped_open"
+        result["ok"] = bool(after.get("stopped")) and bool(after.get("open")) == expected_open
+        if not result["ok"]:
+            result["error"] = "rTorrent did not restore the requested stopped state"
+    except Exception as exc:
+        result.update({"ok": False, "error": str(exc), "after": _download_runtime_state(c, h)})
+    return result
+
+
 def apply_post_check_policy(profile: dict, rows: list[dict], previous_rows: dict[str, dict] | None = None) -> list[dict]:
-    """Start complete torrents after check; stop and label incomplete ones for Smart Queue."""
+    """Apply post-hash policies for explicit Recheck and Re-download operations."""
     previous_rows = previous_rows or {}
     profile_id = int(profile.get("id") or 0)
     c = client_for(profile)
     changes: list[dict] = []
     for row in rows:
         h = str(row.get("hash") or "")
+        redownload_watch = _redownload_recovery_entry(profile_id, h) if h else None
+        is_checking = str(row.get("status") or "") == "Checking" or int(row.get("hashing") or 0) > 0
+        if redownload_watch:
+            watch_age = time.time() - float(redownload_watch.get("started_at") or 0)
+            if is_checking:
+                redownload_watch["check_seen"] = True
+            # Note: A visible check can recover immediately when it ends; a short fallback delay also covers very fast checks that finish between polls.
+            recovery_ready = not is_checking and (bool(redownload_watch.get("check_seen")) or watch_age >= _REDOWNLOAD_RECOVERY_WATCH_MIN_SECONDS)
+            if recovery_ready:
+                redownload_watch["attempts"] = int(redownload_watch.get("attempts") or 0) + 1
+                try:
+                    recovery = _restore_redownload_state(c, h, str(redownload_watch.get("restore_mode") or "running"))
+                    runtime = recovery.get("after") or _download_runtime_state(c, h)
+                    _apply_runtime_state_to_row(row, runtime)
+                    if recovery.get("ok"):
+                        _clear_redownload_recovery(profile_id, h)
+                        changes.append({"hash": h, "action": "restore_redownload_state", "result": recovery})
+                    elif int(redownload_watch.get("attempts") or 0) >= _REDOWNLOAD_RECOVERY_MAX_ATTEMPTS:
+                        _clear_redownload_recovery(profile_id, h)
+                        changes.append({"hash": h, "action": "redownload_recovery_failed", "result": recovery})
+                    else:
+                        changes.append({"hash": h, "action": "redownload_recovery_retry", "result": recovery})
+                except Exception as exc:
+                    if int(redownload_watch.get("attempts") or 0) >= _REDOWNLOAD_RECOVERY_MAX_ATTEMPTS:
+                        _clear_redownload_recovery(profile_id, h)
+                        changes.append({"hash": h, "action": "redownload_recovery_failed", "error": str(exc)})
+                    else:
+                        changes.append({"hash": h, "action": "redownload_recovery_retry", "error": str(exc)})
+            # Note: Re-download hashing has its own recovery policy and must never fall through to the manual Recheck/Post-check behavior.
+            continue
         try:
             if h and _cleanup_post_check_label_if_ready(c, row):
                 changes.append({"hash": h, "action": "remove_post_check_label"})
         except Exception as exc:
             changes.append({"hash": h, "action": "remove_post_check_label_failed", "error": str(exc)})
         watched_recheck = _is_post_check_watched(profile_id, h)
-        is_checking = str(row.get("status") or "") == "Checking" or int(row.get("hashing") or 0) > 0
         # Note: Only explicit pyTorrent rechecks use the post-check policy; automatic checks after bulk add must continue normally.
         if not h or not watched_recheck or is_checking:
             continue
@@ -877,13 +1013,13 @@ def _read_file_recreate_flags(c: ScgiRtorrentClient, h: str) -> dict:
     return summary
 
 
-def recreate_files_hash(c: ScgiRtorrentClient, torrent_hash: str) -> dict:
+def recreate_files_hash(c: ScgiRtorrentClient, torrent_hash: str, profile_id: int = 0) -> dict:
     """Delete local data and make rTorrent download the torrent files again.
 
     rTorrent recreate flags are only consumed after the underlying files are missing
     or truncated. This action therefore removes the torrent data on the rTorrent host
     first, queues per-file create/resize flags, runs a hash check, and restores the
-    previous running state only when the torrent was active before the operation.
+    previous runtime intent after the asynchronous hash check finishes.
     """
     h = str(torrent_hash or "")
     if not h:
@@ -898,8 +1034,13 @@ def recreate_files_hash(c: ScgiRtorrentClient, torrent_hash: str) -> dict:
             result.update({"ok": False, "error": "torrent has no file rows", "after": _download_runtime_state(c, h)})
             return result
 
-        was_running = bool(before.get("state")) and not bool(before.get("paused"))
-        was_open = bool(before.get("open"))
+        restore_mode = (
+            "paused" if bool(before.get("paused"))
+            else "running" if bool(before.get("state"))
+            else "stopped_open" if bool(before.get("open"))
+            else "stopped_closed"
+        )
+        result["restore_mode"] = restore_mode
         data_path = _safe_rm_rf_path(_torrent_data_path(c, h))
         result["removed_path"] = data_path
 
@@ -925,29 +1066,32 @@ def recreate_files_hash(c: ScgiRtorrentClient, torrent_hash: str) -> dict:
         result["updated_files"] = len(files)
         result["queued_flags_before_check"] = _read_file_recreate_flags(c, h)
 
-        # Note: Hash check after deletion makes rTorrent mark pieces missing and start a real download.
+        # Note: Set the running intent before d.check_hash; starting only after the RPC races with rTorrent's asynchronous rehash completion.
         try:
             c.call("d.open", h)
             result["commands"].append("d.open")
         except Exception as exc:
             result["errors"].append(f"d.open: {exc}")
+        if restore_mode == "running":
+            try:
+                c.call("d.start", h)
+                result["commands"].append("d.start_before_check")
+            except Exception as exc:
+                # Note: A failed pre-check Start does not abort Re-download because the post-check recovery path can retry it safely.
+                result["errors"].append(f"d.start_before_check: {exc}")
+
+        # Note: Recovery is registered before the hash RPC so the poller can restore a stuck state without deleting and adding the torrent again.
+        register_redownload_recovery(int(profile_id or 0), h, restore_mode)
         c.call("d.check_hash", h)
         result["commands"].append("d.check_hash")
         result["queued_flags_after_check"] = _read_file_recreate_flags(c, h)
 
-        if was_running:
-            c.call("d.start", h)
-            result["commands"].append("d.start")
-        elif not was_open:
-            try:
-                c.call("d.close", h)
-                result["commands"].append("d.close_restore")
-            except Exception as exc:
-                result["errors"].append(f"d.close_restore: {exc}")
-
         result["after"] = _download_runtime_state(c, h)
+        result["recovery_watch"] = bool(int(profile_id or 0) > 0)
         result["ok"] = True
     except Exception as exc:
+        if int(profile_id or 0) > 0:
+            _clear_redownload_recovery(int(profile_id), h)
         result.update({"ok": False, "error": str(exc), "after": _download_runtime_state(c, h)})
     return result
 
@@ -1233,6 +1377,11 @@ def action(profile: dict, torrent_hashes: list[str], name: str, payload: dict | 
 
     c = client_for(profile)
 
+    if name in {"start", "stop", "pause", "resume", "unpause", "recheck", "remove", "move"}:
+        # Note: A newer explicit user action supersedes the state captured by a pending Re-download recovery and must never be overwritten later.
+        for h in pending_hashes():
+            _clear_redownload_recovery(int(profile.get("id") or 0), h)
+
     def missing_item(torrent_hash: str, exc: Exception, base: dict | None = None) -> dict:
         # Note: Broken hashes are terminal for a single torrent only; the rest of the job must continue.
         item = dict(base or {})
@@ -1409,11 +1558,11 @@ def action(profile: dict, torrent_hashes: list[str], name: str, payload: dict | 
         return {"ok": True, "count": len([item for item in results if not item.get("error")]), "requested_count": len(torrent_hashes), "remove_data": False, "results": results}
 
     if name == "recreate_files":
-        # Queue rTorrent file recreation with the same direct file-target setter style used by file-priority updates.
+        # Note: Re-download keeps a per-profile recovery watcher so asynchronous rehash completion cannot leave the torrent stopped at 0%.
         results = previous_results
         for h in pending_hashes():
             try:
-                item = recreate_files_hash(c, h)
+                item = recreate_files_hash(c, h, int(profile.get("id") or 0))
             except Exception as exc:
                 if not _is_missing_info_hash_error(exc):
                     raise

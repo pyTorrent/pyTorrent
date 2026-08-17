@@ -141,6 +141,11 @@ POST_CHECK_DOWNLOAD_LABEL = "To download after check"
 _POST_CHECK_WATCH_TTL_SECONDS = 48 * 60 * 60
 _POST_CHECK_WATCH_MIN_SECONDS = 2.0
 _POST_CHECK_WATCH: dict[int, dict[str, float]] = {}
+_REDOWNLOAD_RECOVERY_WATCH_TTL_SECONDS = 48 * 60 * 60
+_REDOWNLOAD_RECOVERY_WATCH_MIN_SECONDS = 5.0
+_REDOWNLOAD_RECOVERY_MAX_ATTEMPTS = 3
+# Note: Re-download recovery is separate from manual recheck policy because incomplete re-downloads must resume instead of entering Post-check.
+_REDOWNLOAD_RECOVERY_WATCH: dict[int, dict[str, dict]] = {}
 
 def _scgi_retry_attempts() -> int:
     # Note: Short retry/backoff protects bulk operations from temporary Errno 111 during high rTorrent load.
