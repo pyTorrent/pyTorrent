@@ -706,9 +706,9 @@
                         id="addLabelOptions"></datalist></label>
                     <div class="add-options-stack"><label class="form-check form-switch add-option-switch"><input
                           id="addStart" class="form-check-input" type="checkbox" checked><span
-                          class="form-check-label">Start after add</span></label><label
-                        class="form-check add-option-action"><input id="rememberAddPathDefaultRadio"
-                          class="form-check-input" type="radio" name="addPathDefaultAction" value="save-default" {% if
+                          class="form-check-label">Start after add</span></label><!-- Note: This native checkbox keeps the saved location option reversible without requiring Bootstrap JavaScript. --><label
+                        class="form-check add-option-action"><input id="rememberAddPathDefaultCheckbox"
+                          class="form-check-input" type="checkbox" {% if
                           prefs and prefs.download_remember_last_enabled and
                           prefs.download_location_mode=='remember_last' %}checked{% endif %}><span
                           class="add-option-copy"><span class="form-check-label">Remember this location as

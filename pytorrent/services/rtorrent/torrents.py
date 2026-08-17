@@ -186,7 +186,8 @@ def _cleanup_post_check_label_if_ready(c: ScgiRtorrentClient, row: dict) -> bool
     if POST_CHECK_DOWNLOAD_LABEL not in labels:
         return False
     status = str(row.get("status") or "").lower()
-    started_after_wait = bool(int(row.get("state") or 0)) and bool(int(row.get("active") or 0)) and status != "checking"
+    # Note: A state=1/open=1 torrent has accepted a Start request even when rTorrent still reports active=0, so the temporary post-check label can be removed.
+    started_after_wait = bool(int(row.get("state") or 0)) and bool(int(row.get("open") or 0)) and status != "checking"
     if not (_row_progress_complete(row) or status == "seeding" or started_after_wait):
         return False
     clear_post_check_download_label(c, str(row.get("hash") or ""), str(row.get("label") or ""))
@@ -316,7 +317,8 @@ def normalize_row(row: list) -> dict:
         last_activity = int(time.time())
     completed_at = int(row[26] or 0) if len(row) > 26 else 0
     is_checking = bool(hashing) or _message_indicates_active_check(msg_l)
-    post_check = POST_CHECK_DOWNLOAD_LABEL in _label_names(str(row[17] or "")) and not is_checking and not bool(is_active)
+    # Note: Post-check is a deliberately stopped state; once Start sets state=1 it must render as queued/downloading even if active=0 briefly.
+    post_check = POST_CHECK_DOWNLOAD_LABEL in _label_names(str(row[17] or "")) and not is_checking and not bool(state)
     is_paused = manual_pause and not is_checking and not post_check
     is_queued = bool(state) and bool(is_open) and not bool(is_active) and not bool(complete) and not is_paused and not is_checking and not post_check
     status = "Checking" if is_checking else "Post-check" if post_check else "Paused" if is_paused else "Queued" if is_queued else "Seeding" if complete and state else "Downloading" if state else "Stopped"
@@ -382,7 +384,8 @@ def normalize_live_row(row: list) -> dict:
     labels = str(row[16] or "") if len(row) > 16 else ""
     manual_pause = str(row[17] or "").strip() == "1" if len(row) > 17 else False
     is_checking = bool(hashing) or _message_indicates_active_check(msg.lower())
-    post_check = POST_CHECK_DOWNLOAD_LABEL in _label_names(labels) and not is_checking and not bool(is_active)
+    # Note: Live rows leave Post-check as soon as rTorrent accepts Start by setting state=1, even before active becomes true.
+    post_check = POST_CHECK_DOWNLOAD_LABEL in _label_names(labels) and not is_checking and not bool(state)
     # Note: Live patches keep Queued separate from explicit user Paused using the same app marker as full snapshots.
     is_paused = manual_pause and not is_checking and not post_check
     is_queued = bool(state) and bool(is_open) and not bool(is_active) and not bool(complete) and not is_paused and not is_checking and not post_check
@@ -699,7 +702,8 @@ def _download_runtime_state(c: ScgiRtorrentClient, h: str) -> dict:
     opened = _int_rpc(c, 'd.is_open', h)
     label = _str_rpc(c, 'd.custom1', h)
     manual_pause = _manual_pause_enabled(c, h)
-    post_check = POST_CHECK_DOWNLOAD_LABEL in _label_names(label) and not bool(active)
+    # Note: Runtime Post-check is reserved for state=0; state=1/active=0 is a valid queued Start result, not a post-check hold.
+    post_check = POST_CHECK_DOWNLOAD_LABEL in _label_names(label) and not bool(state) and not bool(active)
     paused = bool(manual_pause and not post_check)
     queued = bool(state and opened and not active and not paused and not post_check)
     return {
@@ -948,11 +952,12 @@ def recreate_files_hash(c: ScgiRtorrentClient, torrent_hash: str) -> dict:
     return result
 
 def start_or_resume_hash(c: ScgiRtorrentClient, torrent_hash: str, prefer_start: bool = False) -> dict:
-    """Start stopped torrents and recover open/inactive paused torrents.
+    """Start stopped torrents and recover rTorrent states that ignore the first Start request.
 
-    rTorrent can expose a torrent as state=1, open=1 and active=0 while d.resume/d.start
-    alone does not wake it up. Manual Start uses the same recovery path users already
-    perform by hand: d.stop followed by d.open and d.start.
+    rTorrent can expose a torrent as stopped or open/inactive after a force check even
+    when d.open/d.start returned successfully. The normal start path is kept first;
+    only a confirmed state=0 result is normalized with the same Stop -> Open -> Start
+    sequence that recovers the torrent manually.
     """
     h = str(torrent_hash or '')
     if not h:
@@ -971,11 +976,13 @@ def start_or_resume_hash(c: ScgiRtorrentClient, torrent_hash: str, prefer_start:
         result.update({'ok': True, 'skipped': 'already_active', 'after': before})
         return result
 
+    normalized_before_start = False
     if (before.get('paused') and not prefer_start) or before.get('queued') or before.get('post_check'):
         try:
-            # Note: Start intentionally normalizes open/inactive torrents through Stop -> Start because d.resume can leave them stuck.
+            # Note: Open/inactive and Post-check states are normalized before Start because d.resume/d.start can otherwise leave them stuck.
             c.call('d.stop', h)
             result['commands'].append('d.stop')
+            normalized_before_start = True
         except Exception as exc:
             result.setdefault('ignored_errors', []).append(f'd.stop: {exc}')
     try:
@@ -994,14 +1001,36 @@ def start_or_resume_hash(c: ScgiRtorrentClient, torrent_hash: str, prefer_start:
         except Exception as exc2:
             result.setdefault('ignored_errors', []).append(f'd.try_start: {exc2}')
             result['ok'] = False
+
     after = _download_runtime_state(c, h)
-    if before.get('post_check') and after.get('active'):
-        # Note: The marker stays in place when start fails so the row remains visible in the Post-check filter.
-        clear_post_check_download_label(c, h, before.get('label'))
-        result['commands'].append('clear_post_check_label')
+    if after.get('stopped'):
+        # Note: Force-check can leave an rTorrent item in a stale state=0 state even after a successful d.start RPC; retry the user's proven Stop -> Start recovery automatically.
+        result['recovery'] = 'stop_open_start_after_no_effect'
+        if normalized_before_start:
+            result['recovery_repeated_normalization'] = True
+        for method in ('d.stop', 'd.open', 'd.start'):
+            try:
+                c.call(method, h)
+                result['commands'].append(f'{method}_recovery')
+            except Exception as exc:
+                result.setdefault('ignored_errors', []).append(f'{method}_recovery: {exc}')
         after = _download_runtime_state(c, h)
+
+    if before.get('post_check') and not after.get('stopped'):
+        # Note: Accepted Start clears the temporary post-check marker even while active=0 so the UI can show the real queued/running state.
+        try:
+            if clear_post_check_download_label(c, h, before.get('label')):
+                result['commands'].append('clear_post_check_label')
+            after = _download_runtime_state(c, h)
+        except Exception as exc:
+            result.setdefault('ignored_errors', []).append(f'clear_post_check_label: {exc}')
+
     result['after'] = after
-    result['ok'] = result.get('ok', True)
+    if after.get('stopped'):
+        result['ok'] = False
+        result['error'] = 'rTorrent remained stopped after Start recovery'
+    else:
+        result['ok'] = result.get('ok', True)
     return result
 
 
@@ -1365,7 +1394,7 @@ def action(profile: dict, torrent_hashes: list[str], name: str, payload: dict | 
             mark_done(h, item, results)
         return {"ok": True, "count": len([item for item in results if not item.get("error")]), "requested_count": len(torrent_hashes), "remove_data": False, "results": results}
     if name == "start":
-        # Note: Start recovers stuck Paused/open-inactive rows with Stop -> Start while keeping normal stopped rows on d.start.
+        # Note: Start keeps the normal path first and automatically retries Stop -> Open -> Start only when rTorrent confirms that the first request had no effect.
         results = previous_results
         for h in pending_hashes():
             try:
