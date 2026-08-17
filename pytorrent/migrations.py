@@ -126,6 +126,12 @@ def _migration_is_already_present(conn: sqlite3.Connection, migration: Migration
     query = match.group(1).strip()
     try:
         row = conn.execute(query).fetchone()
+    except sqlite3.OperationalError as exc:
+        message = str(exc).lower()
+        # Note: Older databases may legitimately miss a table or column referenced by a later probe; that means the migration is not applied yet.
+        if "no such table:" in message or "no such column:" in message:
+            return False
+        raise DatabaseMigrationError(f"Invalid applied-if check in {migration.path.name}") from exc
     except sqlite3.Error as exc:
         raise DatabaseMigrationError(f"Invalid applied-if check in {migration.path.name}") from exc
     if row is None:
