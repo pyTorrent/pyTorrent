@@ -644,6 +644,11 @@ html[data-ui-framework="pytorrent"] .form-field>small {
   line-height: 1.4;
 }
 
+/* Note: Content-sized form rows keep controls aligned when neighbouring help text wraps to a different number of lines. */
+html[data-ui-framework="pytorrent"] .form-field {
+  align-content: start;
+}
+
 html[data-ui-framework="pytorrent"] .input-group {
   position: relative;
   display: flex;
@@ -734,33 +739,39 @@ html[data-ui-framework="pytorrent"] .form-check-label {
 
 html[data-ui-framework="pytorrent"] .form-switch {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 0.46rem;
 }
 
 html[data-ui-framework="pytorrent"] .form-switch .form-check-input {
+  --pt-switch-width: 2rem;
+  --pt-switch-height: 1.1rem;
+  --pt-switch-thumb-size: 0.72rem;
+  --pt-switch-thumb-offset: 0.14rem;
   position: relative;
   flex: 0 0 auto;
-  width: 2rem;
-  height: 1.1rem;
-  margin-right: 0;
+  width: var(--pt-switch-width);
+  height: var(--pt-switch-height);
+  margin: 0;
+  border-color: transparent;
   border-radius: 999px;
   background: var(--pt-border-strong);
-  border-color: transparent;
   box-shadow: none;
 }
 
 html[data-ui-framework="pytorrent"] .form-switch .form-check-input::after {
+  /* Note: Track-relative positioning keeps the thumb inset symmetric when interface zoom introduces subpixel rounding. */
   content: "";
   position: absolute;
-  top: 0.13rem;
-  left: 0.14rem;
-  width: 0.72rem;
-  height: 0.72rem;
+  top: 50%;
+  left: var(--pt-switch-thumb-offset);
+  width: var(--pt-switch-thumb-size);
+  height: var(--pt-switch-thumb-size);
   border-radius: 50%;
   background: var(--pt-surface-raised);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
-  transition: transform var(--pt-motion-base) ease;
+  transform: translateY(-50%);
+  transition: left var(--pt-motion-base) ease;
 }
 
 html[data-ui-framework="pytorrent"] .form-switch .form-check-input:checked {
@@ -768,7 +779,20 @@ html[data-ui-framework="pytorrent"] .form-switch .form-check-input:checked {
 }
 
 html[data-ui-framework="pytorrent"] .form-switch .form-check-input:checked::after {
-  transform: translateX(0.86rem);
+  left: calc(100% - var(--pt-switch-thumb-size) - var(--pt-switch-thumb-offset));
+}
+
+/* Note: Rule activation is a header state control, so the PyTorrent runtime shows it without a surrounding field frame. */
+html[data-ui-framework="pytorrent"] .automation-enabled {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+/* Note: Keep one settings-row gap between the Easter egg enable panel and its image source fields. */
+html[data-ui-framework="pytorrent"] #prefPane-easteregg .preference-subsection {
+  margin-top: 0.9rem;
 }
 
 html[data-ui-framework="pytorrent"] .form-range {

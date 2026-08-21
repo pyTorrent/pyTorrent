@@ -514,6 +514,32 @@ body {
   color: var(--bs-secondary-color);
 }
 
+.initial-loader-recovery {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--bs-border-color);
+}
+
+.initial-loader-recovery-text {
+  /* Note: Recovery errors use the same body text size as the loader status message. */
+  color: var(--bs-secondary-color);
+}
+
+.initial-loader-recovery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+/* Note: Recovery modals must sit above loader feedback in both Bootstrap and the native PyTorrent runtime. */
+.initial-loader.is-recovery-suspended,
+.initial-loader.is-recovery-suspended + .global-loader {
+  z-index: 1040;
+}
+
 @media (max-height: 620px) {
   .initial-loader-card {
     padding: 1.5rem;
@@ -3161,9 +3187,20 @@ html[data-ui-framework="pytorrent"] .file-priority-table .file-row-actions .btn-
   background: var(--bs-body-bg);
 }
 
+.automation-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
 .automation-card-title {
-  margin-bottom: 0.5rem;
   font-weight: 700;
+}
+
+.automation-card-header + .automation-rule-grid,
+.automation-main-card > .automation-card-title + .automation-builder-grid {
+  margin-top: 0.5rem;
 }
 
 .automation-rule-grid,
@@ -3176,6 +3213,7 @@ html[data-ui-framework="pytorrent"] .file-priority-table .file-row-actions .btn-
 
 .automation-enabled,
 .automation-negate {
+  flex: 0 0 auto;
   margin: 0;
   padding: 0.45rem 0.6rem 0.45rem 2.5rem;
   border: 1px solid var(--bs-border-color);
@@ -6063,11 +6101,16 @@ body,
   background: rgba(var(--bs-secondary-bg-rgb), 0.24);
 }
 
-/* Easter egg preferences: simple source controls with an inline verification preview. */
+/* Note: Easter egg source fields use equal tracks so both URL inputs stay symmetrical in Bootstrap and PyTorrent frameworks. */
 .easter-egg-source-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
+}
+
+.easter-egg-source-list > .form-field {
+  min-width: 0;
+  width: 100%;
 }
 
 .easter-egg-preview {
@@ -6201,6 +6244,7 @@ body,
 }
 
 @media (max-width: 768px) {
+  .easter-egg-source-list,
   .preference-two-column-layout {
     grid-template-columns: 1fr;
   }
@@ -9796,21 +9840,11 @@ body.sorting-preference-cards .footer-pref-card {
   grid-column: 1 / -1;
   width: 100%;
 }
-/* PyTorrent runtime polish: navigation sizing, switch alignment and virtual-list row isolation. */
+/* PyTorrent runtime polish: navigation sizing and virtual-list row isolation. */
 html[data-ui-framework="pytorrent"] .topbar .nav-btn.btn-xs {
   min-height: 30px;
   padding: 0.18rem 0.48rem;
   font-size: 0.78rem;
-}
-
-/* A switch is one visual control: remove the inherited checkbox top margin so its label is truly centered. */
-html[data-ui-framework="pytorrent"] .form-switch {
-  align-items: center;
-}
-
-html[data-ui-framework="pytorrent"] .form-switch .form-check-input {
-  margin-top: 0;
-  margin-bottom: 0;
 }
 
 /* PyTorrent non-compact torrent rows: the virtual slot and the painted row must be the same height.

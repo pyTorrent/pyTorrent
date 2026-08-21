@@ -24,7 +24,11 @@ def profiles_list():
         item["profile_backup_interval_hours"] = settings.get("interval_hours")
         item["profile_backup_retention_days"] = settings.get("retention_days")
         profiles.append(item)
-    return ok({"profiles": profiles, "active": preferences.active_profile()})
+    return ok({
+        "profiles": profiles,
+        "active": preferences.active_profile(),
+        "can_manage_profiles": (not auth.enabled()) or auth.is_admin(),
+    })
 
 
 
@@ -61,16 +65,18 @@ def profiles_delete(profile_id: int):
 def profiles_activate(profile_id: int):
     try:
         profile = preferences.activate_profile(profile_id)
-        stats_error = ""
+        # Note: Profile activation is intentionally DB/cache-only. A broken SCGI endpoint must never block recovery profile selection.
         try:
-            # Note: Profile overview metrics are cached only on user-initiated profile switch, not on every profile list render.
-            preferences.save_profile_runtime_stats(profile, rtorrent.list_torrents(profile), user_id=auth.current_user_id() or default_user_id())
-        except Exception as exc:
-            stats_error = str(exc)
-        response = {"profile": profile}
-        if stats_error:
-            response["stats_error"] = stats_error
-        return ok(response)
+            cached_rows = torrent_cache.snapshot(profile_id)
+            if torrent_cache.age_seconds(profile_id) is not None:
+                preferences.save_profile_runtime_stats(
+                    profile,
+                    cached_rows,
+                    user_id=auth.current_user_id() or default_user_id(),
+                )
+        except Exception:
+            pass
+        return ok({"profile": profile})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 404
 

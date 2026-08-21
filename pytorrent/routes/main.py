@@ -95,6 +95,7 @@ def _frontend_bootstrap_config(prefs: dict, profile: dict | None, current_user: 
         "authProvider": auth.provider(),
         "externalAuth": 1 if auth.uses_external_provider() else 0,
         "currentUser": current_user,
+        "canManageProfiles": 1 if (not auth.enabled() or auth.is_admin(current_user)) else 0,
         "activeProfile": profile.get("id") if profile else None,
         "tableColumns": _bootstrap_json_value(prefs.get("table_columns_json"), {}, dict),
         "torrentSort": _bootstrap_json_value(prefs.get("torrent_sort_json"), {}, dict),

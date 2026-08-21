@@ -50,6 +50,16 @@
       </div>
       <div id="initialLoaderTitle" class="initial-loader-title">Loading torrents...</div>
       <div id="initialLoaderText" class="initial-loader-text">Connecting to rTorrent and preparing data.</div>
+      <div id="initialLoaderRecovery" class="initial-loader-recovery d-none" aria-live="polite">
+        <div id="initialLoaderRecoveryText" class="initial-loader-recovery-text">rTorrent is taking longer than expected to provide a complete snapshot.</div>
+        <!-- Note: Recovery always allows switching to another accessible profile; profile editing stays admin-only. -->
+        <div class="initial-loader-recovery-actions">
+          {% if not auth_enabled or (current_user and current_user.role == 'admin') %}
+          <button id="initialLoaderEditProfileBtn" class="btn btn-sm btn-outline-primary" type="button"><i class="fa-solid fa-pen-to-square"></i> Edit profile settings</button>
+          {% endif %}
+          <button id="initialLoaderChooseProfileBtn" class="btn btn-sm btn-outline-primary" type="button"><i class="fa-solid fa-server"></i> Choose another profile</button>
+        </div>
+      </div>
     </div>
   </div>
   <div id="globalLoader" class="global-loader d-none"><span
@@ -1340,7 +1350,8 @@
                           </section>
                           <section class="preference-subsection preference-subsection-flat" aria-labelledby="diskMonitoredPathsTitle">
                             <div class="preference-subsection-heading"><b id="diskMonitoredPathsTitle">Monitored paths</b><small>Add storage directories used by selected and aggregate modes.</small></div>
-                            <div class="input-group input-group-sm"><input id="diskMonitorPathInput" class="form-control" placeholder="/data/torrents"><button id="addDiskPathBtn" class="btn btn-outline-primary" type="button">Add path</button></div>
+                            <!-- UI note: Disk monitor actions reuse the same add/remove/connection icon language as the rest of the application. -->
+                            <div class="input-group input-group-sm"><input id="diskMonitorPathInput" class="form-control" placeholder="/data/torrents"><button id="addDiskPathBtn" class="btn btn-outline-primary" type="button"><i class="fa-solid fa-plus"></i> Add path</button></div>
                             <label class="form-field mt-2"><span>Selected path</span><select id="diskMonitorSelectedPath" class="form-select form-select-sm"></select><small id="diskMonitorSelectedHint">Select a monitored path first.</small></label>
                             <div id="diskMonitorPaths" class="disk-monitor-path-list"></div>
                           </section>
@@ -1966,14 +1977,18 @@
                       <input id="autoEditId" type="hidden">
                       <div class="automation-shell">
                         <div class="automation-main-card">
-                          <div class="automation-card-title">1. Rule</div>
+                          <!-- UI note: Rule activation stays visible in the card header for both add and edit modes. -->
+                          <div class="automation-card-header">
+                            <div class="automation-card-title">1. Rule</div>
+                            <label class="form-check form-switch automation-enabled"><input id="autoEnabled"
+                                class="form-check-input" type="checkbox" checked><span
+                                class="form-check-label">Enabled</span></label>
+                          </div>
                           <div class="automation-rule-grid"><label class="form-field"><span>Name</span><input
                                 id="autoName" class="form-control"
                                 placeholder="e.g. Punkty katalogowanie"></label><label class="form-field"><span>Cooldown
                                 minutes</span><input id="autoCooldown" class="form-control" type="number" min="0"
-                                value="60"></label><label class="form-check form-switch automation-enabled"><input
-                                id="autoEnabled" class="form-check-input" type="checkbox" checked><span
-                                class="form-check-label">Enabled</span></label></div>
+                                value="60"></label></div>
                         </div>
                         <div class="automation-main-card">
                           <div class="automation-card-title">2. Conditions</div>
@@ -2108,7 +2123,7 @@
                       changes</span><label class="form-check form-switch mb-0"><input id="rtConfigApplyOnStart"
                         class="form-check-input" type="checkbox"><span class="form-check-label">Apply saved changes 60s
                         after pyTorrent start</span></label><button id="rtConfigReloadBtn"
-                      class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-rotate"></i> Reload</button></div>
+                      class="btn btn-sm btn-outline-secondary ms-auto"><i class="fa-solid fa-rotate"></i> Reload</button></div>
                   <div id="rtConfigManager"><span class="spinner-border spinner-border-sm"></span> Loading config...
                   </div>
                   <div class="rt-config-actions mt-3">
@@ -2119,7 +2134,7 @@
                     <div class="rt-config-actions-secondary"><button id="rtConfigGenerateBtn"
                         class="btn btn-sm btn-outline-secondary" disabled><i class="fa-solid fa-file-code"></i> Generate
                         .rtorrent.rc overrides</button></div>
-                    <!-- UI note: Reload is grouped with apply-on-start; generation is separated from save/reset actions. -->
+                    <!-- UI note: Reload stays in the toolbar but is aligned to the far right; generation remains separated from save/reset actions. -->
                   </div><textarea id="rtConfigOutput" class="form-control form-control-sm mt-3 rt-config-output"
                     rows="7" readonly placeholder="Generated rTorrent config changes will appear here."></textarea>
                 </div>
