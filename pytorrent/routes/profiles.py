@@ -133,25 +133,31 @@ def prefs_get():
 
 @bp.post("/preferences")
 def prefs_save():
-    return ok({"preferences": preferences.save_preferences(request.json or {}, profile_id=request_profile_id(require_write=True))})
+    payload = request.get_json(silent=True) or {}
+    # Personal/global preferences never modify shared rTorrent state. Only shared profile fields require write access.
+    require_write = preferences.has_shared_profile_preference_fields(payload)
+    profile_id = request_profile_id(require_write=require_write)
+    return ok({"preferences": preferences.save_preferences(payload, profile_id=profile_id)})
 
 
 @bp.post("/preferences/table-columns/recommended")
 def prefs_table_columns_recommended():
     # Note: Applies the backend-owned recommended desktop and mobile column layout.
-    return ok({"preferences": preferences.apply_recommended_table_columns(profile_id=request_profile_id(require_write=True))})
+    # Recommended columns are personal per-profile UI state, so read access to the profile is enough.
+    return ok({"preferences": preferences.apply_recommended_table_columns(profile_id=request_profile_id(require_write=False))})
 
 
 @bp.post("/profile-copy")
 def profile_copy_scope():
-    # Note: Copying profile-scoped configuration is additive/narrow and never copies history, runtime state, or inaccessible profiles.
+    # Personal copies write only the signed-in user's (user, profile) row; shared copies require write access to the target profile.
     from ..services import profile_copy
 
     payload = request.get_json(silent=True) or {}
     try:
-        target_profile_id = request_profile_id(require_write=True)
         source_profile_id = int(payload.get("source_profile_id") or 0)
         scope = str(payload.get("scope") or "").strip()
+        scope_kind = profile_copy.copy_scope_kind(scope)
+        target_profile_id = request_profile_id(require_write=scope_kind == profile_copy.PROFILE_SHARED_SCOPE)
         user_id = auth.current_user_id() or default_user_id()
         if not target_profile_id:
             raise ValueError("No target profile")
@@ -175,9 +181,13 @@ def labels_list():
     with connect() as conn:
         rows = conn.execute(
             """
-            SELECT l.*, COALESCE(u.display_name,u.username,u.email,'user ' || l.user_id) AS owner_name
+            SELECT l.*,
+                   COALESCE(cu.display_name,cu.username,cu.email,'user ' || l.created_by_user_id) AS created_by_name,
+                   COALESCE(uu.display_name,uu.username,uu.email,'user ' || l.updated_by_user_id) AS updated_by_name,
+                   COALESCE(cu.display_name,cu.username,cu.email,'user ' || l.created_by_user_id) AS owner_name
             FROM labels l
-            LEFT JOIN users u ON u.id=l.user_id
+            LEFT JOIN users cu ON cu.id=l.created_by_user_id
+            LEFT JOIN users uu ON uu.id=l.updated_by_user_id
             WHERE l.profile_id=?
             ORDER BY l.name COLLATE NOCASE, l.id
             """,
@@ -199,12 +209,13 @@ def labels_save():
     if not auth.can_write_profile(int(profile["id"]), default_user_id()):
         return jsonify({"ok": False, "error": "No write access to profile"}), 403
     now = utcnow()
+    actor_id = default_user_id()
     with connect() as conn:
         existing = conn.execute("SELECT id FROM labels WHERE profile_id=? AND lower(name)=lower(?) ORDER BY id LIMIT 1", (profile["id"], name)).fetchone()
         if existing:
-            conn.execute("UPDATE labels SET color=?, updated_at=? WHERE id=?", (data.get("color") or "#64748b", now, existing["id"]))
+            conn.execute("UPDATE labels SET color=?, updated_by_user_id=?, updated_at=? WHERE id=?", (data.get("color") or "#64748b", actor_id, now, existing["id"]))
         else:
-            conn.execute("INSERT INTO labels(user_id,profile_id,name,color,created_at,updated_at) VALUES(?,?,?,?,?,?)", (default_user_id(), profile["id"], name, data.get("color") or "#64748b", now, now))
+            conn.execute("INSERT INTO labels(created_by_user_id,updated_by_user_id,profile_id,name,color,created_at,updated_at) VALUES(?,?,?,?,?,?,?)", (actor_id, actor_id, profile["id"], name, data.get("color") or "#64748b", now, now))
     return labels_list()
 
 
@@ -228,9 +239,13 @@ def ratio_groups_list():
     with connect() as conn:
         rows = conn.execute(
             """
-            SELECT g.*, COALESCE(u.display_name,u.username,u.email,'user ' || g.user_id) AS owner_name
+            SELECT g.*,
+                   COALESCE(cu.display_name,cu.username,cu.email,'user ' || g.created_by_user_id) AS created_by_name,
+                   COALESCE(uu.display_name,uu.username,uu.email,'user ' || g.updated_by_user_id) AS updated_by_name,
+                   COALESCE(cu.display_name,cu.username,cu.email,'user ' || g.created_by_user_id) AS owner_name
             FROM ratio_groups g
-            LEFT JOIN users u ON u.id=g.user_id
+            LEFT JOIN users cu ON cu.id=g.created_by_user_id
+            LEFT JOIN users uu ON uu.id=g.updated_by_user_id
             WHERE g.profile_id=?
             ORDER BY g.name COLLATE NOCASE, g.id
             """,
@@ -253,19 +268,20 @@ def ratio_groups_save():
     if not auth.can_write_profile(int(profile["id"]), default_user_id()):
         return jsonify({"ok": False, "error": "No write access to profile"}), 403
     now = utcnow()
+    actor_id = default_user_id()
     with connect() as conn:
-        existing = conn.execute("SELECT id,user_id FROM ratio_groups WHERE profile_id=? AND lower(name)=lower(?) ORDER BY id LIMIT 1", (profile["id"], name)).fetchone()
+        existing = conn.execute("SELECT id FROM ratio_groups WHERE profile_id=? AND lower(name)=lower(?) ORDER BY id LIMIT 1", (profile["id"], name)).fetchone()
         values = (float(data.get("min_ratio") or 1), float(data.get("max_ratio") or 2), int(data.get("seed_time_minutes") or 0), int(data.get("min_seed_time_minutes") or 0), 1 if data.get("ignore_private", True) else 0, 1 if data.get("ignore_active_upload", True) else 0, int(data.get("active_upload_min_bytes") or 1024), data.get("move_path") or "", data.get("set_label") or "", data.get("action") or "stop", 1 if data.get("enabled", True) else 0, now)
         if existing:
             conn.execute(
-                """UPDATE ratio_groups SET min_ratio=?,max_ratio=?,seed_time_minutes=?,min_seed_time_minutes=?,ignore_private=?,ignore_active_upload=?,active_upload_min_bytes=?,move_path=?,set_label=?,action=?,enabled=?,updated_at=? WHERE id=? AND profile_id=?""",
-                (*values, existing["id"], profile["id"]),
+                """UPDATE ratio_groups SET min_ratio=?,max_ratio=?,seed_time_minutes=?,min_seed_time_minutes=?,ignore_private=?,ignore_active_upload=?,active_upload_min_bytes=?,move_path=?,set_label=?,action=?,enabled=?,updated_at=?,updated_by_user_id=? WHERE id=? AND profile_id=?""",
+                (*values, actor_id, existing["id"], profile["id"]),
             )
         else:
             conn.execute(
-                """INSERT INTO ratio_groups(user_id,profile_id,name,min_ratio,max_ratio,seed_time_minutes,min_seed_time_minutes,ignore_private,ignore_active_upload,active_upload_min_bytes,move_path,set_label,action,enabled,created_at,updated_at)
-                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (default_user_id(), profile["id"], name, *values[:-1], now, now),
+                """INSERT INTO ratio_groups(created_by_user_id,updated_by_user_id,profile_id,name,min_ratio,max_ratio,seed_time_minutes,min_seed_time_minutes,ignore_private,ignore_active_upload,active_upload_min_bytes,move_path,set_label,action,enabled,created_at,updated_at)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (actor_id, actor_id, profile["id"], name, *values[:-1], now, now),
             )
     return ratio_groups_list()
 

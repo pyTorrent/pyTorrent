@@ -24,7 +24,7 @@ def _check_lock(profile_id: int, rule_id: int | None = None) -> threading.Lock:
 
 
 def _resolve_user_id(profile: dict[str, Any] | None = None, user_id: int | None = None) -> int:
-    """Return a safe user id for rule ownership or background execution."""
+    """Return the user acting now; background execution falls back to the profile owner."""
     if user_id:
         return int(user_id)
     request_user_id = auth.current_user_id()
@@ -77,10 +77,15 @@ def _rule_row(row: dict[str, Any]) -> dict[str, Any]:
     item = dict(row)
     item['conditions'] = _loads(item.pop('conditions_json', '[]'), [])
     item['effects'] = _loads(item.pop('effects_json', '[]'), [])
-    item['owner_user_id'] = int(item.get('user_id') or 0)
-    item['owner_username'] = str(item.get('owner_username') or '').strip()
-    item['owner_display_name'] = str(item.get('owner_display_name') or '').strip()
-    item['owner_label'] = item['owner_display_name'] or item['owner_username'] or f"user #{item['owner_user_id']}"
+    item['created_by_user_id'] = int(item.get('created_by_user_id') or 0)
+    item['created_by_username'] = str(item.get('created_by_username') or '').strip()
+    item['created_by_display_name'] = str(item.get('created_by_display_name') or '').strip()
+    item['created_by_label'] = item['created_by_display_name'] or item['created_by_username'] or (f"user #{item['created_by_user_id']}" if item['created_by_user_id'] else '')
+    # Backward-compatible aliases. These identify the creator, not an owner/authorization principal.
+    item['owner_user_id'] = item['created_by_user_id']
+    item['owner_username'] = item['created_by_username']
+    item['owner_display_name'] = item['created_by_display_name']
+    item['owner_label'] = item['created_by_label']
     return item
 
 
@@ -98,18 +103,14 @@ def _require_profile_write(profile_id: int, user_id: int | None = None) -> int:
     return viewer_id
 
 
-def _can_manage_rule(profile_id: int, rule: dict[str, Any], user_id: int) -> bool:
-    return int(rule.get('user_id') or 0) == int(user_id) or auth.can_write_profile(profile_id, user_id)
-
-
 def _select_rules_sql(where_sql: str) -> str:
     return f'''
         SELECT
             r.*,
-            u.username AS owner_username,
-            COALESCE(u.display_name, '') AS owner_display_name
+            u.username AS created_by_username,
+            COALESCE(u.display_name, '') AS created_by_display_name
         FROM automation_rules r
-        LEFT JOIN users u ON u.id = r.user_id
+        LEFT JOIN users u ON u.id = r.created_by_user_id
         WHERE {where_sql}
         ORDER BY r.enabled DESC, r.name COLLATE NOCASE
     '''
@@ -189,7 +190,7 @@ def export_rules(profile_id: int, user_id: int | None = None) -> dict[str, Any]:
 
 
 def import_rules(profile_id: int, payload: dict[str, Any] | list[Any], user_id: int | None = None, replace: bool = False) -> list[dict[str, Any]]:
-    owner_id = _require_profile_write(profile_id, user_id)
+    actor_id = _require_profile_write(profile_id, user_id)
     raw_rules = payload if isinstance(payload, list) else payload.get('rules', []) if isinstance(payload, dict) else []
     if not isinstance(raw_rules, list) or not raw_rules:
         raise ValueError('Import file does not contain automation rules')
@@ -216,20 +217,20 @@ def import_rules(profile_id: int, payload: dict[str, Any] | list[Any], user_id: 
             conn.execute('DELETE FROM automation_rules WHERE profile_id=?', (profile_id,))
         for rule in normalized:
             cur = conn.execute(
-                'INSERT INTO automation_rules(user_id,profile_id,name,enabled,conditions_json,effects_json,cooldown_minutes,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)',
+                'INSERT INTO automation_rules(created_by_user_id,updated_by_user_id,profile_id,name,enabled,conditions_json,effects_json,cooldown_minutes,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)',
                 (
-                    owner_id, profile_id, str(rule.get('name') or 'Automation rule').strip() or 'Automation rule',
+                    actor_id, actor_id, profile_id, str(rule.get('name') or 'Automation rule').strip() or 'Automation rule',
                     1 if rule.get('enabled', True) else 0, json.dumps(rule.get('conditions') or []),
                     json.dumps(rule.get('effects') or []), max(0, int(rule.get('cooldown_minutes') or 0)), now, now,
                 ),
             )
             imported_ids.append(int(cur.lastrowid))
 
-    return [get_rule(rule_id, profile_id, owner_id) for rule_id in imported_ids]
+    return [get_rule(rule_id, profile_id, actor_id) for rule_id in imported_ids]
 
 
 def save_rule(profile_id: int, data: dict[str, Any], user_id: int | None = None) -> dict[str, Any]:
-    actor_id = _resolve_user_id(user_id=user_id)
+    actor_id = _require_profile_write(profile_id, user_id)
     name = str(data.get('name') or 'Automation rule').strip() or 'Automation rule'
     conditions = data.get('conditions') or []
     effects = data.get('effects') or []
@@ -241,35 +242,29 @@ def save_rule(profile_id: int, data: dict[str, Any], user_id: int | None = None)
     enabled = 1 if data.get('enabled', True) else 0
     now = utcnow()
     rule_id = int(data.get('id') or 0)
-    if rule_id:
-        existing = get_rule(rule_id, profile_id, actor_id)
-        if not _can_manage_rule(profile_id, existing, actor_id):
-            raise ValueError('No permission to edit this automation rule')
-        owner_id = int(existing.get('user_id') or existing.get('owner_user_id') or actor_id)
-        with connect() as conn:
+    with connect() as conn:
+        if rule_id:
             cur = conn.execute(
-                'UPDATE automation_rules SET name=?, enabled=?, conditions_json=?, effects_json=?, cooldown_minutes=?, updated_at=? WHERE id=? AND profile_id=?',
-                (name, enabled, json.dumps(conditions), json.dumps(effects), cooldown, now, rule_id, profile_id),
+                'UPDATE automation_rules SET name=?, enabled=?, conditions_json=?, effects_json=?, cooldown_minutes=?, updated_by_user_id=?, updated_at=? WHERE id=? AND profile_id=?',
+                (name, enabled, json.dumps(conditions), json.dumps(effects), cooldown, actor_id, now, rule_id, profile_id),
             )
             if not cur.rowcount:
                 raise ValueError('Rule not found')
-    else:
-        owner_id = _require_profile_write(profile_id, actor_id)
-        with connect() as conn:
+        else:
             cur = conn.execute(
-                'INSERT INTO automation_rules(user_id,profile_id,name,enabled,conditions_json,effects_json,cooldown_minutes,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)',
-                (owner_id, profile_id, name, enabled, json.dumps(conditions), json.dumps(effects), cooldown, now, now),
+                'INSERT INTO automation_rules(created_by_user_id,updated_by_user_id,profile_id,name,enabled,conditions_json,effects_json,cooldown_minutes,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)',
+                (actor_id, actor_id, profile_id, name, enabled, json.dumps(conditions), json.dumps(effects), cooldown, now, now),
             )
             rule_id = int(cur.lastrowid)
     return get_rule(rule_id, profile_id, actor_id)
 
 
 def delete_rule(rule_id: int, profile_id: int, user_id: int | None = None) -> None:
-    actor_id = _resolve_user_id(user_id=user_id)
-    rule = get_rule(rule_id, profile_id, actor_id)
-    if not _can_manage_rule(profile_id, rule, actor_id):
-        raise ValueError('No permission to delete this automation rule')
+    _require_profile_write(profile_id, user_id)
     with connect() as conn:
+        existing = conn.execute('SELECT id FROM automation_rules WHERE id=? AND profile_id=?', (rule_id, profile_id)).fetchone()
+        if not existing:
+            raise ValueError('Rule not found')
         # Child/runtime state is removed first; audit history keeps the rule name but not a dangling id.
         conn.execute('DELETE FROM automation_rule_state WHERE rule_id=? AND profile_id=?', (rule_id, profile_id))
         conn.execute('UPDATE automation_history SET rule_id=NULL WHERE rule_id=? AND profile_id=?', (rule_id, profile_id))
@@ -359,8 +354,8 @@ def _job_context(rule: dict[str, Any], eff_type: str, hashes: list[str], torrent
         'source': 'automation',
         'rule_id': rule.get('id'),
         'rule_name': str(rule.get('name') or ''),
-        'rule_owner_user_id': int(rule.get('user_id') or rule.get('owner_user_id') or 0),
-        'rule_owner': str(rule.get('owner_label') or ''),
+        'rule_created_by_user_id': int(rule.get('created_by_user_id') or rule.get('owner_user_id') or 0),
+        'rule_created_by': str(rule.get('created_by_label') or rule.get('owner_label') or ''),
         'effect': eff_type,
         'bulk': len(hashes) > 1,
         'hash_count': len(hashes),
@@ -423,12 +418,12 @@ def _automation_profile_transfer_payload(profile: dict[str, Any], eff: dict[str,
     # Note: Metadata-only rules preserve each torrent's live source directory, so target-root checks apply only when data files are moved.
     source_id = int(profile.get('id') or 0)
     if not auth.can_write_profile(source_id, user_id):
-        raise ValueError('Rule owner has no write access to source profile')
+        raise ValueError('Automation executor has no write access to source profile')
     target_id = int(eff.get('target_profile_id') or 0)
     if not target_id or target_id == source_id:
         raise ValueError('Automation target profile is invalid')
     if not auth.can_write_profile(target_id, user_id):
-        raise ValueError('Rule owner has no write access to target profile')
+        raise ValueError('Automation executor has no write access to target profile')
     target_profile = get_profile(target_id, user_id)
     if not target_profile:
         raise ValueError('Automation target profile does not exist')
@@ -502,9 +497,9 @@ def _apply_effects_bulk(c: Any, profile: dict[str, Any], torrents: list[dict[str
             job_ids = _enqueue_automation_job(profile, rule, 'move', hashes, payload, torrents_by_hash, user_id, {'effect_type': 'move'})
             applied.append({'type': 'move', 'path': path, 'count': len(hashes), 'target_hashes': hashes, 'move_data': payload['move_data'], 'recheck': payload['recheck'], 'keep_seeding': payload['keep_seeding'], 'job_ids': job_ids})
         elif typ == 'profile_transfer':
-            owner_id = int(user_id or rule.get('user_id') or rule.get('owner_user_id') or default_user_id())
-            payload = _automation_profile_transfer_payload(profile, eff, owner_id)
-            job_ids = _enqueue_automation_job(profile, rule, 'profile_transfer', hashes, payload, torrents_by_hash, owner_id, {'effect_type': 'profile_transfer'})
+            executor_id = int(user_id or _resolve_user_id(profile))
+            payload = _automation_profile_transfer_payload(profile, eff, executor_id)
+            job_ids = _enqueue_automation_job(profile, rule, 'profile_transfer', hashes, payload, torrents_by_hash, executor_id, {'effect_type': 'profile_transfer'})
             applied.append({'type': 'profile_transfer', 'target_profile_id': payload['target_profile_id'], 'target_path': payload['target_path'], 'count': len(hashes), 'target_hashes': hashes, 'move_data': payload['move_data'], 'move_data_requested': payload['move_data_requested'], 'move_data_downgraded': payload['move_data_downgraded'], 'post_action': payload['post_action'], 'label_mode': payload['label_mode'], 'label': payload['label_value'], 'job_ids': job_ids})
         elif typ == 'add_label':
             label = str(eff.get('label') or '').strip()
@@ -560,15 +555,14 @@ def _apply_effects_bulk(c: Any, profile: dict[str, Any], torrents: list[dict[str
     return applied
 
 
-def _record_skipped_rule(profile_id: int, rule: dict[str, Any], hashes: list[str], reason: str, now: str) -> dict[str, Any]:
+def _record_skipped_rule(profile_id: int, rule: dict[str, Any], hashes: list[str], reason: str, now: str, user_id: int) -> dict[str, Any]:
     action = {'type': 'skipped', 'error': reason, 'count': len(hashes)}
-    owner_id = int(rule.get('user_id') or rule.get('owner_user_id') or default_user_id())
     torrent_hash = hashes[0] if len(hashes) == 1 else f'batch:{rule["id"]}:{now}:skipped'
     torrent_name = '1 torrent' if len(hashes) == 1 else f'{len(hashes)} torrents'
     with connect() as conn:
         conn.execute(
             'INSERT INTO automation_history(user_id,profile_id,rule_id,torrent_hash,torrent_name,rule_name,actions_json,created_at) VALUES(?,?,?,?,?,?,?,?)',
-            (owner_id, profile_id, rule['id'], torrent_hash, torrent_name, str(rule.get('name') or ''), json.dumps([action]), now),
+            (int(user_id), profile_id, rule['id'], torrent_hash, torrent_name, str(rule.get('name') or ''), json.dumps([action]), now),
         )
     return {'rule_id': rule['id'], 'rule_name': rule.get('name'), 'count': len(hashes), 'actions': [action], 'skipped': True}
 
@@ -578,11 +572,11 @@ def check(profile: dict | None = None, user_id: int | None = None, force: bool =
     if not profile:
         return {'ok': False, 'error': 'No active rTorrent profile'}
     profile_id = int(profile['id'])
-    if rule_id is not None:
-        _require_profile_read(profile_id, user_id)
+    executor_id = _resolve_user_id(profile, user_id)
+    # Rules are shared profile configuration. The current caller (or profile owner for background runs) authorizes execution.
+    _require_profile_write(profile_id, executor_id)
     lock = _check_lock(profile_id, rule_id)
     if not lock.acquire(blocking=False):
-        # Note: Browser, manual and background checks can now coexist without duplicate rule application.
         return {'ok': True, 'checked': 0, 'applied': [], 'batches': [], 'rules': 0, 'skipped': True, 'reason': 'Automation check already running'}
     try:
         rules = _list_enabled_rules_for_profile(profile_id, rule_id=rule_id, force=force)
@@ -607,13 +601,8 @@ def check(profile: dict | None = None, user_id: int | None = None, force: bool =
             rule = item['rule']
             matched = item['matched']
             hashes = item['hashes']
-            owner_id = int(rule.get('user_id') or rule.get('owner_user_id') or default_user_id())
-            if not auth.can_write_profile(profile_id, owner_id):
-                batch = _record_skipped_rule(profile_id, rule, hashes, 'Rule owner no longer has write access to profile', now)
-                batches.append(batch)
-                continue
             try:
-                actions = _apply_effects_bulk(None, profile, matched, rule.get('effects') or [], rule, owner_id)
+                actions = _apply_effects_bulk(None, profile, matched, rule.get('effects') or [], rule, executor_id)
             except Exception as exc:
                 actions = [{'error': str(exc), 'count': len(hashes), 'target_hashes': hashes}]
             changed_hashes = sorted({h for a in actions for h in (a.get('target_hashes') or [])})
@@ -621,16 +610,18 @@ def check(profile: dict | None = None, user_id: int | None = None, force: bool =
                 continue
             history_actions = [{k: v for k, v in a.items() if k != 'target_hashes'} for a in actions]
             matched_by_hash = {str(t.get('hash') or ''): t for t in matched}
+            creator_id = int(rule.get('created_by_user_id') or 0)
+            creator_label = str(rule.get('created_by_label') or '')
             with connect() as conn:
                 for h in changed_hashes:
                     t = matched_by_hash.get(h, {})
                     conn.execute('INSERT INTO automation_rule_state(rule_id,profile_id,torrent_hash,last_matched_at,last_applied_at,updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(rule_id,profile_id,torrent_hash) DO UPDATE SET last_matched_at=excluded.last_matched_at, last_applied_at=excluded.last_applied_at, updated_at=excluded.updated_at', (rule['id'], profile_id, h, now, now, now))
-                    applied.append({'rule_id': rule['id'], 'rule_name': rule.get('name'), 'owner_user_id': owner_id, 'owner_label': rule.get('owner_label'), 'hash': h, 'name': t.get('name'), 'actions': [{'type': a.get('type', 'error'), 'count': a.get('count', len(changed_hashes))} for a in actions]})
+                    applied.append({'rule_id': rule['id'], 'rule_name': rule.get('name'), 'created_by_user_id': creator_id, 'created_by_label': creator_label, 'executed_by_user_id': executor_id, 'hash': h, 'name': t.get('name'), 'actions': [{'type': a.get('type', 'error'), 'count': a.get('count', len(changed_hashes))} for a in actions]})
                 _mark_rule_cooldown(conn, rule, profile_id, now)
                 torrent_name = str(matched_by_hash.get(changed_hashes[0], {}).get('name') or '') if len(changed_hashes) == 1 else f'{len(changed_hashes)} torrents'
                 torrent_hash = changed_hashes[0] if len(changed_hashes) == 1 else f'batch:{rule["id"]}:{now}'
-                conn.execute('INSERT INTO automation_history(user_id,profile_id,rule_id,torrent_hash,torrent_name,rule_name,actions_json,created_at) VALUES(?,?,?,?,?,?,?,?)', (owner_id, profile_id, rule['id'], torrent_hash, torrent_name, str(rule.get('name') or ''), json.dumps(history_actions), now))
-            batches.append({'rule_id': rule['id'], 'rule_name': rule.get('name'), 'owner_user_id': owner_id, 'owner_label': rule.get('owner_label'), 'count': len(changed_hashes), 'actions': history_actions})
+                conn.execute('INSERT INTO automation_history(user_id,profile_id,rule_id,torrent_hash,torrent_name,rule_name,actions_json,created_at) VALUES(?,?,?,?,?,?,?,?)', (executor_id, profile_id, rule['id'], torrent_hash, torrent_name, str(rule.get('name') or ''), json.dumps(history_actions), now))
+            batches.append({'rule_id': rule['id'], 'rule_name': rule.get('name'), 'created_by_user_id': creator_id, 'created_by_label': creator_label, 'executed_by_user_id': executor_id, 'count': len(changed_hashes), 'actions': history_actions})
         return {'ok': True, 'checked': len(torrents), 'rules': len(rules), 'applied': applied, 'batches': batches}
     finally:
         lock.release()

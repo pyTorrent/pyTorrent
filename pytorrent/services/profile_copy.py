@@ -27,6 +27,43 @@ PREFERENCE_COPY_SCOPES: dict[str, tuple[str, ...]] = {
     ),
 }
 
+
+USER_PROFILE_SCOPE = "user_profile"
+PROFILE_SHARED_SCOPE = "profile_shared"
+
+PROFILE_SHARED_COPY_SCOPES = frozenset({
+    "preferences.disk_monitor",
+    "job_scheduling",
+    "backup_schedule",
+    "labels",
+    "automations",
+    "smart_queue",
+    "ratio_groups",
+    "rss",
+    "download_planner",
+    "poller",
+    "operation_logs",
+    "rtorrent_config",
+})
+
+
+def copy_scope_kind(scope: str) -> str:
+    """Return whether a copy writes personal (user, profile) state or shared profile state."""
+    clean_scope = str(scope or "").strip().lower()
+    if clean_scope == "profile_basics":
+        return USER_PROFILE_SCOPE
+    if clean_scope.startswith("preferences."):
+        pref_scope = clean_scope.split(".", 1)[1]
+        if pref_scope == "disk_monitor":
+            return PROFILE_SHARED_SCOPE
+        if pref_scope in PREFERENCE_COPY_SCOPES:
+            return USER_PROFILE_SCOPE
+        raise ValueError("Unsupported Preferences copy scope")
+    if clean_scope in PROFILE_SHARED_COPY_SCOPES:
+        return PROFILE_SHARED_SCOPE
+    raise ValueError("Unsupported profile copy scope")
+
+
 BASIC_PROFILE_PREFERENCE_SCOPES = (
     "view_state",
     "tracker_favicons",
@@ -69,14 +106,20 @@ SMART_QUEUE_COPY_KEYS = (
 
 
 def _actor_id(user_id: int | None = None) -> int:
-    """Resolve the user that owns copied user-scoped configuration."""
-    # Note: Profile-copy writes always belong to the signed-in user, while auth-disabled installs keep using the built-in user.
+    """Resolve the signed-in actor performing the copy operation."""
+    # Note: Personal scopes use this actor as both source and target preference identity; shared scopes use it only for authorization/audit.
     return int(user_id or auth.current_user_id() or default_user_id())
 
 
-def _validate_profiles(source_profile_id: int, target_profile_id: int, user_id: int) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Validate source read access and target write access before copying anything."""
-    # Note: Source access is read-only by design; only the active destination profile needs write permission.
+def _validate_profiles(
+    source_profile_id: int,
+    target_profile_id: int,
+    user_id: int,
+    *,
+    require_target_write: bool = True,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Validate source access and the permission appropriate for the destination scope."""
+    # Personal (user, profile) state needs only target read access; shared profile state requires target write access.
     source_id = int(source_profile_id or 0)
     target_id = int(target_profile_id or 0)
     if not source_id or not target_id:
@@ -85,8 +128,11 @@ def _validate_profiles(source_profile_id: int, target_profile_id: int, user_id: 
         raise ValueError("Choose a different source profile")
     if not auth.can_access_profile(source_id, user_id):
         raise PermissionError("No access to source profile")
-    if not auth.can_write_profile(target_id, user_id):
-        raise PermissionError("No write access to target profile")
+    if require_target_write:
+        if not auth.can_write_profile(target_id, user_id):
+            raise PermissionError("No write access to target profile")
+    elif not auth.can_access_profile(target_id, user_id):
+        raise PermissionError("No access to target profile")
     source = preferences.get_profile(source_id, user_id)
     target = preferences.get_profile(target_id, user_id)
     if not source or not target:
@@ -98,8 +144,13 @@ def copy_preference_scope(source_profile_id: int, target_profile_id: int, scope:
     """Copy one profile-scoped Preferences section without touching user-global settings."""
     # Note: Each Preferences button maps to a narrow column set so copying Footer cannot overwrite Columns, Port checker, or other sections.
     actor_id = _actor_id(user_id)
-    _validate_profiles(source_profile_id, target_profile_id, actor_id)
     clean_scope = str(scope or "").strip().lower()
+    _validate_profiles(
+        source_profile_id,
+        target_profile_id,
+        actor_id,
+        require_target_write=clean_scope == "disk_monitor",
+    )
     if clean_scope == "disk_monitor":
         source = preferences.get_disk_monitor_preferences(int(source_profile_id), actor_id)
         payload = {
@@ -131,7 +182,7 @@ def copy_basic_profile_settings(source_profile_id: int, target_profile_id: int, 
     """Copy the normal profile UI preferences without technical or path-specific configuration."""
     # Note: This preset intentionally excludes Disk Monitor, download paths, automation tools, daemon tuning, backups and runtime state; the current filter also stays local because label/tracker filters may not exist on the target profile.
     actor_id = _actor_id(user_id)
-    _validate_profiles(source_profile_id, target_profile_id, actor_id)
+    _validate_profiles(source_profile_id, target_profile_id, actor_id, require_target_write=False)
     source = preferences.get_profile_preferences(actor_id, int(source_profile_id))
     payload = {
         column: source.get(column)
@@ -267,13 +318,13 @@ def copy_labels(source_profile_id: int, target_profile_id: int, user_id: int | N
             ).fetchone()
             if existing:
                 conn.execute(
-                    "UPDATE labels SET color=?, updated_at=? WHERE id=? AND profile_id=?",
-                    (row.get("color") or "#64748b", now, int(existing["id"]), int(target_profile_id)),
+                    "UPDATE labels SET color=?, updated_by_user_id=?, updated_at=? WHERE id=? AND profile_id=?",
+                    (row.get("color") or "#64748b", actor_id, now, int(existing["id"]), int(target_profile_id)),
                 )
             else:
                 conn.execute(
-                    "INSERT INTO labels(user_id,profile_id,name,color,created_at,updated_at) VALUES(?,?,?,?,?,?)",
-                    (actor_id, int(target_profile_id), name, row.get("color") or "#64748b", now, now),
+                    "INSERT INTO labels(created_by_user_id,updated_by_user_id,profile_id,name,color,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
+                    (actor_id, actor_id, int(target_profile_id), name, row.get("color") or "#64748b", now, now),
                 )
             copied += 1
     return {"scope": "labels", "copied": copied}
@@ -287,7 +338,7 @@ def copy_download_planner(source_profile_id: int, target_profile_id: int, user_i
     source = download_planner.get_settings(int(source_profile_id), actor_id)
     payload = {
         key: value for key, value in source.items()
-        if key not in {"profile_id", "owner_user_id", "owner_name", "updated_at", "manual_override_until"}
+        if key not in {"profile_id", "updated_by_user_id", "updated_by_name", "owner_user_id", "owner_name", "updated_at", "manual_override_until"}
     }
     copied = download_planner.save_settings(int(target_profile_id), payload, actor_id)
     return {"scope": "download_planner", "copied": len(payload), "settings": copied}
@@ -342,13 +393,13 @@ def copy_ratio_groups(source_profile_id: int, target_profile_id: int, user_id: i
             )
             if existing:
                 conn.execute(
-                    "UPDATE ratio_groups SET min_ratio=?,max_ratio=?,seed_time_minutes=?,min_seed_time_minutes=?,ignore_private=?,ignore_active_upload=?,active_upload_min_bytes=?,move_path=?,set_label=?,action=?,enabled=?,updated_at=? WHERE id=?",
-                    (*values, int(existing["id"])),
+                    "UPDATE ratio_groups SET min_ratio=?,max_ratio=?,seed_time_minutes=?,min_seed_time_minutes=?,ignore_private=?,ignore_active_upload=?,active_upload_min_bytes=?,move_path=?,set_label=?,action=?,enabled=?,updated_at=?,updated_by_user_id=? WHERE id=?",
+                    (*values, actor_id, int(existing["id"])),
                 )
             else:
                 conn.execute(
-                    "INSERT INTO ratio_groups(user_id,profile_id,name,min_ratio,max_ratio,seed_time_minutes,min_seed_time_minutes,ignore_private,ignore_active_upload,active_upload_min_bytes,move_path,set_label,action,enabled,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                    (actor_id, int(target_profile_id), row.get("name") or "Ratio group", *values[:-1], now, now),
+                    "INSERT INTO ratio_groups(created_by_user_id,updated_by_user_id,profile_id,name,min_ratio,max_ratio,seed_time_minutes,min_seed_time_minutes,ignore_private,ignore_active_upload,active_upload_min_bytes,move_path,set_label,action,enabled,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (actor_id, actor_id, int(target_profile_id), row.get("name") or "Ratio group", *values[:-1], now, now),
                 )
             copied += 1
     return {"scope": "ratio_groups", "copied": copied}
@@ -433,11 +484,12 @@ def copy_rtorrent_config(source_profile_id: int, target_profile_id: int, user_id
 
 
 def copy_profile_scope(source_profile_id: int, target_profile_id: int, scope: str, user_id: int | None = None) -> dict[str, Any]:
-    """Dispatch a profile-copy request to the narrow service responsible for that configuration type."""
-    # Note: One API surface keeps permission checks and source selection consistent across Preferences and automation tools.
+    """Dispatch a profile-copy request and expose its ownership semantics to the caller."""
     clean_scope = str(scope or "").strip().lower()
+    scope_kind = copy_scope_kind(clean_scope)
     if clean_scope.startswith("preferences."):
-        return copy_preference_scope(source_profile_id, target_profile_id, clean_scope.split(".", 1)[1], user_id)
+        result = copy_preference_scope(source_profile_id, target_profile_id, clean_scope.split(".", 1)[1], user_id)
+        return {**result, "requested_scope": clean_scope, "scope_kind": scope_kind}
     handlers = {
         "profile_basics": copy_basic_profile_settings,
         "job_scheduling": copy_job_scheduling,
@@ -455,4 +507,5 @@ def copy_profile_scope(source_profile_id: int, target_profile_id: int, scope: st
     handler = handlers.get(clean_scope)
     if not handler:
         raise ValueError("Unsupported profile copy scope")
-    return handler(source_profile_id, target_profile_id, user_id)
+    result = handler(source_profile_id, target_profile_id, user_id)
+    return {**result, "requested_scope": clean_scope, "scope_kind": scope_kind}

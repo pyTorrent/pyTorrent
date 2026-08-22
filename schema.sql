@@ -168,7 +168,7 @@ CREATE INDEX IF NOT EXISTS idx_jobs_profile_created ON jobs(profile_id, created_
 
 CREATE TABLE IF NOT EXISTS disk_monitor_preferences (
   profile_id INTEGER PRIMARY KEY,
-  user_id INTEGER NOT NULL,
+  updated_by_user_id INTEGER,
   paths_json TEXT,
   mode TEXT DEFAULT 'default',
   selected_path TEXT,
@@ -176,25 +176,26 @@ CREATE TABLE IF NOT EXISTS disk_monitor_preferences (
   stop_threshold INTEGER DEFAULT 98,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  FOREIGN KEY(user_id) REFERENCES users(id),
   FOREIGN KEY(profile_id) REFERENCES rtorrent_profiles(id)
 );
-CREATE INDEX IF NOT EXISTS idx_disk_monitor_preferences_owner ON disk_monitor_preferences(user_id);
+CREATE INDEX IF NOT EXISTS idx_disk_monitor_preferences_updated_by ON disk_monitor_preferences(updated_by_user_id);
 
 CREATE TABLE IF NOT EXISTS labels (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER NOT NULL,
+  created_by_user_id INTEGER,
+  updated_by_user_id INTEGER,
   profile_id INTEGER,
   name TEXT NOT NULL,
   color TEXT DEFAULT '#64748b',
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  UNIQUE(user_id, profile_id, name)
+  updated_at TEXT NOT NULL
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_labels_profile_name ON labels(profile_id, name COLLATE NOCASE);
 
 CREATE TABLE IF NOT EXISTS ratio_groups (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER NOT NULL,
+  created_by_user_id INTEGER,
+  updated_by_user_id INTEGER,
   profile_id INTEGER,
   name TEXT NOT NULL,
   min_ratio REAL DEFAULT 1.0,
@@ -209,9 +210,10 @@ CREATE TABLE IF NOT EXISTS ratio_groups (
   action TEXT DEFAULT 'stop',
   enabled INTEGER DEFAULT 1,
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  UNIQUE(user_id, profile_id, name)
+  updated_at TEXT NOT NULL
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ratio_groups_profile_name ON ratio_groups(profile_id, name COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_ratio_groups_profile_enabled ON ratio_groups(profile_id, enabled, name);
 
 CREATE TABLE IF NOT EXISTS rss_feeds (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -292,9 +294,7 @@ CREATE TABLE IF NOT EXISTS ratio_history (
 CREATE INDEX IF NOT EXISTS idx_ratio_history_profile_created ON ratio_history(profile_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_ratio_history_user_profile_id ON ratio_history(user_id, profile_id, id);
 CREATE INDEX IF NOT EXISTS idx_ratio_assignments_profile_status ON ratio_assignments(profile_id, last_status);
-CREATE INDEX IF NOT EXISTS idx_ratio_groups_user_profile_enabled ON ratio_groups(user_id, profile_id, enabled);
 CREATE INDEX IF NOT EXISTS idx_ratio_groups_profile_enabled ON ratio_groups(profile_id, enabled, name);
-CREATE INDEX IF NOT EXISTS idx_labels_profile_name ON labels(profile_id, name);
 
 CREATE TABLE IF NOT EXISTS app_backups (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -439,7 +439,8 @@ CREATE TABLE IF NOT EXISTS transfer_speed_peaks (
 
 CREATE TABLE IF NOT EXISTS automation_rules (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER NOT NULL,
+  created_by_user_id INTEGER,
+  updated_by_user_id INTEGER,
   profile_id INTEGER,
   name TEXT NOT NULL,
   enabled INTEGER DEFAULT 1,
@@ -450,7 +451,7 @@ CREATE TABLE IF NOT EXISTS automation_rules (
   updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_automation_rules_profile_enabled ON automation_rules(profile_id, enabled);
-CREATE INDEX IF NOT EXISTS idx_automation_rules_user_profile_enabled ON automation_rules(user_id, profile_id, enabled);
+CREATE INDEX IF NOT EXISTS idx_automation_rules_created_by ON automation_rules(created_by_user_id, profile_id);
 CREATE TABLE IF NOT EXISTS automation_rule_state (
   rule_id INTEGER NOT NULL,
   profile_id INTEGER NOT NULL,
@@ -500,13 +501,11 @@ CREATE TABLE IF NOT EXISTS poller_settings (
 
 
 CREATE TABLE IF NOT EXISTS download_plan_settings (
-  user_id INTEGER NOT NULL,
-  profile_id INTEGER NOT NULL,
+  profile_id INTEGER PRIMARY KEY,
+  updated_by_user_id INTEGER,
   settings_json TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  PRIMARY KEY(user_id, profile_id)
+  updated_at TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_download_plan_settings_profile ON download_plan_settings(profile_id, updated_at);
 
 CREATE TABLE IF NOT EXISTS download_plan_paused (
   profile_id INTEGER NOT NULL,
@@ -556,8 +555,8 @@ CREATE INDEX IF NOT EXISTS idx_operation_logs_user_profile_created ON operation_
 CREATE INDEX IF NOT EXISTS idx_operation_logs_event_type ON operation_logs(event_type, created_at);
 
 CREATE TABLE IF NOT EXISTS operation_log_settings (
-  user_id INTEGER NOT NULL,
-  profile_id INTEGER NOT NULL DEFAULT 0,
+  profile_id INTEGER PRIMARY KEY,
+  updated_by_user_id INTEGER,
   retention_mode TEXT DEFAULT 'days',
   retention_days INTEGER DEFAULT 30,
   retention_lines INTEGER DEFAULT 5000,
@@ -575,10 +574,8 @@ CREATE TABLE IF NOT EXISTS operation_log_settings (
   operation_last_retention_run_at TEXT,
   operation_last_retention_deleted INTEGER DEFAULT 0,
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  PRIMARY KEY(user_id, profile_id)
+  updated_at TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_operation_log_settings_profile ON operation_log_settings(profile_id, updated_at);
 CREATE TABLE IF NOT EXISTS tracker_favicon_cache (
   domain TEXT PRIMARY KEY,
   source_url TEXT,

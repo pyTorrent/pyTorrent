@@ -118,7 +118,7 @@ def _frontend_bootstrap_config(prefs: dict, profile: dict | None, current_user: 
         "diskMonitorPaths": _bootstrap_json_value(prefs.get("disk_monitor_paths_json"), [], list),
         "diskMonitorMode": str(prefs.get("disk_monitor_mode") or "default"),
         "diskMonitorSelectedPath": str(prefs.get("disk_monitor_selected_path") or ""),
-        "diskMonitorOwnerLabel": str(prefs.get("disk_monitor_owner_label") or ""),
+        "diskMonitorUpdatedByLabel": str(prefs.get("disk_monitor_updated_by_label") or prefs.get("disk_monitor_owner_label") or ""),
         "bootstrapTheme": str(prefs.get("bootstrap_theme") or "default"),
         "pytorrentTheme": str(prefs.get("pytorrent_theme") or "default"),
         "pytorrentAnimationsEnabled": flag("pytorrent_animations_enabled", True),

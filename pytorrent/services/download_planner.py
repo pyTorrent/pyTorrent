@@ -193,19 +193,12 @@ def normalize(data: dict | None) -> dict:
 
 
 def _row(user_id: int | None, profile_id: int) -> dict | None:
+    # Planner configuration is a single shared row per profile; user_id is accepted only for API compatibility.
     with connect() as conn:
-        row = conn.execute(
-            "SELECT * FROM download_plan_settings WHERE profile_id=? ORDER BY updated_at DESC, user_id ASC LIMIT 1",
+        return conn.execute(
+            "SELECT * FROM download_plan_settings WHERE profile_id=?",
             (profile_id,),
         ).fetchone()
-        if row:
-            return row
-        if user_id:
-            return conn.execute(
-                "SELECT * FROM download_plan_settings WHERE user_id=? AND profile_id=?",
-                (user_id, profile_id),
-            ).fetchone()
-    return None
 
 
 def _user_label(user_id: int | None) -> str:
@@ -338,13 +331,30 @@ def get_settings(profile_id: int, user_id: int | None = None) -> dict:
     row = _row(user_id, profile_id)
     if not row:
         migrated = normalize({**DEFAULTS, **_legacy_disk_guard_defaults(int(profile_id), user_id)})
-        return {**migrated, "profile_id": int(profile_id), "owner_user_id": int(user_id), "owner_name": _user_label(user_id)}
+        return {
+            **migrated,
+            "profile_id": int(profile_id),
+            "updated_by_user_id": 0,
+            "updated_by_name": "",
+            # Backward-compatible aliases; these no longer imply ownership.
+            "owner_user_id": 0,
+            "owner_name": "",
+        }
     try:
         data = json.loads(row.get("settings_json") or "{}")
     except Exception:
         data = {}
-    owner_user_id = int(row.get("user_id") or user_id)
-    settings = {**normalize(data), "profile_id": int(profile_id), "owner_user_id": owner_user_id, "owner_name": _user_label(owner_user_id), "updated_at": row.get("updated_at")}
+    updated_by_user_id = int(row.get("updated_by_user_id") or 0)
+    updated_by_name = _user_label(updated_by_user_id) if updated_by_user_id else ""
+    settings = {
+        **normalize(data),
+        "profile_id": int(profile_id),
+        "updated_by_user_id": updated_by_user_id,
+        "updated_by_name": updated_by_name,
+        "owner_user_id": updated_by_user_id,
+        "owner_name": updated_by_name,
+        "updated_at": row.get("updated_at"),
+    }
     runtime_override = _override_until(int(profile_id))
     if runtime_override:
         settings["manual_override_until"] = runtime_override
@@ -358,15 +368,27 @@ def save_settings(profile_id: int, data: dict, user_id: int | None = None) -> di
     settings = normalize(data)
     now = utcnow()
     with connect() as conn:
-        conn.execute("DELETE FROM download_plan_settings WHERE profile_id=?", (int(profile_id),))
         conn.execute(
             """
-            INSERT INTO download_plan_settings(user_id, profile_id, settings_json, updated_at)
+            INSERT INTO download_plan_settings(profile_id, updated_by_user_id, settings_json, updated_at)
             VALUES(?,?,?,?)
+            ON CONFLICT(profile_id) DO UPDATE SET
+              updated_by_user_id=excluded.updated_by_user_id,
+              settings_json=excluded.settings_json,
+              updated_at=excluded.updated_at
             """,
-            (user_id, profile_id, json.dumps(settings), now),
+            (profile_id, user_id, json.dumps(settings), now),
         )
-    return {**settings, "profile_id": int(profile_id), "owner_user_id": int(user_id), "owner_name": _user_label(user_id), "updated_at": now}
+    updated_by_name = _user_label(user_id)
+    return {
+        **settings,
+        "profile_id": int(profile_id),
+        "updated_by_user_id": int(user_id),
+        "updated_by_name": updated_by_name,
+        "owner_user_id": int(user_id),
+        "owner_name": updated_by_name,
+        "updated_at": now,
+    }
 
 
 def _active_downloading_hashes(profile: dict) -> list[str]:
@@ -517,10 +539,11 @@ def evaluate(profile: dict, settings: dict | None = None, now: datetime | None =
 
 def enforce(profile: dict, force: bool = False, user_id: int | None = None) -> dict:
     profile_id = int(profile.get("id") or 0)
-    settings = get_settings(profile_id, user_id or int(profile.get("user_id") or default_user_id()))
-    user_id = int(settings.get("owner_user_id") or user_id or profile.get("user_id") or default_user_id())
-    if not auth.can_write_profile(profile_id, user_id):
-        return {"ok": True, "enabled": False, "profile_id": profile_id, "skipped": True, "reason": "planner owner has no write access", "history": history(profile_id, 20), "history_total": history_count(profile_id)}
+    execution_user_id = int(user_id or profile.get("user_id") or default_user_id())
+    settings = get_settings(profile_id, execution_user_id)
+    if not auth.can_write_profile(profile_id, execution_user_id):
+        return {"ok": True, "enabled": False, "profile_id": profile_id, "skipped": True, "reason": "execution user has no write access", "history": history(profile_id, 20), "history_total": history_count(profile_id)}
+    user_id = execution_user_id
     if not settings.get("enabled"):
         return {"ok": True, "enabled": False, "profile_id": profile_id, "history": history(profile_id, 20), "history_total": history_count(profile_id), "preview": preview(profile, user_id=user_id)}
     startup_remaining = int(PLANNER_STARTUP_DELAY_SECONDS - (time.monotonic() - _APP_STARTED_AT))

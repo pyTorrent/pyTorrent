@@ -11,14 +11,14 @@ APP_BACKUP_TABLES = [
     "users", "user_profile_permissions", "user_preferences", "profile_preferences", "rtorrent_profiles",
     "disk_monitor_preferences", "labels", "ratio_groups", "rss_feeds", "rss_rules",
     "smart_queue_settings", "smart_queue_exclusions", "automation_rules",
-    "rtorrent_config_overrides", "poller_settings", "app_settings", "download_plan_settings",
+    "rtorrent_config_overrides", "poller_settings", "app_settings", "download_plan_settings", "operation_log_settings",
 ]
 
 # Note: Profile backups contain profile behavior plus user-specific view preferences for the user creating the backup.
 PROFILE_BACKUP_TABLES = [
     "rtorrent_profiles", "profile_preferences", "disk_monitor_preferences", "labels", "ratio_groups",
     "rss_feeds", "rss_rules", "smart_queue_settings", "smart_queue_exclusions",
-    "automation_rules", "rtorrent_config_overrides", "poller_settings", "download_plan_settings",
+    "automation_rules", "rtorrent_config_overrides", "poller_settings", "download_plan_settings", "operation_log_settings",
 ]
 
 # Scope values:
@@ -38,6 +38,7 @@ PROFILE_TABLE_SCOPES = {
     "rtorrent_config_overrides": "profile",
     "poller_settings": "profile",
     "download_plan_settings": "profile_singleton",
+    "operation_log_settings": "profile_singleton",
 }
 
 PROFILE_TABLE_FILTERS = {
@@ -54,6 +55,7 @@ PROFILE_TABLE_FILTERS = {
     "rtorrent_config_overrides": "profile_id=?",
     "poller_settings": "profile_id=?",
     "download_plan_settings": "profile_id=?",
+    "operation_log_settings": "profile_id=?",
 }
 
 DEFAULT_AUTO_BACKUP_SETTINGS = {
@@ -280,6 +282,49 @@ def _assert_foreign_keys_valid(conn) -> None:
     raise ValueError("Backup contains invalid database references: " + "; ".join(sample))
 
 
+def _rewrite_app_row_compat(table: str, row: dict) -> dict:
+    """Map legacy shared-setting ownership columns into audit metadata during app restore."""
+    clean = dict(row)
+    legacy_user_id = clean.get("user_id")
+    if table in {"disk_monitor_preferences", "download_plan_settings", "operation_log_settings"}:
+        if "updated_by_user_id" not in clean:
+            clean["updated_by_user_id"] = None if table == "operation_log_settings" and int(legacy_user_id or 0) == 0 else legacy_user_id
+        clean.pop("user_id", None)
+    elif table in {"labels", "ratio_groups", "automation_rules"}:
+        clean.setdefault("created_by_user_id", legacy_user_id)
+        clean.setdefault("updated_by_user_id", legacy_user_id)
+        clean.pop("user_id", None)
+    return clean
+
+
+def _dedupe_app_shared_rows(table: str, rows: list[dict]) -> list[dict]:
+    """Normalize old per-user shared rows before restoring into profile-singleton/shared-name tables."""
+    clean_rows = [dict(row) for row in rows]
+    if table not in {"disk_monitor_preferences", "download_plan_settings", "operation_log_settings", "labels", "ratio_groups"}:
+        return clean_rows
+    ordered = sorted(
+        clean_rows,
+        key=lambda row: (str(row.get("updated_at") or row.get("created_at") or ""), int(row.get("id") or 0)),
+        reverse=True,
+    )
+    if table == "operation_log_settings":
+        # Legacy operation-log settings used user_id=0 as the canonical shared row; move those rows ahead of newer per-user fallbacks.
+        ordered = sorted(ordered, key=lambda row: 0 if int(row.get("user_id") or 0) == 0 else 1)
+    if table in {"disk_monitor_preferences", "download_plan_settings", "operation_log_settings"}:
+        chosen: dict[int, dict] = {}
+        for row in ordered:
+            pid = int(row.get("profile_id") or 0)
+            if pid not in chosen:
+                chosen[pid] = row
+        return list(chosen.values())
+    chosen: dict[tuple[int, str], dict] = {}
+    for row in ordered:
+        key = (int(row.get("profile_id") or 0), str(row.get("name") or "").strip().casefold())
+        if key[1] and key not in chosen:
+            chosen[key] = row
+    return list(chosen.values())
+
+
 def restore_app_backup(backup_id: int, user_id: int | None = None) -> dict:
     user_id = user_id or auth.current_user_id() or default_user_id()
     _require_admin(user_id)
@@ -297,7 +342,7 @@ def restore_app_backup(backup_id: int, user_id: int | None = None) -> dict:
             # an explicitly present empty table means "restore it as empty".
             if table not in tables:
                 continue
-            rows = tables.get(table) or []
+            rows = [_rewrite_app_row_compat(table, dict(row)) for row in _dedupe_app_shared_rows(table, tables.get(table) or [])]
             conn.execute(f"DELETE FROM {table}")
             if not rows:
                 restored[table] = 0
@@ -322,6 +367,21 @@ def _single_profile_row(rows: list[dict]) -> list[dict]:
     return [sorted(rows, key=lambda row: str(row.get("updated_at") or row.get("created_at") or ""), reverse=True)[0]]
 
 
+def _dedupe_profile_named_rows(rows: list[dict]) -> list[dict]:
+    """Collapse legacy per-user definitions into one shared definition per case-insensitive name."""
+    chosen: dict[str, dict] = {}
+    ordered = sorted(
+        (dict(row) for row in rows),
+        key=lambda row: (str(row.get("updated_at") or row.get("created_at") or ""), int(row.get("id") or 0)),
+        reverse=True,
+    )
+    for row in ordered:
+        key = str(row.get("name") or "").strip().casefold()
+        if key and key not in chosen:
+            chosen[key] = row
+    return list(chosen.values())
+
+
 def _rewrite_profile_row(table: str, row: dict, user_id: int, target_profile_id: int) -> dict:
     clean = dict(row)
     if table == "rtorrent_profiles":
@@ -331,8 +391,17 @@ def _rewrite_profile_row(table: str, row: dict, user_id: int, target_profile_id:
         return clean
     if "profile_id" in clean:
         clean["profile_id"] = target_profile_id
-    if "user_id" in clean:
+    if table == "profile_preferences":
+        # Personal view state from the backup becomes personal state of the restoring user.
         clean["user_id"] = user_id
+    else:
+        # Legacy shared-profile backups may contain a misleading `user_id`; it must not become ownership.
+        clean.pop("user_id", None)
+    if table in {"disk_monitor_preferences", "download_plan_settings", "operation_log_settings"}:
+        clean["updated_by_user_id"] = user_id
+    elif table in {"labels", "ratio_groups", "automation_rules"}:
+        clean["created_by_user_id"] = user_id
+        clean["updated_by_user_id"] = user_id
     if table == "poller_settings":
         clean["profile_id"] = target_profile_id
     if "id" in clean and table != "rtorrent_profiles":
@@ -353,8 +422,10 @@ def restore_profile_backup(backup_id: int, target_profile_id: int, user_id: int 
         conn.execute("PRAGMA foreign_keys = OFF")
         for table in PROFILE_BACKUP_TABLES:
             rows = tables.get(table) or []
-            if table == "disk_monitor_preferences":
+            if table in {"disk_monitor_preferences", "download_plan_settings", "operation_log_settings"}:
                 rows = _single_profile_row([dict(row) for row in rows])
+            elif table in {"labels", "ratio_groups"}:
+                rows = _dedupe_profile_named_rows([dict(row) for row in rows])
             where = PROFILE_TABLE_FILTERS.get(table)
             params = _profile_filter_params(table, user_id, int(target_profile_id))
             conn.execute(f"DELETE FROM {table} WHERE {where}", params)

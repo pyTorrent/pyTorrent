@@ -65,8 +65,10 @@ def _should_apply(profile: dict, group: dict, torrent: dict) -> tuple[bool, str]
 
 
 def check(profile: dict, user_id: int | None = None) -> dict:
-    viewer_user_id = user_id or default_user_id()
+    executor_user_id = int(user_id or profile.get("user_id") or default_user_id())
     profile_id = int(profile["id"])
+    if not auth.can_write_profile(profile_id, executor_user_id):
+        raise PermissionError("No write access to profile")
     with connect() as conn:
         groups = conn.execute("SELECT * FROM ratio_groups WHERE profile_id=? AND enabled=1 ORDER BY lower(name), id", (profile_id,)).fetchall()
         already = {row["torrent_hash"] for row in conn.execute("SELECT torrent_hash FROM ratio_assignments WHERE profile_id=? AND last_status='applied'", (profile_id,)).fetchall()}
@@ -93,11 +95,6 @@ def check(profile: dict, user_id: int | None = None) -> dict:
                 )
             continue
         action = str(group.get("action") or "stop")
-        owner_user_id = int(group.get("user_id") or viewer_user_id)
-        if not auth.can_write_profile(profile_id, owner_user_id):
-            skipped += 1
-            _record(owner_user_id, profile_id, group, torrent, action, "skipped", "owner has no write access to profile")
-            continue
         payload = {"hashes": [torrent["hash"]], "source": "ratio", "job_context": {"source": "ratio", "rule_name": group.get("name"), "hash_count": 1}}
         if action == "remove_data":
             api_action = "remove"
@@ -110,10 +107,10 @@ def check(profile: dict, user_id: int | None = None) -> dict:
             payload["label"] = group.get("set_label") or group.get("name") or ""
         else:
             api_action = action if action in {"stop", "remove", "pause"} else "stop"
-        job_id = enqueue(api_action, profile_id, payload, user_id=owner_user_id)
+        job_id = enqueue(api_action, profile_id, payload, user_id=executor_user_id)
         queued_jobs.append(job_id)
         applied += 1
-        _record(owner_user_id, profile_id, group, torrent, action, "applied", reason, {"job_id": job_id, "api_action": api_action})
+        _record(executor_user_id, profile_id, group, torrent, action, "applied", reason, {"job_id": job_id, "api_action": api_action})
     return {"applied": applied, "skipped": skipped, "job_ids": queued_jobs}
 
 
@@ -141,7 +138,7 @@ def start_scheduler(socketio=None) -> None:
                     profile = get_profile(profile_id, owner_id)
                     if not profile:
                         continue
-                    # Note: Ratio rules are evaluated per profile owner, not the active browser user.
+                    # Note: Background ratio execution uses the profile owner as the execution principal; rule creators are audit metadata only.
                     result = check(profile, user_id=owner_id)
                     if socketio and result.get("applied"):
                         socketio.emit("ratio_rules_checked", {"profile_id": profile["id"], **result}, to=f"profile:{profile['id']}")

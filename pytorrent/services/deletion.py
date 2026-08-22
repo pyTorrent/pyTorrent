@@ -173,30 +173,32 @@ def _guard_user_jobs(conn: sqlite3.Connection, user_id: int) -> None:
         )
 
 
-def _delete_user_indirect_rows(conn: sqlite3.Connection, user_id: int) -> dict[str, int]:
-    """Delete rows that reference user-owned definitions without a user_id column."""
+def _clear_user_audit_references(conn: sqlite3.Connection, user_id: int) -> dict[str, int]:
+    """Keep shared profile configuration when a creator/editor account is removed."""
     uid = int(user_id)
-    deleted: dict[str, int] = {}
-
-    rule_rows = conn.execute("SELECT id FROM automation_rules WHERE user_id=?", (uid,)).fetchall()
-    rule_ids = [int(row["id"]) for row in rule_rows]
-    if rule_ids:
-        placeholders = ",".join("?" for _ in rule_ids)
-        cur = conn.execute(f"DELETE FROM automation_rule_state WHERE rule_id IN ({placeholders})", tuple(rule_ids))
-        if cur.rowcount and cur.rowcount > 0:
-            deleted["automation_rule_state"] = int(cur.rowcount)
-
-    group_rows = conn.execute("SELECT id FROM ratio_groups WHERE user_id=?", (uid,)).fetchall()
-    group_ids = [int(row["id"]) for row in group_rows]
-    if group_ids:
-        placeholders = ",".join("?" for _ in group_ids)
-        cur = conn.execute(f"DELETE FROM ratio_assignments WHERE group_id IN ({placeholders})", tuple(group_ids))
-        if cur.rowcount and cur.rowcount > 0:
-            deleted["ratio_assignments"] = int(cur.rowcount)
-        # Historical rows keep the group name but must not point at a definition that no longer exists.
-        conn.execute(f"UPDATE ratio_history SET group_id=NULL WHERE group_id IN ({placeholders}) AND user_id<>?", (*group_ids, uid))
-
-    return deleted
+    cleared: dict[str, int] = {}
+    audit_columns = (
+        ("disk_monitor_preferences", "updated_by_user_id"),
+        ("labels", "created_by_user_id"),
+        ("labels", "updated_by_user_id"),
+        ("ratio_groups", "created_by_user_id"),
+        ("ratio_groups", "updated_by_user_id"),
+        ("automation_rules", "created_by_user_id"),
+        ("automation_rules", "updated_by_user_id"),
+        ("download_plan_settings", "updated_by_user_id"),
+        ("operation_log_settings", "updated_by_user_id"),
+    )
+    for table, column in audit_columns:
+        if table not in _tables_with_column(conn, column):
+            continue
+        cur = conn.execute(
+            f"UPDATE {_quote_identifier(table)} SET {_quote_identifier(column)}=NULL WHERE {_quote_identifier(column)}=?",
+            (uid,),
+        )
+        count = max(0, int(cur.rowcount or 0))
+        if count:
+            cleared[f"{table}.{column}"] = count
+    return cleared
 
 
 def _delete_profile_app_settings(conn: sqlite3.Connection, profile_id: int) -> int:
@@ -365,8 +367,8 @@ def purge_user(conn: sqlite3.Connection, user_id: int) -> dict[str, object]:
             profile_results.append(purge_profile(conn, pid))
             deleted_profiles.append(pid)
 
-        deleted = _delete_user_indirect_rows(conn, uid)
-        _merge_counts(deleted, _delete_rows_by_column(conn, "user_id", uid, exclude={"users", "rtorrent_profiles"}))
+        audit_references_cleared = _clear_user_audit_references(conn, uid)
+        deleted = _delete_rows_by_column(conn, "user_id", uid, exclude={"users", "rtorrent_profiles"})
         _merge_counts(
             deleted,
             _delete_fk_children(conn, "users", "id", uid, exclude={"users", "rtorrent_profiles"}),
@@ -381,6 +383,7 @@ def purge_user(conn: sqlite3.Connection, user_id: int) -> dict[str, object]:
             "deleted_profiles": deleted_profiles,
             "profile_results": profile_results,
             "deleted_rows": deleted,
+            "audit_references_cleared": audit_references_cleared,
             "deleted_app_settings": app_settings_deleted,
         }
 

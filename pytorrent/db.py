@@ -75,12 +75,19 @@ def init_db():
             conn.execute("PRAGMA journal_mode = WAL")
         except sqlite3.OperationalError:
             pass
-        # Note: Fresh databases receive schema.sql first, so historical ALTER migrations are recorded as a baseline instead of replayed.
+        # Fresh databases are materialized from the current schema snapshot and then
+        # migration history is recorded as a baseline. Existing databases must run
+        # pending migrations first: schema.sql may contain indexes/constraints that
+        # reference columns introduced by those migrations.
         current_schema_is_fresh = conn.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name!='schema_migrations' LIMIT 1"
         ).fetchone() is None
-        create_schema(conn)
-        run_database_migrations(conn, current_schema_is_fresh=current_schema_is_fresh)
+        if current_schema_is_fresh:
+            create_schema(conn)
+            run_database_migrations(conn, current_schema_is_fresh=True)
+        else:
+            run_database_migrations(conn, current_schema_is_fresh=False)
+            create_schema(conn)
         seed_default_user(conn)
     try:
         from .services.auth import ensure_admin_user

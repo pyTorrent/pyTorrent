@@ -434,10 +434,11 @@ def legacy_disk_monitor_preferences(user_id: int | None = None) -> dict:
     return _normalize_disk_monitor(row)
 
 
-def _disk_monitor_owner_label(row: dict | None) -> str:
+def _disk_monitor_updated_by_label(row: dict | None) -> str:
     if not row:
         return ""
-    return str(row.get("owner_display_name") or row.get("owner_username") or row.get("owner_email") or (f"user #{row.get('user_id')}" if row.get("user_id") else "")).strip()
+    user_id = row.get("updated_by_user_id") or row.get("user_id")
+    return str(row.get("updated_by_display_name") or row.get("updated_by_username") or row.get("updated_by_email") or (f"user #{user_id}" if user_id else "")).strip()
 
 
 def get_disk_monitor_preferences(profile_id: int | None = None, user_id: int | None = None) -> dict:
@@ -450,20 +451,27 @@ def get_disk_monitor_preferences(profile_id: int | None = None, user_id: int | N
     with connect() as conn:
         row = conn.execute(
             """
-            SELECT d.*, u.username AS owner_username, u.display_name AS owner_display_name, u.email AS owner_email
+            SELECT d.*, u.username AS updated_by_username, u.display_name AS updated_by_display_name, u.email AS updated_by_email
             FROM disk_monitor_preferences d
-            LEFT JOIN users u ON u.id=d.user_id
+            LEFT JOIN users u ON u.id=d.updated_by_user_id
             WHERE d.profile_id=?
             """,
             (profile_id,),
         ).fetchone()
     if row:
         clean = _normalize_disk_monitor(row)
-        clean["disk_monitor_owner_user_id"] = int(row.get("user_id") or 0)
-        clean["disk_monitor_owner_label"] = _disk_monitor_owner_label(row)
+        updated_by_user_id = int(row.get("updated_by_user_id") or 0)
+        updated_by_label = _disk_monitor_updated_by_label(row)
+        clean["disk_monitor_updated_by_user_id"] = updated_by_user_id
+        clean["disk_monitor_updated_by_label"] = updated_by_label
+        # Backward-compatible aliases for older frontends.
+        clean["disk_monitor_owner_user_id"] = updated_by_user_id
+        clean["disk_monitor_owner_label"] = updated_by_label
         return clean
     # Backward-compatible seed: existing global disk monitor values become defaults for first use of a profile.
     clean = legacy_disk_monitor_preferences(user_id)
+    clean["disk_monitor_updated_by_user_id"] = 0
+    clean["disk_monitor_updated_by_label"] = ""
     clean["disk_monitor_owner_user_id"] = 0
     clean["disk_monitor_owner_label"] = ""
     return clean
@@ -485,14 +493,17 @@ def save_disk_monitor_preferences(profile_id: int | None, data: dict, user_id: i
     now = utcnow()
     with connect() as conn:
         conn.execute(
-            "INSERT INTO disk_monitor_preferences(profile_id,user_id,paths_json,mode,selected_path,stop_enabled,stop_threshold,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?) "
-            "ON CONFLICT(profile_id) DO UPDATE SET user_id=excluded.user_id, paths_json=excluded.paths_json, mode=excluded.mode, selected_path=excluded.selected_path, stop_enabled=excluded.stop_enabled, stop_threshold=excluded.stop_threshold, updated_at=excluded.updated_at",
+            "INSERT INTO disk_monitor_preferences(profile_id,updated_by_user_id,paths_json,mode,selected_path,stop_enabled,stop_threshold,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?) "
+            "ON CONFLICT(profile_id) DO UPDATE SET updated_by_user_id=excluded.updated_by_user_id, paths_json=excluded.paths_json, mode=excluded.mode, selected_path=excluded.selected_path, stop_enabled=excluded.stop_enabled, stop_threshold=excluded.stop_threshold, updated_at=excluded.updated_at",
             (profile_id, user_id, clean["disk_monitor_paths_json"], clean["disk_monitor_mode"], clean["disk_monitor_selected_path"], clean["disk_monitor_stop_enabled"], clean["disk_monitor_stop_threshold"], now, now),
         )
-    clean["disk_monitor_owner_user_id"] = int(user_id)
+    clean["disk_monitor_updated_by_user_id"] = int(user_id)
     with connect() as conn:
-        row = conn.execute("SELECT display_name AS owner_display_name, username AS owner_username, email AS owner_email, id AS user_id FROM users WHERE id=?", (user_id,)).fetchone()
-    clean["disk_monitor_owner_label"] = _disk_monitor_owner_label(row)
+        row = conn.execute("SELECT display_name AS updated_by_display_name, username AS updated_by_username, email AS updated_by_email, id AS updated_by_user_id FROM users WHERE id=?", (user_id,)).fetchone()
+    clean["disk_monitor_updated_by_label"] = _disk_monitor_updated_by_label(row)
+    # Backward-compatible aliases for older frontends.
+    clean["disk_monitor_owner_user_id"] = clean["disk_monitor_updated_by_user_id"]
+    clean["disk_monitor_owner_label"] = clean["disk_monitor_updated_by_label"]
     return clean
 
 
@@ -650,6 +661,21 @@ def get_preferences(user_id: int | None = None, profile_id: int | None = None):
             merged.update(_seed_profile_preferences(conn, user_id, int(profile_id)))
     merged.update(get_disk_monitor_preferences(profile_id, user_id))
     return merged
+
+SHARED_PROFILE_PREFERENCE_FIELDS = frozenset({
+    "disk_monitor_paths_json",
+    "disk_monitor_mode",
+    "disk_monitor_selected_path",
+    "disk_monitor_stop_enabled",
+    "disk_monitor_stop_threshold",
+})
+
+
+def has_shared_profile_preference_fields(data: dict | None) -> bool:
+    """Return True when a Preferences write changes configuration shared by the whole profile."""
+    payload = data if isinstance(data, dict) else {}
+    return any(key in payload for key in SHARED_PROFILE_PREFERENCE_FIELDS)
+
 
 def save_preferences(data: dict, user_id: int | None = None, profile_id: int | None = None):
     user_id = user_id or auth.current_user_id() or default_user_id()
