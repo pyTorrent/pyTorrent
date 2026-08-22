@@ -142,6 +142,29 @@ def prefs_table_columns_recommended():
     return ok({"preferences": preferences.apply_recommended_table_columns(profile_id=request_profile_id(require_write=True))})
 
 
+@bp.post("/profile-copy")
+def profile_copy_scope():
+    # Note: Copying profile-scoped configuration is additive/narrow and never copies history, runtime state, or inaccessible profiles.
+    from ..services import profile_copy
+
+    payload = request.get_json(silent=True) or {}
+    try:
+        target_profile_id = request_profile_id(require_write=True)
+        source_profile_id = int(payload.get("source_profile_id") or 0)
+        scope = str(payload.get("scope") or "").strip()
+        user_id = auth.current_user_id() or default_user_id()
+        if not target_profile_id:
+            raise ValueError("No target profile")
+        result = profile_copy.copy_profile_scope(source_profile_id, int(target_profile_id), scope, user_id=user_id)
+        return ok({"copy": result})
+    except PermissionError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 403
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
 
 @bp.get("/labels")
 def labels_list():

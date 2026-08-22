@@ -43,6 +43,7 @@ const moduleImportSpecs = [
   ['./liveSpeedStats.js', 'liveSpeedStatsSource'],
   ['./statusBar.js', 'statusBarSource'],
   ['./preferencesTools.js', 'preferencesToolsSource'],
+  ['./profileCopy.js', 'profileCopySource'],
   ['./diskMonitor.js', 'diskMonitorSource'],
   ['./portCheckActions.js', 'portCheckActionsSource'],
   ['./appStatus.js', 'appStatusSource'],

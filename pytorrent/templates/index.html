@@ -1056,6 +1056,14 @@
                   <div class="section-title"><i class="fa-solid fa-server"></i> rTorrent profiles</div>
                   <div id="profileList" class="mb-3 small"><span
                       class="spinner-border spinner-border-sm me-2"></span>Loading profiles...</div>
+                  <!-- Note: The profile-level preset copies only normal UI preferences; technical automation and path-specific settings stay local to each rTorrent instance. -->
+                  <div class="view-preferences-note">
+                    <i class="fa-solid fa-circle-info"></i>
+                    <span>Copy common profile preferences such as sorting/sidebar layout, columns, footer, tracker favicons, port checker and peer display settings. Disk Monitor, download paths and technical tools are excluded.</span>
+                    <button class="btn btn-sm btn-outline-primary d-none" type="button"
+                      data-profile-copy-scope="profile_basics" data-profile-copy-label="basic profile settings"><i
+                        class="fa-solid fa-copy"></i> Copy basic settings</button>
+                  </div>
                 </div>
                 <div class="surface-section mb-3">
                   <div class="section-title"><i class="fa-solid fa-stethoscope"></i> Diagnostics</div>
@@ -1092,8 +1100,6 @@
                         class="btn btn-outline-secondary btn-sm d-none" type="button"><i class="fa-solid fa-xmark"></i>
                         Cancel</button></div>
                   </div>
-                  <div class="form-text">Create one rTorrent profile at a time. Move/remove queues keep their order for
-                    each profile.</div>
                 </div>
               </div>
               <div id="toolTorrentStats" class="d-none">
@@ -1160,12 +1166,12 @@
                     <div id="prefPane-appearance" class="tab-pane fade show active" role="tabpanel">
                       <div class="surface-section">
                         <div class="section-title"><i class="fa-solid fa-palette"></i> Appearance</div>
-                        <div class="small text-muted mb-2">Framework, theme, typography and interface scale. Torrent view
-                          preferences also remember the selected filter, sorting and the height of the General / Files /
-                          Trackers panel.</div>
-                        <div class="view-preferences-note"><i class="fa-solid fa-circle-info"></i><span>View state is
-                            saved automatically in the database: current torrent filter, last sort column and direction,
-                            visible columns, and details panel height.</span><button id="resetViewPreferencesBtn"
+                        <div class="small text-muted mb-2">Framework, theme, typography, interface scale and details panel height are user preferences. Torrent filter and sorting are stored separately for each rTorrent profile.</div>
+                        <!-- Note: Only the database-backed profile view state is portable here; Columns has its own copy action and user-wide appearance settings stay untouched. -->
+                        <div class="view-preferences-note"><i class="fa-solid fa-circle-info"></i><span>Filter, sorting and sidebar expansion depend on the active rTorrent profile.</span><button
+                            class="btn btn-sm btn-outline-primary d-none" type="button"
+                            data-profile-copy-scope="preferences.view_state" data-profile-copy-label="view state"><i
+                              class="fa-solid fa-copy"></i> Copy from profile</button><button id="resetViewPreferencesBtn"
                             class="btn btn-sm btn-outline-secondary" type="button"><i
                               class="fa-solid fa-arrow-rotate-left"></i> Reset view defaults</button></div>
                         <div class="preferences-grid"><label class="form-field framework-preference-field"><span>UI framework</span><select
@@ -1209,6 +1215,8 @@
                       <div class="surface-section">
                         <div class="section-title"><i class="fa-solid fa-window-maximize"></i> Browser</div>
                         <div class="small text-muted mb-3">Small browser-only helpers that do not change torrent behavior.</div>
+                        <!-- Note: Profile-scoped Browser settings are explained before the controls, matching the other Preferences sections. -->
+                        <div class="view-preferences-note mb-3"><i class="fa-solid fa-circle-info"></i><span>Tracker favicons depend on the active rTorrent profile. Speed in browser title does not.</span><button class="btn btn-sm btn-outline-primary d-none" type="button" data-profile-copy-scope="preferences.tracker_favicons" data-profile-copy-label="tracker favicon settings"><i class="fa-solid fa-copy"></i> Copy from profile</button></div>
                         <!-- Note: Browser options use one compact list so two simple toggles do not look like separate feature panels. -->
                         <div class="preference-setting-list">
                           <label class="preference-setting-row form-check form-switch">
@@ -1337,6 +1345,8 @@
                       <div class="surface-section">
                         <div class="section-title"><i class="fa-solid fa-hard-drive"></i> Disk monitor</div>
                         <div class="small text-muted mb-2">Choose which storage value drives the footer disk progress bar and manage extra monitored paths.</div>
+                        <!-- Note: Disk-monitor paths and thresholds belong to the active rTorrent profile. -->
+                        <div class="view-preferences-note"><i class="fa-solid fa-circle-info"></i><span>Disk monitor settings depend on the active rTorrent profile.</span><button class="btn btn-sm btn-outline-primary d-none" type="button" data-profile-copy-scope="preferences.disk_monitor" data-profile-copy-label="disk monitor settings"><i class="fa-solid fa-copy"></i> Copy from profile</button></div>
                         <div id="diskMonitorOwner" class="preference-context-line">{% if prefs and prefs.disk_monitor_owner_label %}Owner: {{ prefs.disk_monitor_owner_label }}{% endif %}</div>
                         <!-- Note: Progress source is an exclusive choice, so regular radio rows are clearer than switch-looking radio controls. -->
                         <div class="preference-two-column-layout">
@@ -1364,6 +1374,8 @@
                       <div class="surface-section">
                         <div class="section-title"><i class="fa-solid fa-network-wired"></i> Port checker</div>
                         <div class="small text-muted mb-3">Check whether the active rTorrent incoming port is reachable from the internet.</div>
+                        <!-- Note: Port-check enablement is stored per active rTorrent profile; cached check results are not copied. -->
+                        <div class="view-preferences-note"><i class="fa-solid fa-circle-info"></i><span>Automatic port checking depends on the active rTorrent profile.</span><button class="btn btn-sm btn-outline-primary d-none" type="button" data-profile-copy-scope="preferences.port_checker" data-profile-copy-label="port checker settings"><i class="fa-solid fa-copy"></i> Copy from profile</button></div>
                         <!-- Note: Automatic checking, current status and manual diagnostics are separated so the result is readable at a glance. -->
                         <div class="preference-setting-list">
                           <label class="preference-setting-row form-check form-switch"><span class="preference-setting-copy"><b>Automatic port checks</b><small>Keep the port status available in the footer and reuse a result for up to 6 hours.</small></span><input id="portCheckEnabled" class="form-check-input" type="checkbox"></label>
@@ -1387,6 +1399,8 @@
                       <div class="surface-section">
                         <div class="section-title"><i class="fa-solid fa-users-viewfinder"></i> Peers</div>
                         <div class="small text-muted mb-3">Optional helpers for the torrent Peers tab.</div>
+                        <!-- Note: Reverse DNS and the Peers auto-refresh interval share the same profile-scoped preference row. -->
+                        <div class="view-preferences-note"><i class="fa-solid fa-circle-info"></i><span>Reverse DNS and the Peers auto-refresh interval depend on the active rTorrent profile.</span><button class="btn btn-sm btn-outline-primary d-none" type="button" data-profile-copy-scope="preferences.peers" data-profile-copy-label="peer settings"><i class="fa-solid fa-copy"></i> Copy from profile</button></div>
                         <!-- Note: A single peer preference uses the same compact setting-row pattern as Browser and Port checker. -->
                         <div class="preference-setting-list">
                           <label class="preference-setting-row form-check form-switch"><span class="preference-setting-copy"><b>Reverse DNS hostnames</b><small>Resolve peer IP addresses with the built-in cached resolver and show hostnames only in the Peers tab.</small></span><input id="reverseDnsEnabled" class="form-check-input" type="checkbox" {% if not prefs or prefs.reverse_dns_enabled %}checked{% endif %}></label>
@@ -1398,6 +1412,8 @@
                         <div class="section-title"><i class="fa-solid fa-table-columns"></i> Columns</div>
                         <div class="small text-muted mb-2">Choose visible columns and drag enabled desktop columns into the
                           order you want. Changes are saved automatically for the current user and rTorrent profile.</div>
+                        <!-- Note: Desktop/mobile column configuration is copied as one normalized profile-scoped payload. -->
+                        <div class="view-preferences-note"><i class="fa-solid fa-circle-info"></i><span>Column visibility, order, widths and mobile column choices depend on the active rTorrent profile.</span><button class="btn btn-sm btn-outline-primary d-none" type="button" data-profile-copy-scope="preferences.columns" data-profile-copy-label="column settings"><i class="fa-solid fa-copy"></i> Copy from profile</button></div>
                         <div id="columnManager" class="column-manager"></div>
                         <div class="mt-3"><button id="recommendedColumnsBtn" class="btn btn-outline-primary btn-sm"
                             type="button"><i class="fa-solid fa-table-columns"></i> Recommended columns</button><button
@@ -1410,6 +1426,8 @@
                         <div class="section-title"><i class="fa-solid fa-table-list"></i> Footer</div>
                         <div class="small text-muted mb-2">Choose visible items and drag them into the order you want.
                           Changes are saved automatically for the current user and rTorrent profile.</div>
+                        <!-- Note: Footer item/order and CPU/RAM chart presentation are one profile-scoped section. -->
+                        <div class="view-preferences-note"><i class="fa-solid fa-circle-info"></i><span>Footer items, order and CPU/RAM chart layout depend on the active rTorrent profile.</span><button class="btn btn-sm btn-outline-primary d-none" type="button" data-profile-copy-scope="preferences.footer" data-profile-copy-label="footer settings"><i class="fa-solid fa-copy"></i> Copy from profile</button></div>
                         <div id="footerPreferences" class="footer-preferences"></div>
                         <div class="system-chart-preferences">
                           <div class="system-chart-preferences-title">CPU / RAM chart</div>
@@ -1466,6 +1484,8 @@
                   <div class="tool-note mb-3">These settings are stored per active rTorrent profile. Light jobs are
                     control actions such as start, stop, pause, resume, labels, ratio assignment, reannounce and speed
                     limits. Heavy jobs are long or destructive actions such as move, remove and adding torrents.</div>
+                  <!-- Note: Copying job scheduling never copies the source profile connection or identity fields. -->
+                  <div class="view-preferences-note"><i class="fa-solid fa-circle-info"></i><span>Concurrency and watchdog timeouts depend on the active rTorrent profile.</span><button class="btn btn-sm btn-outline-primary d-none" type="button" data-profile-copy-scope="job_scheduling" data-profile-copy-label="job scheduling settings"><i class="fa-solid fa-copy"></i> Copy from profile</button></div>
                   <div class="job-settings-grid"><label class="form-field"><span>Heavy parallel jobs</span><input
                         id="jobHeavyParallel" class="form-control form-control-sm" type="number" min="1" max="64"
                         value="5"><small>Maximum heavy jobs running at once for this profile. Default:
@@ -1494,6 +1514,8 @@
                 <div class="logs-tools-layout">
                   <div class="surface-section operation-log-retention-section">
                     <div class="section-title"><i class="fa-solid fa-book"></i> Log retention</div>
+                    <!-- Note: Only retention policy is portable; log rows and cleanup execution metadata remain profile-local. -->
+                    <div class="view-preferences-note"><i class="fa-solid fa-circle-info"></i><span>Log retention policy depends on the active rTorrent profile. Log history itself is never copied.</span><button class="btn btn-sm btn-outline-primary d-none" type="button" data-profile-copy-scope="operation_logs" data-profile-copy-label="log retention settings"><i class="fa-solid fa-copy"></i> Copy from profile</button></div>
                     <div class="operation-log-retention-groups">
                       <section class="operation-log-retention-card">
                         <h6>Job logs</h6>
@@ -1631,6 +1653,8 @@
                 <div class="surface-section">
                   <div class="section-title"><i class="fa-solid fa-tags"></i> Labels</div>
                   <div class="tool-note mb-3">Create reusable labels and remove labels that are no longer needed.</div>
+                  <!-- Note: Label definitions are portable, but torrent-to-label assignments remain on their original profile. -->
+                  <div class="view-preferences-note"><i class="fa-solid fa-circle-info"></i><span>Saved labels depend on the active rTorrent profile. Copying labels does not change any torrent assignments.</span><button class="btn btn-sm btn-outline-primary d-none" type="button" data-profile-copy-scope="labels" data-profile-copy-label="labels"><i class="fa-solid fa-copy"></i> Copy from profile</button></div>
                   <div class="input-group input-group-sm mb-3"><span class="input-group-text"><i
                         class="fa-solid fa-tag"></i></span><input id="newLabelName" class="form-control"
                       placeholder="New label"><button id="newLabelBtn" class="btn btn-outline-primary" type="button"><i
@@ -1645,6 +1669,8 @@
                   <div class="section-title"><i class="fa-solid fa-scale-balanced"></i> Ratio rules</div>
                   <div class="tool-note mb-3">Rules are checked automatically every 5 minutes. A torrent uses the group
                     stored in its rTorrent custom ratio field.</div>
+                  <!-- Note: Ratio group definitions are profile-scoped; assignments and execution history are not portable. -->
+                  <div class="view-preferences-note"><i class="fa-solid fa-circle-info"></i><span>Ratio rule definitions depend on the active rTorrent profile. Torrent assignments and history are not copied.</span><button class="btn btn-sm btn-outline-primary d-none" type="button" data-profile-copy-scope="ratio_groups" data-profile-copy-label="ratio rules"><i class="fa-solid fa-copy"></i> Copy from profile</button></div>
                   <!-- Note: These fields match the ratio save payload used by the frontend module, including action, move target and safety switches. -->
                   <div class="management-card">
                     <div class="management-card-title"><i class="fa-solid fa-plus"></i> Add or edit group</div>
@@ -1691,6 +1717,8 @@
                   <div class="section-title"><i class="fa-solid fa-rss"></i> RSS downloader</div>
                   <div class="tool-note mb-3">Feeds are checked by schedule and every match is logged per feed/rule.
                   </div>
+                  <!-- Note: RSS copy carries feed/rule configuration only; scheduler timestamps and match history stay local. -->
+                  <div class="view-preferences-note"><i class="fa-solid fa-circle-info"></i><span>RSS feeds and rules depend on the active rTorrent profile. Match history and scheduler state are not copied.</span><button class="btn btn-sm btn-outline-primary d-none" type="button" data-profile-copy-scope="rss" data-profile-copy-label="RSS configuration"><i class="fa-solid fa-copy"></i> Copy from profile</button></div>
                   <div class="management-card">
                     <div class="management-card-title"><i class="fa-solid fa-satellite-dish"></i> Feed</div>
                     <div class="rss-form-grid management-form-grid"><input id="rssFeedId" type="hidden"><label
@@ -1765,7 +1793,10 @@
                               class="fa-solid fa-floppy-disk"></i> Save</button><button id="smartCheckBtn"
                             class="btn btn-sm btn-outline-success"><i class="fa-solid fa-play"></i> Check now</button></div>
                         <!-- UI note: Smart Queue keeps Save primary, uses outline success for the live check, and keeps dry-run neutral because it is read-only. -->
-                      </div><!-- UI note: Smart Queue switch is named plainly and kept inside the row on mobile. -->
+                      </div>
+                      <!-- Note: Smart Queue copy transfers configuration only; stalled timers, exclusions, grace state and history remain local. -->
+                      <div class="view-preferences-note"><i class="fa-solid fa-circle-info"></i><span>Smart Queue settings depend on the active rTorrent profile. Runtime state, exclusions and history are not copied.</span><button class="btn btn-sm btn-outline-primary d-none" type="button" data-profile-copy-scope="smart_queue" data-profile-copy-label="Smart Queue settings"><i class="fa-solid fa-copy"></i> Copy from profile</button></div>
+                      <!-- UI note: Smart Queue switch is named plainly and kept inside the row on mobile. -->
                       <div class="smart-settings-list">
                         <div class="smart-setting-row smart-toggle-row">
                           <div><label class="form-check-label" for="smartEnabled">Enabled</label>
@@ -1974,6 +2005,8 @@
                       </div>
                       <div class="small text-muted mb-3">Build a rule as: conditions first, then ordered actions.
                         Matching torrents are handled as one batch and the cooldown is applied to the whole rule.</div>
+                      <!-- Note: Automation copies are additive and de-duplicated; cooldown execution state and history stay on the source profile. -->
+                      <div class="view-preferences-note"><i class="fa-solid fa-circle-info"></i><span>Automation rules depend on the active rTorrent profile. Copying adds missing rules and does not copy runtime state or history.</span><button class="btn btn-sm btn-outline-primary d-none" type="button" data-profile-copy-scope="automations" data-profile-copy-label="automation rules"><i class="fa-solid fa-copy"></i> Copy from profile</button></div>
                       <input id="autoEditId" type="hidden">
                       <div class="automation-shell">
                         <div class="automation-main-card">
@@ -2117,6 +2150,8 @@
                   <div class="section-title"><i class="fa-solid fa-gears"></i> rTorrent config</div>
                   <div class="small text-muted mb-2">Grouped rTorrent runtime settings with inline recommendations and
                     compatibility status.</div>
+                  <!-- Note: Saved override values are portable, but the source daemon baseline is never reused on the target profile. -->
+                  <div class="view-preferences-note"><i class="fa-solid fa-circle-info"></i><span>Saved rTorrent overrides depend on the active profile. Copying preserves the target daemon's own reference baseline and does not apply values immediately.</span><button class="btn btn-sm btn-outline-primary d-none" type="button" data-profile-copy-scope="rtorrent_config" data-profile-copy-label="rTorrent config overrides"><i class="fa-solid fa-copy"></i> Copy from profile</button></div>
                   <div class="alert alert-secondary py-2 small rt-config-note">Reference value is kept from the first
                     override save. Later saves add or clear differences without replacing the original reference.</div>
                   <div class="rt-config-toolbar"><span id="rtConfigChangedCount" class="badge text-bg-secondary">No
@@ -2166,6 +2201,8 @@
                   <div class="backup-pane" data-backup-panel="profile">
                     <div class="tool-note mb-3">Creates and restores settings for the currently selected profile.
                       User-scoped preferences are remapped to the current user where needed.</div>
+                    <!-- Note: Automatic profile-backup policy is portable; backup files and scheduler progress remain profile-local. -->
+                    <div class="view-preferences-note"><i class="fa-solid fa-circle-info"></i><span>Automatic backup schedule depends on the active rTorrent profile. Existing backup files and last-run state are not copied.</span><button class="btn btn-sm btn-outline-primary d-none" type="button" data-profile-copy-scope="backup_schedule" data-profile-copy-label="profile backup schedule"><i class="fa-solid fa-copy"></i> Copy from profile</button></div>
                     <div class="backup-settings-grid mb-3"><label
                         class="form-check form-switch backup-auto-switch"><input id="profileBackupAutoEnabled"
                           class="form-check-input" type="checkbox"><span class="form-check-label">Enable automatic
@@ -2425,6 +2462,26 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Note: One shared source-profile picker is reused by Preferences and all profile-scoped configuration tools. -->
+  <div class="modal fade" id="profileCopyModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 id="profileCopyModalTitle" class="modal-title"><i class="fa-solid fa-copy"></i> Copy profile settings</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div id="profileCopyDescription" class="tool-note mb-3">Choose a source profile.</div>
+          <label class="form-field"><span>Source rTorrent profile</span><select id="profileCopySourceSelect" class="form-select"></select><small>Only profiles available to your account are listed. The current profile is the destination.</small></label>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button id="profileCopyConfirmBtn" type="button" class="btn btn-primary"><i class="fa-solid fa-copy"></i> Copy settings</button>
         </div>
       </div>
     </div>
