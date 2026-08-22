@@ -452,11 +452,23 @@ def _emit_disk_refresh_requested(profile_id: int, action_name: str, payload: dic
     _schedule_profile_disk_refresh(int(profile_id), len((payload or {}).get("hashes") or []))
 
 def _execute(profile: dict, action_name: str, payload: dict, user_id: int | None = None):
+    transfer_checkpoint = {"current": 0, "at": 0.0}
+
     def checkpoint(next_state: dict, current: int, total: int):
-        # Note: Checkpoint is defined before every action branch so profile-transfer jobs can resume safely.
+        # Note: Fast profile-transfer batches checkpoint every few items or once per second, avoiding one growing SQLite JSON write per torrent while keeping restart progress bounded.
         job_id = payload.get("__job_id")
-        if job_id:
-            _checkpoint_job(str(job_id), next_state, current, total)
+        if not job_id:
+            return
+        if action_name == "profile_transfer":
+            now = time.monotonic()
+            is_final = int(total or 0) > 0 and int(current or 0) >= int(total or 0)
+            item_delta = int(current or 0) - int(transfer_checkpoint["current"] or 0)
+            time_delta = now - float(transfer_checkpoint["at"] or 0.0)
+            if not is_final and item_delta < 5 and transfer_checkpoint["at"] and time_delta < 1.0:
+                return
+            transfer_checkpoint["current"] = int(current or 0)
+            transfer_checkpoint["at"] = now
+        _checkpoint_job(str(job_id), next_state, current, total)
 
     if action_name == "smart_queue_check":
         from . import smart_queue
@@ -601,6 +613,20 @@ def _emit_destination_profile_refresh(job: dict, payload: dict, action_name: str
         pass
 
 
+def _defer_profile_transfer_bulk_refresh(action_name: str, payload: dict) -> bool:
+    """Return true when a later ordered bulk part will perform the shared cache refresh."""
+    # Note: Large profile transfers avoid two full torrent-cache scans after every 100-item part; the final ordered part refreshes both source and target profiles once.
+    if action_name != "profile_transfer":
+        return False
+    context = (payload or {}).get("job_context") or {}
+    try:
+        part = int(context.get("bulk_part") or 0)
+        parts = int(context.get("bulk_parts") or 0)
+    except (TypeError, ValueError):
+        return False
+    return parts > 1 and 0 < part < parts
+
+
 def _finish_running_job(job_id: str, profile: dict, job: dict, payload: dict, result: dict | None, event_meta: dict) -> None:
     _set_job(job_id, "done", result=result, finished=True)
     _record_job_event(profile["id"], job["action"], "done", payload, result=result or {}, job_id=job_id, user_id=int(job.get("user_id") or 0))
@@ -616,8 +642,10 @@ def _finish_running_job(job_id: str, profile: dict, job: dict, payload: dict, re
     })
     action_name = str(job["action"] or "")
     _emit_disk_refresh_requested(int(profile["id"]), action_name, payload, result or {})
-    _emit_torrent_refresh(profile, action_name)
-    _emit_destination_profile_refresh(job, payload, action_name)
+    defer_bulk_refresh = _defer_profile_transfer_bulk_refresh(action_name, payload)
+    if not defer_bulk_refresh:
+        _emit_torrent_refresh(profile, action_name)
+        _emit_destination_profile_refresh(job, payload, action_name)
     _schedule_delayed_torrent_refresh(profile, action_name)
     _emit("job_update", {"id": job_id, "profile_id": profile["id"], "status": "done", "result": result})
 
@@ -640,6 +668,15 @@ def _handle_job_exception(job_id: str, job: dict, payload: dict, exc: Exception)
                     payload.get("requested_limits"),
                     payload.get("previous_limits"),
                 )
+            except Exception:
+                pass
+        if str(job.get("action") or "") == "profile_transfer":
+            # Note: A terminal bulk-transfer failure forces one endpoint refresh so earlier successful parts are visible even when the final deferred refresh never runs.
+            try:
+                source_profile = get_profile(int(job.get("profile_id") or 0), int(job.get("user_id") or 0))
+                if source_profile:
+                    _emit_torrent_refresh(source_profile, "profile_transfer")
+                _emit_destination_profile_refresh(job, payload, "profile_transfer")
             except Exception:
                 pass
         _record_job_event(int(job.get("profile_id") or 0), job.get("action"), "failed", payload, error=str(exc), job_id=job_id, user_id=int(job.get("user_id") or 0))

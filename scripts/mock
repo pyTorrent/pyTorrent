@@ -743,6 +743,9 @@ class MockRtorrentState:
                 label = text.split("=", 1)[1]
             if text.startswith("d.directory.set="):
                 directory = text.split("=", 1)[1]
+            if text.startswith("d.directory_base.set="):
+                # Note: The mock mirrors exact multi-file path restoration used by metadata-only profile transfers.
+                directory = text.split("=", 1)[1]
         self.torrents.append({
             "mock_index": index, "hash": torrent_hash, "name": f"Mock Added Torrent {index + 1}", "state": 1, "complete": 0,
             "size": size, "completed": 0, "ratio": 0, "up_rate": 0, "down_rate": 512_000,

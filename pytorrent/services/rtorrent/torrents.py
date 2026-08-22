@@ -1,7 +1,7 @@
 from __future__ import annotations
 import time
 from .client import *
-from .files import export_torrent_file, iter_remote_file_chunks, set_file_priorities
+from .files import export_torrent_file, iter_remote_file_chunks, read_torrent_session_bytes, set_file_priorities, torrent_export_context
 from .system import disk_usage_for_default_path
 
 XMLRPC_DEFAULT_SIZE_LIMIT_BYTES = 512 * 1024
@@ -65,21 +65,24 @@ def _parse_xmlrpc_size_limit(value) -> int:
         return XMLRPC_DEFAULT_SIZE_LIMIT_BYTES
 
 
-def xmlrpc_size_limit(profile: dict) -> dict:
+def xmlrpc_size_limit(profile: dict, *, client: ScgiRtorrentClient | None = None) -> dict:
     """Return the current rTorrent XML-RPC request size limit."""
+    # Note: Bulk operations may reuse an existing target client so limit discovery does not allocate another client wrapper.
     try:
-        raw = client_for(profile).call('network.xmlrpc.size_limit')
+        raw = (client or client_for(profile)).call('network.xmlrpc.size_limit')
         limit = _parse_xmlrpc_size_limit(raw)
         return {'ok': True, 'raw': str(raw), 'bytes': limit, 'human': human_size(limit)}
     except Exception as exc:
         return {'ok': False, 'raw': '', 'bytes': XMLRPC_DEFAULT_SIZE_LIMIT_BYTES, 'human': human_size(XMLRPC_DEFAULT_SIZE_LIMIT_BYTES), 'error': str(exc)}
 
 
-def estimate_torrent_upload_request_size(data: bytes, start: bool = True, directory: str = '', label: str = '', file_priorities: list[dict] | None = None) -> int:
+def estimate_torrent_upload_request_size(data: bytes, start: bool = True, directory: str = '', label: str = '', file_priorities: list[dict] | None = None, *, directory_base: bool = False) -> int:
     """Estimate the XML-RPC body size produced by rTorrent load.raw* for a .torrent file."""
+    # Note: Multi-file profile transfers can use d.directory_base.set to preserve the exact existing data root without appending d.name again.
     commands = []
     if directory:
-        commands.append(f'd.directory.set={directory}')
+        directory_method = 'd.directory_base.set' if directory_base else 'd.directory.set'
+        commands.append(f'{directory_method}={directory}')
     if label:
         commands.append(f'd.custom1.set={label}')
     method = 'load.raw' if file_priorities else ('load.raw_start' if start else 'load.raw')
@@ -1178,19 +1181,168 @@ def start_or_resume_hash(c: ScgiRtorrentClient, torrent_hash: str, prefer_start:
     return result
 
 
-def _read_exported_torrent_bytes(profile: dict, torrent_hash: str) -> tuple[bytes, dict]:
-    item = export_torrent_file(profile, torrent_hash)
+def _profile_transfer_multicall_value(value):
+    """Unwrap one XML-RPC system.multicall result value."""
+    if isinstance(value, dict) and ("faultCode" in value or "faultString" in value):
+        raise RuntimeError(str(value.get("faultString") or value.get("faultCode") or "rTorrent multicall failed"))
+    if isinstance(value, (list, tuple)) and len(value) == 1:
+        return value[0]
+    return value
+
+
+def _profile_transfer_source_states(c: ScgiRtorrentClient, torrent_hashes: list[str]) -> dict[str, dict]:
+    """Read live source paths and status for a transfer batch with a targeted multicall."""
+    # Note: One system.multicall replaces several SCGI socket round trips per torrent; individual calls remain as a compatibility fallback.
+    fields = (
+        ("directory", "d.directory"),
+        ("base_path", "d.base_path"),
+        ("label", "d.custom1"),
+        ("state", "d.state"),
+        ("active", "d.is_active"),
+        ("name", "d.name"),
+        ("is_multi_file", "d.is_multi_file"),
+    )
+    hashes = _unique_torrent_hashes(torrent_hashes)
+    states = {h: {} for h in hashes}
+    calls = [
+        {"methodName": method, "params": [h]}
+        for h in hashes
+        for _key, method in fields
+    ]
+    raw_results = None
+    if calls:
+        try:
+            raw_results = c.call("system.multicall", calls)
+        except Exception:
+            raw_results = None
+    if isinstance(raw_results, (list, tuple)) and len(raw_results) == len(calls):
+        offset = 0
+        for h in hashes:
+            for key, _method in fields:
+                value = raw_results[offset]
+                offset += 1
+                try:
+                    states[h][key] = _profile_transfer_multicall_value(value)
+                except Exception:
+                    pass
+
+    for h in hashes:
+        state = states[h]
+        for key, method in fields:
+            if key in state:
+                continue
+            try:
+                state[key] = c.call(method, h)
+            except Exception:
+                if key == "active":
+                    state[key] = state.get("state", 0)
+                elif key in {"state", "is_multi_file"}:
+                    state[key] = 0
+                else:
+                    state[key] = ""
+    return states
+
+
+def _profile_transfer_persist_sessions(c: ScgiRtorrentClient, torrent_hashes: list[str]) -> dict[str, str]:
+    """Persist fresh rTorrent resume metadata before exporting a transfer batch."""
+    # Note: Fresh session metadata prevents a target profile from inheriting a stale completion map; system.multicall keeps the save cost to one SCGI round trip in normal installations.
+    pending = _unique_torrent_hashes(torrent_hashes)
+    saved_by: dict[str, str] = {}
+    for method in ("d.save_full_session", "d.save_resume"):
+        if not pending:
+            break
+        calls = [{"methodName": method, "params": [h]} for h in pending]
+        raw_results = None
+        try:
+            raw_results = c.call("system.multicall", calls)
+        except Exception:
+            raw_results = None
+        if isinstance(raw_results, (list, tuple)) and len(raw_results) == len(calls):
+            retry = []
+            for h, value in zip(pending, raw_results):
+                try:
+                    _profile_transfer_multicall_value(value)
+                    saved_by[h] = method
+                except Exception:
+                    retry.append(h)
+            pending = retry
+            continue
+
+        # Note: Older rTorrent builds without system.multicall support retain compatibility through the existing per-torrent save methods.
+        retry = []
+        for h in pending:
+            try:
+                c.call(method, h)
+                saved_by[h] = method
+            except Exception:
+                retry.append(h)
+        pending = retry
+    return saved_by
+
+
+def _profile_transfer_load_location(state: dict, torrent_hash: str) -> tuple[str, bool]:
+    """Return the exact live load path and whether rTorrent must use d.directory_base.set."""
+    # Note: For multi-file torrents d.directory already includes the data root; d.directory.set would append d.name again, while d.directory_base.set preserves the exact current path.
+    is_multi_file = bool(int(state.get("is_multi_file") or 0))
+    directory = _remote_clean_path(state.get("directory") or "")
+    if directory and directory.startswith("/"):
+        return directory, is_multi_file
+    base_path = _remote_clean_path(state.get("base_path") or "")
+    if base_path and base_path.startswith("/"):
+        if is_multi_file:
+            return base_path, True
+        return posixpath.dirname(base_path.rstrip("/")) or "/", False
+    raise ValueError(f"Cannot determine current save directory for {torrent_hash}")
+
+
+def _profile_transfer_load_directory(state: dict, torrent_hash: str) -> str:
+    """Return the live data directory used by transfer helpers that only need a path."""
+    # Note: Keep this compatibility helper while the transfer loader separately tracks the required rTorrent directory setter.
+    return _profile_transfer_load_location(state, torrent_hash)[0]
+
+
+def _profile_transfer_data_path(state: dict, torrent_hash: str) -> str:
+    """Return the live payload path used by a physical profile-transfer move."""
+    # Note: Prefer d.base_path because it already resolves single-file and multi-file torrent layouts correctly.
+    base_path = _remote_clean_path(state.get("base_path") or "")
+    if base_path and base_path.startswith("/"):
+        return base_path
+    directory = _profile_transfer_load_directory(state, torrent_hash)
+    name = str(state.get("name") or "").strip()
+    if int(state.get("is_multi_file") or 0):
+        return directory
+    return _remote_join(directory, name) if name else directory
+
+
+def _read_exported_torrent_bytes(profile: dict, torrent_hash: str, *, export_context: dict | None = None) -> tuple[bytes, dict]:
+    """Read one exported .torrent while reusing batch export state when available."""
+    # Note: The bulk fast path reads the freshly saved session file directly; legacy source discovery remains the fallback for unusual rTorrent layouts.
+    direct = read_torrent_session_bytes(profile, torrent_hash, export_context=export_context)
+    if direct is not None:
+        return direct
+    item = export_torrent_file(profile, torrent_hash, export_context=export_context)
     if item.get("local"):
         return LocalPath(str(item.get("path") or "")).read_bytes(), item
-    data = b"".join(bytes(chunk) for chunk in iter_remote_file_chunks(profile, str(item.get("path") or "")) if chunk)
+    context = export_context or {}
+    data = b"".join(
+        bytes(chunk)
+        for chunk in iter_remote_file_chunks(
+            profile,
+            str(item.get("path") or ""),
+            client=context.get("client"),
+            readability_checked=bool(item.get("readability_checked")),
+        )
+        if chunk
+    )
     if not data:
         raise RuntimeError(f"Cannot read exported torrent file for {torrent_hash}")
     return data, item
 
 
-def _move_profile_transfer_data(source_client: ScgiRtorrentClient, torrent_hash: str, target_path: str) -> dict:
+def _move_profile_transfer_data(source_client: ScgiRtorrentClient, torrent_hash: str, target_path: str, *, source_data_path: str = "") -> dict:
     """Move one torrent data path for a profile transfer after backend permission checks."""
-    src = _remote_clean_path(_torrent_data_path(source_client, torrent_hash))
+    # Note: Bulk transfers pass the already fetched live data path so move preparation does not re-query d.base_path/d.directory per torrent.
+    src = _remote_clean_path(source_data_path or _torrent_data_path(source_client, torrent_hash))
     if not src:
         raise ValueError(f"Cannot determine source path for {torrent_hash}")
     dst = _remote_join(target_path, posixpath.basename(src.rstrip("/")))
@@ -1203,13 +1355,14 @@ def _move_profile_transfer_data(source_client: ScgiRtorrentClient, torrent_hash:
     except Exception:
         pass
     if src == dst:
-        return {"skipped_data_move": "source and destination are the same"}
+        return {"skipped_data_move": "source and destination are the same", "moved_to": dst}
     _run_remote_move(source_client, src, dst)
     return {"moved_from": src, "moved_to": dst}
 
 
 def transfer_profile(source_profile: dict, target_profile: dict, torrent_hashes: list[str], payload: dict | None = None, checkpoint=None, resume_state: dict | None = None) -> dict:
-    """Move torrent entries between rTorrent profiles; data moving is delegated to a separate helper."""
+    """Move torrent entries between rTorrent profiles while preserving each live data location unless data is explicitly moved."""
+    # Note: Metadata-only transfers are pointer changes, not data moves: every target torrent is loaded with the source torrent's current d.directory.
     torrent_hashes = _unique_torrent_hashes(torrent_hashes)
     payload = payload or {}
     resume_state = resume_state or {}
@@ -1230,12 +1383,19 @@ def transfer_profile(source_profile: dict, target_profile: dict, torrent_hashes:
         label_value = ""
     if len(label_value) > 120:
         label_value = label_value[:120]
-    if not target_path or not target_path.startswith("/") or target_path == "/":
+    if move_data and (not target_path or not target_path.startswith("/") or target_path == "/"):
         raise ValueError("Missing or unsafe target path")
+
     completed_hashes = set(str(x) for x in (resume_state.get("completed_hashes") or []))
     previous_results = list(resume_state.get("results") or [])
     source_client = client_for(source_profile)
     target_client = client_for(target_profile)
+    pending_hashes = [h for h in torrent_hashes if str(h) not in completed_hashes]
+    source_states = _profile_transfer_source_states(source_client, pending_hashes)
+    session_saved_by = _profile_transfer_persist_sessions(source_client, pending_hashes)
+    source_names = {h: str((source_states.get(h) or {}).get("name") or "") for h in pending_hashes}
+    export_context = torrent_export_context(source_profile, client=source_client, names=source_names, prefer_session=True)
+    target_limit = xmlrpc_size_limit(target_profile, client=target_client)
 
     def missing_transfer_item(torrent_hash: str, exc: Exception, base: dict | None = None) -> dict:
         item = dict(base or {})
@@ -1248,18 +1408,33 @@ def transfer_profile(source_profile: dict, target_profile: dict, torrent_hashes:
             checkpoint({"completed_hashes": sorted(completed_hashes), "results": results}, len(completed_hashes), len(torrent_hashes))
 
     results = previous_results
-    for h in [x for x in torrent_hashes if str(x) not in completed_hashes]:
+    for h in pending_hashes:
+        source_state = source_states.get(h) or {}
         item = {
             "hash": h,
             "source_profile_id": int(source_profile.get("id") or 0),
             "target_profile_id": int(target_profile.get("id") or 0),
             "target_path": target_path,
+            "preserved_source_directory": not move_data,
             "move_data": move_data,
             "move_data_requested": bool(payload.get("move_data_requested")),
             "move_data_downgraded": bool(payload.get("move_data_downgraded")),
         }
         try:
-            data, exported = _read_exported_torrent_bytes(source_profile, h)
+            if move_data:
+                load_directory, load_directory_base = target_path, False
+            else:
+                load_directory, load_directory_base = _profile_transfer_load_location(source_state, h)
+            item["load_directory"] = load_directory
+            item["load_directory_method"] = "d.directory_base.set" if load_directory_base else "d.directory.set"
+        except Exception as path_exc:
+            # Note: One malformed live path is isolated to that torrent so a large transfer batch can continue safely.
+            item.update({"ok": False, "error": str(path_exc), "skipped": "missing_source_directory"})
+            results.append(item)
+            mark_done(h, results)
+            continue
+        try:
+            data, exported = _read_exported_torrent_bytes(source_profile, h, export_context=export_context)
         except RuntimeError as export_exc:
             if _is_missing_info_hash_error(export_exc):
                 item.update(missing_transfer_item(h, export_exc, item))
@@ -1282,30 +1457,39 @@ def transfer_profile(source_profile: dict, target_profile: dict, torrent_hashes:
             results.append(item)
             mark_done(h, results)
             continue
+
         item["exported_from"] = exported.get("path")
+        if session_saved_by.get(h):
+            item["metadata_session_saved_by"] = session_saved_by[h]
         if exported.get("session_saved_by"):
             # Note: This identifies transfers recovered from rTorrent session state rather than an original watch/source file.
             item["metadata_recovered_by"] = exported.get("session_saved_by")
-        limit = validate_torrent_upload_size(target_profile, data, False, target_path, "")
-        if not limit.get("ok"):
-            raise RuntimeError(f"Target profile XML-RPC limit is too small for {h}: {limit.get('request_h')} > {limit.get('limit_h')}")
-        try:
-            label = str(source_client.call("d.custom1", h) or "")
-        except Exception:
-            label = ""
+
+        label = str(source_state.get("label") or "")
         target_label = label_value if label_value else label
-        try:
-            was_state = int(source_client.call("d.state", h) or 0)
-        except Exception:
-            was_state = 0
-        try:
-            was_active = int(source_client.call("d.is_active", h) or 0)
-        except Exception:
-            was_active = was_state
+        was_state = int(source_state.get("state") or 0)
+        was_active = int(source_state.get("active") or was_state)
+        # Note: Size validation uses the same start mode, directory and label that will be sent to load.raw/load.raw_start.
+        start_on_target = bool(was_state or was_active) if post_action in {"none", "current"} else post_action == "start"
+        request_bytes = estimate_torrent_upload_request_size(
+            data, start_on_target, load_directory, target_label, directory_base=load_directory_base
+        )
+        limit_bytes = int(target_limit.get("bytes") or XMLRPC_DEFAULT_SIZE_LIMIT_BYTES)
+        if request_bytes > limit_bytes:
+            item.update({
+                "ok": False,
+                "error": f"Target profile XML-RPC limit is too small for {h}: {human_size(request_bytes)} > {target_limit.get('human') or human_size(limit_bytes)}",
+                "skipped": "xmlrpc_size_limit",
+            })
+            results.append(item)
+            mark_done(h, results)
+            continue
+
         moved_to = ""
         if move_data:
             try:
-                move_result = _move_profile_transfer_data(source_client, h, target_path)
+                source_data_path = _profile_transfer_data_path(source_state, h)
+                move_result = _move_profile_transfer_data(source_client, h, target_path, source_data_path=source_data_path)
             except Exception as move_exc:
                 if not _is_missing_info_hash_error(move_exc):
                     raise
@@ -1315,10 +1499,13 @@ def transfer_profile(source_profile: dict, target_profile: dict, torrent_hashes:
                 continue
             item.update(move_result)
             moved_to = str(move_result.get("moved_to") or "")
+
         # Note: The default keeps the torrent status from the source profile; explicit actions override it.
-        start_on_target = bool(was_state or was_active) if post_action in {"none", "current"} else post_action == "start"
         try:
-            added = add_torrent_raw(target_profile, data, start_on_target, target_path, target_label)
+            added = add_torrent_raw(
+                target_profile, data, start_on_target, load_directory, target_label,
+                client=target_client, directory_base=load_directory_base,
+            )
             if not added.get("ok"):
                 raise RuntimeError(added.get("error") or "target add failed")
         except Exception:
@@ -1331,6 +1518,7 @@ def transfer_profile(source_profile: dict, target_profile: dict, torrent_hashes:
                 except Exception as rollback_exc:
                     item["rollback_error"] = str(rollback_exc)
             raise
+
         if post_action in {"stop", "pause", "check", "recheck"}:
             try:
                 if post_action == "stop":
@@ -1342,6 +1530,7 @@ def transfer_profile(source_profile: dict, target_profile: dict, torrent_hashes:
                 item["post_action_applied"] = post_action
             except Exception as post_exc:
                 item["post_action_error"] = str(post_exc)
+
         try:
             source_client.call("d.erase", h)
         except Exception as erase_exc:
@@ -1349,15 +1538,29 @@ def transfer_profile(source_profile: dict, target_profile: dict, torrent_hashes:
                 raise
             item["source_erase_skipped"] = "missing_info_hash"
             item["source_erase_error"] = str(erase_exc)
+
         item["target_started"] = start_on_target
         item["label"] = target_label
         item["previous_label"] = label
         item["post_action"] = post_action
         results.append(item)
         mark_done(h, results)
+
     errors = [item for item in results if item.get("error")]
     moved_count = len([item for item in results if not item.get("error")])
-    return {"ok": True, "count": moved_count, "requested_count": len(torrent_hashes), "move_data": move_data, "target_profile_id": int(target_profile.get("id") or 0), "target_path": target_path, "label": label_value, "post_action": post_action, "results": results, "errors": errors}
+    return {
+        "ok": True,
+        "count": moved_count,
+        "requested_count": len(torrent_hashes),
+        "move_data": move_data,
+        "preserve_source_path": not move_data,
+        "target_profile_id": int(target_profile.get("id") or 0),
+        "target_path": target_path,
+        "label": label_value,
+        "post_action": post_action,
+        "results": results,
+        "errors": errors,
+    }
 
 def action(profile: dict, torrent_hashes: list[str], name: str, payload: dict | None = None, checkpoint=None, resume_state: dict | None = None) -> dict:
     torrent_hashes = _unique_torrent_hashes(torrent_hashes)
@@ -1647,11 +1850,14 @@ def set_limits(profile: dict, down: int | None, up: int | None):
     return {"ok": True, "down": int(down or 0), "up": int(up or 0)}
 
 
-def add_torrent_raw(profile: dict, data: bytes, start: bool = True, directory: str = "", label: str = "", file_priorities: list[dict] | None = None) -> dict:
-    c = client_for(profile)
+def add_torrent_raw(profile: dict, data: bytes, start: bool = True, directory: str = "", label: str = "", file_priorities: list[dict] | None = None, *, client: ScgiRtorrentClient | None = None, directory_base: bool = False) -> dict:
+    """Load raw torrent metadata, optionally reusing an existing SCGI client."""
+    # Note: Profile-transfer batches reuse their target client; directory_base preserves an exact multi-file data root without changing legacy callers.
+    c = client or client_for(profile)
     commands = []
     if directory:
-        commands.append(f"d.directory.set={directory}")
+        directory_method = "d.directory_base.set" if directory_base else "d.directory.set"
+        commands.append(f"{directory_method}={directory}")
     if label:
         commands.append(f"d.custom1.set={label}")
     # Note: File selection before start loads the torrent stopped, changes priorities, then starts it if requested.

@@ -384,6 +384,7 @@ def _remote_join(*parts: str) -> str:
 
 def _run_remote_move(c: ScgiRtorrentClient, src: str, dst: str, poll_interval: float = 2.0) -> None:
     """Run a remote mv without binding the transfer time to the SCGI timeout."""
+    # Note: Fast same-filesystem renames are polled quickly first; longer cross-filesystem moves back off to the existing low-pressure interval.
     token = uuid.uuid4().hex
     status_path = f"/tmp/pytorrent-move-{token}.status"
     start_script = (
@@ -411,8 +412,12 @@ def _run_remote_move(c: ScgiRtorrentClient, src: str, dst: str, poll_interval: f
 
     _rt_execute_allow_timeout(c, "execute.throw", "sh", "-c", start_script, "pytorrent-move-start", src, dst, status_path)
 
+    fast_poll_delays = (0.05, 0.1, 0.2, 0.4)
+    poll_attempt = 0
     while True:
-        time.sleep(max(0.25, poll_interval))
+        delay = fast_poll_delays[poll_attempt] if poll_attempt < len(fast_poll_delays) else max(0.25, poll_interval)
+        poll_attempt += 1
+        time.sleep(delay)
         try:
             output = str(_rt_execute_capture_readonly(c, "sh", "-c", poll_script, "pytorrent-move-poll", status_path) or "").strip()
         except Exception as exc:

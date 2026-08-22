@@ -466,9 +466,9 @@
               <div class="profile-transfer-panel-body">
                 <div id="profileTransferList" class="profile-transfer-list"><span
                     class="spinner-border spinner-border-sm me-2"></span>Loading profiles...</div>
-                <label class="form-field profile-transfer-path-field"><span>Target save path</span>
+                <label class="form-field profile-transfer-path-field"><span>Target save path <small>(data move only)</small></span>
                   <div class="input-group"><input id="profileTransferTargetPath" class="form-control"
-                      placeholder="Use target profile default path"><button class="btn btn-outline-secondary"
+                      placeholder="Use target profile default path when moving data"><button class="btn btn-outline-secondary"
                       data-profile-transfer-browse="1" type="button"><i class="fa-solid fa-folder-open"></i> Browse</button>
                   </div>
                 </label>
@@ -513,7 +513,7 @@
               <div><span class="profile-transfer-field-label">Destination validation</span><small>Disk space and data-move permission are checked for the selected target.</small></div>
             </div>
             <div id="profileTransferDiskInfo" class="profile-transfer-disk">Select a target profile to see destination disk space.</div>
-            <div id="profileTransferPermissionNote" class="profile-transfer-permission form-text">Backend validation decides whether data files can be moved. If not, only torrent metadata will be transferred.</div>
+            <div id="profileTransferPermissionNote" class="profile-transfer-permission form-text">Metadata-only transfer preserves each torrent's current rTorrent save path. Backend validation is required only when data files are moved.</div>
             <!-- Note: Outside-root destinations stay visible as a warning and require an explicit in-modal acknowledgement before transfer. -->
             <div id="profileTransferOutsideRootWarning" class="profile-transfer-outside-warning d-none" role="alert" aria-live="polite">
               <div class="profile-transfer-outside-warning-copy">

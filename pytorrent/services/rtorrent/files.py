@@ -95,12 +95,15 @@ def remote_file_readability_error(profile: dict, source_path: str) -> str | None
     return _remote_readability_error(client_for(profile), source_path)
 
 
-def iter_remote_file_chunks(profile: dict, source_path: str, size: int | None = None, chunk_size: int | None = None):
-    c = client_for(profile)
+def iter_remote_file_chunks(profile: dict, source_path: str, size: int | None = None, chunk_size: int | None = None, *, client: ScgiRtorrentClient | None = None, readability_checked: bool = False):
+    """Stream a remote file in bounded chunks through the rTorrent host."""
+    # Note: Transfer jobs can reuse their existing SCGI client and a prior readable-file probe, avoiding redundant round trips during large metadata batches.
+    c = client or client_for(profile)
     clean = _remote_clean_path(source_path)
-    err = _remote_readability_error(c, clean)
-    if err:
-        raise RuntimeError(err)
+    if not readability_checked:
+        err = _remote_readability_error(c, clean)
+        if err:
+            raise RuntimeError(err)
     block_size = max(65536, int(chunk_size or REMOTE_READ_CHUNK_BYTES or 1048576))
     offset = 0
     emitted = 0
@@ -125,7 +128,8 @@ def iter_remote_file_chunks(profile: dict, source_path: str, size: int | None = 
         yield chunk
         emitted += len(chunk)
         offset += 1
-        if size is not None and emitted >= int(size):
+        # Note: A short block is EOF, so small .torrent files finish without an extra empty SCGI read.
+        if len(chunk) < block_size or (size is not None and emitted >= int(size)):
             break
 
 
@@ -666,26 +670,51 @@ def _rtorrent_session_path(c: ScgiRtorrentClient) -> str:
     return ""
 
 
-def _torrent_source_file_candidates(c: ScgiRtorrentClient, torrent_hash: str) -> list[str]:
-    # Note: rTorrent may keep stale watch/tied paths; session candidates preserve .torrent export when the original source was moved.
-    candidates: list[str] = []
-    for method in ("d.tied_to_file", "d.get_tied_to_file", "d.loaded_file", "d.get_loaded_file", "d.session_file", "d.get_session_file"):
+
+def _torrent_session_source_candidates(session_path: str, torrent_hash: str) -> list[str]:
+    """Return direct session-file candidates without querying per-torrent tied-file methods."""
+    # Note: Bulk profile transfers use these cheap deterministic paths first and fall back to legacy discovery only when needed.
+    resolved_session_path = _remote_clean_path(session_path)
+    if not resolved_session_path:
+        return []
+    clean_hash = str(torrent_hash or "").strip()
+    if not clean_hash:
+        return []
+    candidates = []
+    for h in dict.fromkeys([clean_hash, clean_hash.upper(), clean_hash.lower()]):
+        candidates.append(_remote_join(resolved_session_path, f"{h}.torrent"))
+        candidates.append(_remote_join(resolved_session_path, h))
+    return list(dict.fromkeys(_remote_clean_path(item) for item in candidates if _remote_clean_path(item)))
+
+def _torrent_source_file_candidates(c: ScgiRtorrentClient, torrent_hash: str, *, session_path: str | None = None, prefer_session: bool = False) -> list[str]:
+    """Return readable-source candidates without changing the legacy export order by default."""
+    # Note: Profile transfers prefer the current session copy because it avoids stale watch paths and can be resolved from one cached session directory for the whole batch.
+    tied_candidates: list[str] = []
+    methods = (
+        ("d.session_file", "d.get_session_file", "d.loaded_file", "d.get_loaded_file", "d.tied_to_file", "d.get_tied_to_file")
+        if prefer_session
+        else ("d.tied_to_file", "d.get_tied_to_file", "d.loaded_file", "d.get_loaded_file", "d.session_file", "d.get_session_file")
+    )
+    for method in methods:
         try:
             value = str(c.call(method, torrent_hash) or "").strip()
         except Exception:
             continue
         if value:
-            candidates.append(value)
-    session_path = _rtorrent_session_path(c)
-    hash_values = []
+            tied_candidates.append(value)
+
+    resolved_session_path = _remote_clean_path(session_path) if session_path is not None else _rtorrent_session_path(c)
+    session_candidates: list[str] = []
+    temp_candidates: list[str] = []
     clean_hash = str(torrent_hash or "").strip()
-    if clean_hash:
-        hash_values.extend([clean_hash, clean_hash.upper(), clean_hash.lower()])
-    for h in dict.fromkeys(hash_values):
-        if session_path:
-            candidates.append(_remote_join(session_path, f"{h}.torrent"))
-            candidates.append(_remote_join(session_path, h))
-        candidates.append(f"/tmp/{h}.torrent")
+    hash_values = list(dict.fromkeys([clean_hash, clean_hash.upper(), clean_hash.lower()])) if clean_hash else []
+    for h in hash_values:
+        if resolved_session_path:
+            session_candidates.append(_remote_join(resolved_session_path, f"{h}.torrent"))
+            session_candidates.append(_remote_join(resolved_session_path, h))
+        temp_candidates.append(f"/tmp/{h}.torrent")
+
+    candidates = (session_candidates + tied_candidates if prefer_session else tied_candidates + session_candidates) + temp_candidates
     result = []
     for item in candidates:
         clean = _remote_clean_path(item)
@@ -694,8 +723,14 @@ def _torrent_source_file_candidates(c: ScgiRtorrentClient, torrent_hash: str) ->
     return result
 
 
-def _torrent_source_file(c: ScgiRtorrentClient, torrent_hash: str) -> str:
-    for source in _torrent_source_file_candidates(c, torrent_hash):
+def _torrent_source_file(c: ScgiRtorrentClient, torrent_hash: str, *, session_path: str | None = None, prefer_session: bool = False) -> str:
+    """Return the first readable .torrent source with an optional session-first fast path."""
+    # Note: Session-first transfer mode avoids all tied-file RPCs when the normal rTorrent session .torrent exists.
+    if prefer_session and session_path is not None:
+        for source in _torrent_session_source_candidates(session_path, torrent_hash):
+            if _remote_file_exists(c, source):
+                return source
+    for source in _torrent_source_file_candidates(c, torrent_hash, session_path=session_path, prefer_session=prefer_session):
         if _remote_file_exists(c, source):
             return source
     return ""
@@ -712,20 +747,68 @@ def _save_torrent_session_source(c: ScgiRtorrentClient, torrent_hash: str) -> li
     return saved_methods
 
 
-def export_torrent_file(profile: dict, torrent_hash: str) -> dict:
-    c = client_for(profile)
-    name = str(c.call("d.name", torrent_hash) or torrent_hash).strip() or torrent_hash
+def torrent_export_context(profile: dict, *, client: ScgiRtorrentClient | None = None, names: dict[str, str] | None = None, prefer_session: bool = False) -> dict:
+    """Build reusable metadata-export state for a bulk operation."""
+    # Note: One session-path lookup and one shared client replace repeated discovery work for every torrent in a transfer batch.
+    c = client or client_for(profile)
+    return {
+        "client": c,
+        "session_path": _rtorrent_session_path(c),
+        "names": dict(names or {}),
+        "prefer_session": bool(prefer_session),
+    }
+
+
+def read_torrent_session_bytes(profile: dict, torrent_hash: str, *, export_context: dict | None = None) -> tuple[bytes, dict] | None:
+    """Read a deterministic rTorrent session .torrent directly when bulk context is available."""
+    # Note: The read command performs its own readability check, so the common transfer path needs one SCGI call instead of a separate exists probe plus read.
+    context = export_context or {}
+    c = context.get("client")
+    session_path = str(context.get("session_path") or "")
+    if not c or not session_path or not context.get("prefer_session"):
+        return None
+    for source in _torrent_session_source_candidates(session_path, torrent_hash):
+        try:
+            data = b"".join(
+                bytes(chunk)
+                for chunk in iter_remote_file_chunks(
+                    profile,
+                    source,
+                    client=c,
+                    readability_checked=True,
+                )
+                if chunk
+            )
+        except RuntimeError as exc:
+            message = str(exc).lower()
+            if "not readable" in message or "missing source" in message:
+                continue
+            raise
+        if data:
+            return data, {"path": source, "local": False, "readability_checked": True, "session_direct_read": True}
+    return None
+
+
+def export_torrent_file(profile: dict, torrent_hash: str, *, export_context: dict | None = None) -> dict:
+    """Locate a readable .torrent source while preserving the legacy standalone behavior."""
+    # Note: Bulk transfers may pass a cached context; normal download/export callers keep the original lookup behavior.
+    context = export_context or {}
+    c = context.get("client") or client_for(profile)
+    names = context.get("names") or {}
+    name = str(names.get(str(torrent_hash)) or c.call("d.name", torrent_hash) or torrent_hash).strip() or torrent_hash
     filename = f"{name}.torrent" if not name.lower().endswith(".torrent") else name
-    source = _torrent_source_file(c, torrent_hash)
+    session_path = context.get("session_path") if "session_path" in context else None
+    prefer_session = bool(context.get("prefer_session"))
+    source = _torrent_source_file(c, torrent_hash, session_path=session_path, prefer_session=prefer_session)
     if source:
         # Note: Stream the existing .torrent source directly instead of copying it to a temporary staged file first.
-        return {"path": source, "download_name": filename, "local": False}
+        return {"path": source, "download_name": filename, "local": False, "readability_checked": True}
     saved_methods = _save_torrent_session_source(c, torrent_hash)
     if saved_methods:
         # Note: Metadata-only profile transfers can recover missing tied .torrent files by asking rTorrent to persist its in-memory session first.
-        source = _torrent_source_file(c, torrent_hash)
+        source = _torrent_source_file(c, torrent_hash, session_path=session_path, prefer_session=True)
         if source:
-            return {"path": source, "download_name": filename, "local": False, "session_saved_by": saved_methods}
+            return {"path": source, "download_name": filename, "local": False, "session_saved_by": saved_methods, "readability_checked": True}
     raw = _torrent_raw_from_method(c, torrent_hash)
     if raw:
         target = LocalPath(download_tmp_dir()) / f"pytorrent-download-{uuid.uuid4().hex}.torrent"

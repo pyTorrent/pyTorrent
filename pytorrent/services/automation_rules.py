@@ -419,7 +419,8 @@ def _path_inside_root(path: str, root: str) -> bool:
     return bool(path and root and (path == root or path.startswith(root.rstrip('/') + '/')))
 
 def _automation_profile_transfer_payload(profile: dict[str, Any], eff: dict[str, Any], user_id: int) -> dict[str, Any]:
-    # Note: Automation profile transfers reuse server-side permission checks; UI values are not trusted.
+    """Validate automation profile-transfer settings with the same path semantics as the interactive transfer."""
+    # Note: Metadata-only rules preserve each torrent's live source directory, so target-root checks apply only when data files are moved.
     source_id = int(profile.get('id') or 0)
     if not auth.can_write_profile(source_id, user_id):
         raise ValueError('Rule owner has no write access to source profile')
@@ -431,27 +432,30 @@ def _automation_profile_transfer_payload(profile: dict[str, Any], eff: dict[str,
     target_profile = get_profile(target_id, user_id)
     if not target_profile:
         raise ValueError('Automation target profile does not exist')
-    default_path = _safe_remote_path(rtorrent.default_download_path(target_profile))
-    requested_target_path = _safe_remote_path(str(eff.get('target_path') or eff.get('path') or ''))
-    target_path = requested_target_path or default_path
-    roots = [default_path]
-    try:
-        prefs = get_disk_monitor_preferences(target_id, user_id=user_id)
-        for item in json.loads((prefs or {}).get('disk_monitor_paths_json') or '[]'):
-            clean = _safe_remote_path(str(item or ''))
-            if clean and clean not in roots:
-                roots.append(clean)
-        selected = _safe_remote_path(str((prefs or {}).get('disk_monitor_selected_path') or ''))
-        if selected and selected not in roots:
-            roots.append(selected)
-    except Exception:
-        pass
-    target_roots = [r for r in roots if r]
-    if not any(_path_inside_root(target_path, root) for root in target_roots):
-        if requested_target_path:
-            raise ValueError('Automation target path is outside the target profile download roots')
-        target_path = default_path
+
     requested_move_data = bool(eff.get('move_data'))
+    requested_target_path = _safe_remote_path(str(eff.get('target_path') or eff.get('path') or ''))
+    default_path = _safe_remote_path(rtorrent.default_download_path(target_profile)) if requested_move_data else ''
+    target_path = (requested_target_path or default_path) if requested_move_data else ''
+    roots = [default_path] if default_path else []
+    if requested_move_data:
+        try:
+            prefs = get_disk_monitor_preferences(target_id, user_id=user_id)
+            for item in json.loads((prefs or {}).get('disk_monitor_paths_json') or '[]'):
+                clean = _safe_remote_path(str(item or ''))
+                if clean and clean not in roots:
+                    roots.append(clean)
+            selected = _safe_remote_path(str((prefs or {}).get('disk_monitor_selected_path') or ''))
+            if selected and selected not in roots:
+                roots.append(selected)
+        except Exception:
+            pass
+        target_roots = [r for r in roots if r]
+        if not any(_path_inside_root(target_path, root) for root in target_roots):
+            if requested_target_path:
+                raise ValueError('Automation target path is outside the target profile download roots')
+            target_path = default_path
+
     move_data = False
     downgrade_reason = ''
     if requested_move_data:
@@ -473,6 +477,7 @@ def _automation_profile_transfer_payload(profile: dict[str, Any], eff: dict[str,
         'move_data_requested': requested_move_data,
         'move_data_downgraded': bool(requested_move_data and not move_data),
         'move_data_downgrade_reason': downgrade_reason,
+        'preserve_source_path': not move_data,
         'post_action': post_action,
         'label_mode': label_mode,
         'label_value': str(eff.get('label_value') or '').strip(),
