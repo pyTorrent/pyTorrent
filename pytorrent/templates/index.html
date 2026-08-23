@@ -50,6 +50,18 @@
       </div>
       <div id="initialLoaderTitle" class="initial-loader-title">Loading torrents...</div>
       <div id="initialLoaderText" class="initial-loader-text">Connecting to rTorrent and preparing data.</div>
+      <!-- Note: Loading progress is a framework-neutral component shared by Bootstrap and the native PyTorrent runtime. -->
+      <div id="initialLoaderProgress" class="initial-loader-progress" data-step="bootstrap">
+        <div class="initial-loader-progress-meta">
+          <span id="initialLoaderProgressLabel">Preparing interface</span>
+          <span id="initialLoaderProgressValue">8%</span>
+        </div>
+        <div id="initialLoaderProgressTrack" class="initial-loader-progress-track" role="progressbar"
+          aria-label="Loading progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="8"
+          aria-valuetext="Preparing interface 8%">
+          <div id="initialLoaderProgressBar" class="initial-loader-progress-bar" style="width: 8%;"></div>
+        </div>
+      </div>
       <div id="initialLoaderRecovery" class="initial-loader-recovery d-none" aria-live="polite">
         <div id="initialLoaderRecoveryText" class="initial-loader-recovery-text">rTorrent is taking longer than expected to provide a complete snapshot.</div>
         <!-- Note: Recovery always allows switching to another accessible profile; profile editing stays admin-only. -->
@@ -119,8 +131,9 @@
           class="mobile-speed-stats" aria-label="Current transfer speed"><span><i class="fa-solid fa-down-long"></i> <b
               id="mobileSpeedDl">0 B/s</b></span><span><i class="fa-solid fa-up-long"></i> <b id="mobileSpeedUl">0
               B/s</b></span></span>
+        <!-- Note: The topbar keeps job activity compact; detailed active-profile queue counts are shown by the bottom status chip. -->
         <span id="busyBadge" class="badge text-bg-dark d-none"><span class="spinner-border spinner-border-xs"></span>
-          busy</span>
+          <span id="busyBadgeText">Working...</span></span>
         <!-- UI note: Toast history is opt-in; the badge counts unread toast occurrences after transient toasts disappear. -->
         <div id="notificationHistoryWrap" class="dropdown notification-history-wrap d-none">
           <button id="notificationHistoryBtn" class="btn btn-xs btn-outline-secondary nav-btn notification-history-btn"
@@ -2489,9 +2502,13 @@
 
   <div id="toastHost" class="toast-host"></div>
   <script src="{{ frontend_asset_url('socket_io_js') }}"></script>
+  <!-- Note: Initial loader progress is independent from both UI runtimes and is safe in either framework mode. -->
+  <script src="{{ static_url('js/initialLoaderProgress.js') }}"></script>
   {% if not prefs or prefs.ui_framework == 'pytorrent' %}
+  <!-- Note: Native mode loads only the PyTorrent compatibility runtime; Bootstrap JavaScript stays unloaded. -->
   <script src="{{ static_url('libs/pytorrent-ui/pytorrentUi.js') }}"></script>
   {% else %}
+  <!-- Note: Bootstrap mode loads only Bootstrap JavaScript; the PyTorrent runtime stays unloaded. -->
   <script src="{{ frontend_asset_url('bootstrap_js') }}"></script>
   {% endif %}
   <!-- Note: Shared action feedback keeps asynchronous buttons consistent without changing individual handlers. -->

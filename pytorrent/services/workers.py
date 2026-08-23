@@ -934,8 +934,26 @@ def list_jobs(limit: int = 200, offset: int = 0, profile_id: int | None = None):
     where, params = _job_scope_sql(profile_id=profile_id)
     with connect() as conn:
         rows = conn.execute(f"SELECT * FROM jobs{where} ORDER BY created_at DESC LIMIT ? OFFSET ?", (*params, limit, offset)).fetchall()
-        total = conn.execute(f"SELECT COUNT(*) AS n FROM jobs{where}", params).fetchone()["n"]
-    return {"rows": [_public_job(r) for r in rows], "total": total, "limit": limit, "offset": offset, "profile_id": profile_id}
+        # Note: Runtime counters use the same profile scope as the returned rows so frontend busy state cannot leak across profiles.
+        summary = conn.execute(
+            f"""
+            SELECT
+              COUNT(*) AS total,
+              COALESCE(SUM(CASE WHEN status='running' THEN 1 ELSE 0 END), 0) AS running_total,
+              COALESCE(SUM(CASE WHEN status IN ('pending', 'running') THEN 1 ELSE 0 END), 0) AS unfinished_total
+            FROM jobs{where}
+            """,
+            params,
+        ).fetchone()
+    return {
+        "rows": [_public_job(r) for r in rows],
+        "total": int(summary["total"] or 0),
+        "running_total": int(summary["running_total"] or 0),
+        "unfinished_total": int(summary["unfinished_total"] or 0),
+        "limit": limit,
+        "offset": offset,
+        "profile_id": profile_id,
+    }
 
 
 def cancel_job(job_id: str) -> bool:

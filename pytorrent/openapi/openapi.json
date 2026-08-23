@@ -5288,6 +5288,14 @@
                         },
                         "total": {
                           "type": "integer"
+                        },
+                        "running_total": {
+                          "description": "Number of running jobs in the selected job scope.",
+                          "type": "integer"
+                        },
+                        "unfinished_total": {
+                          "description": "Number of pending or running jobs in the selected job scope.",
+                          "type": "integer"
                         }
                       },
                       "type": "object"

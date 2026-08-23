@@ -190,7 +190,7 @@ def jobs_list():
         abort(403)
     # Note: The UI reads profile-scoped jobs by default; scope=global remains an explicit admin diagnostics view.
     data = list_jobs(limit, offset, profile_id=profile_id)
-    return ok({"jobs": data["rows"], "total": data["total"], "limit": data["limit"], "offset": data["offset"], "profile_id": profile_id, "scope": scope if scope == "global" else "profile"})
+    return ok({"jobs": data["rows"], "total": data["total"], "running_total": data["running_total"], "unfinished_total": data["unfinished_total"], "limit": data["limit"], "offset": data["offset"], "profile_id": profile_id, "scope": scope if scope == "global" else "profile"})
 
 
 
