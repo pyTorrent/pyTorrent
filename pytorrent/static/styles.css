@@ -2534,15 +2534,16 @@ body.mobile-mode .main-grid {
   color: var(--bs-secondary-color);
 }
 
-.view-preferences-note i {
+/* Note: Limit note layout rules to direct children so nested button feedback indicators keep their own dimensions and colors. */
+.view-preferences-note > i {
   color: var(--bs-primary);
 }
 
-.view-preferences-note span {
+.view-preferences-note > span {
   flex: 1 1 260px;
 }
 
-.view-preferences-note .btn {
+.view-preferences-note > .btn {
   flex: 0 0 auto;
 }
 
