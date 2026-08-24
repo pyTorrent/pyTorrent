@@ -464,13 +464,14 @@ def _disk_monitor_updated_by_label(row: dict | None) -> str:
     return str(row.get("updated_by_display_name") or row.get("updated_by_username") or row.get("updated_by_email") or (f"user #{user_id}" if user_id else "")).strip()
 
 
-def get_disk_monitor_preferences(profile_id: int | None = None, user_id: int | None = None) -> dict:
-    user_id = user_id or auth.current_user_id() or default_user_id()
-    profile_id = int(profile_id or _active_profile_id_for_user(user_id) or 0)
+def get_profile_disk_monitor_preferences(profile_id: int, fallback_user_id: int | None = None) -> dict:
+    """Return profile-shared disk monitor settings without request access checks."""
+    # Note: Background/cache services must read the profile-shared row directly; profile-owner permissions are unrelated to ownership of this shared configuration.
+    profile_id = int(profile_id or 0)
     if not profile_id:
-        return legacy_disk_monitor_preferences(user_id)
-    if not auth.can_access_profile(profile_id, user_id):
-        return legacy_disk_monitor_preferences(user_id)
+        clean = legacy_disk_monitor_preferences(fallback_user_id or default_user_id())
+        clean["disk_monitor_config_updated_at"] = ""
+        return clean
     with connect() as conn:
         row = conn.execute(
             """
@@ -481,26 +482,43 @@ def get_disk_monitor_preferences(profile_id: int | None = None, user_id: int | N
             """,
             (profile_id,),
         ).fetchone()
+        if not fallback_user_id:
+            owner = conn.execute("SELECT user_id FROM rtorrent_profiles WHERE id=?", (profile_id,)).fetchone()
+            fallback_user_id = int((owner or {}).get("user_id") or 0) or default_user_id()
     if row:
         clean = _normalize_disk_monitor(row)
         updated_by_user_id = int(row.get("updated_by_user_id") or 0)
         updated_by_label = _disk_monitor_updated_by_label(row)
         clean["disk_monitor_updated_by_user_id"] = updated_by_user_id
         clean["disk_monitor_updated_by_label"] = updated_by_label
+        clean["disk_monitor_config_updated_at"] = str(row.get("updated_at") or "")
         # Backward-compatible aliases for older frontends.
         clean["disk_monitor_owner_user_id"] = updated_by_user_id
         clean["disk_monitor_owner_label"] = updated_by_label
         return clean
     # Backward-compatible seed: existing global disk monitor values become defaults for first use of a profile.
-    clean = legacy_disk_monitor_preferences(user_id)
+    clean = legacy_disk_monitor_preferences(fallback_user_id or default_user_id())
     clean["disk_monitor_updated_by_user_id"] = 0
     clean["disk_monitor_updated_by_label"] = ""
+    clean["disk_monitor_config_updated_at"] = ""
     clean["disk_monitor_owner_user_id"] = 0
     clean["disk_monitor_owner_label"] = ""
     return clean
 
 
+def get_disk_monitor_preferences(profile_id: int | None = None, user_id: int | None = None) -> dict:
+    # Note: Request-facing reads keep permission checks, then delegate profile-shared data loading to the common internal-safe path.
+    user_id = user_id or auth.current_user_id() or default_user_id()
+    profile_id = int(profile_id or _active_profile_id_for_user(user_id) or 0)
+    if not profile_id:
+        return legacy_disk_monitor_preferences(user_id)
+    if not auth.can_access_profile(profile_id, user_id):
+        return legacy_disk_monitor_preferences(user_id)
+    return get_profile_disk_monitor_preferences(profile_id, fallback_user_id=user_id)
+
+
 def save_disk_monitor_preferences(profile_id: int | None, data: dict, user_id: int | None = None) -> dict:
+    # Note: Saving shared disk settings invalidates only the disk snapshot and schedules its dedicated poll lane for immediate refresh.
     user_id = user_id or auth.current_user_id() or default_user_id()
     profile_id = int(profile_id or _active_profile_id_for_user(user_id) or 0)
     if not profile_id:
@@ -527,6 +545,15 @@ def save_disk_monitor_preferences(profile_id: int | None, data: dict, user_id: i
     # Backward-compatible aliases for older frontends.
     clean["disk_monitor_owner_user_id"] = clean["disk_monitor_updated_by_user_id"]
     clean["disk_monitor_owner_label"] = clean["disk_monitor_updated_by_label"]
+    clean["disk_monitor_config_updated_at"] = now
+    try:
+        from . import poller_control, profile_status_cache
+
+        profile_status_cache.invalidate_disk(profile_id)
+        poller_control.request_disk_poll(profile_id)
+    except Exception:
+        # Preference persistence remains authoritative even if runtime cache invalidation cannot be completed.
+        pass
     return clean
 
 

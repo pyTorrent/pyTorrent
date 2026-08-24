@@ -905,7 +905,8 @@ def _safe_rtorrent_time(c):
             return value
     return None
 
-def system_status(profile: dict, rows: list[dict] | None = None) -> dict:
+def system_status(profile: dict, rows: list[dict] | None = None, *, include_disk: bool = True) -> dict:
+    # Note: Callers that use the configured disk-monitor cache can skip the redundant default-directory disk probe.
     c = client_for(profile)
     meta = _cached_rtorrent_meta(profile, c)
     if rows is None:
@@ -917,7 +918,7 @@ def system_status(profile: dict, rows: list[dict] | None = None) -> dict:
     checking_count = sum(1 for t in rows if t.get("status") == "Checking" or int(t.get("hashing") or 0) > 0)
     active_downloads = sum(1 for t in rows if not t["complete"] and t["state"] and not t.get("paused") and t.get("status") != "Checking")
     active_uploads = sum(1 for t in rows if t["complete"] and t["state"] and not t.get("paused"))
-    return {
+    status = {
         "ok": True,
         "version": meta.get("version"),
         "total": len(rows),
@@ -952,8 +953,10 @@ def system_status(profile: dict, rows: list[dict] | None = None) -> dict:
         "listen_port": meta.get("listen_port"),
         "rtorrent_time": meta.get("rtorrent_time"),
         "status_meta_cache": meta.get("status_meta_cache", {}),
-        "disk": disk_usage_for_default_path(profile),
     }
+    if include_disk:
+        status["disk"] = disk_usage_for_default_path(profile)
+    return status
 
 
 __all__ = [

@@ -43,7 +43,7 @@ def system_status():
                 "cached": True,
                 "cache_ready": cached is not None,
             })
-        status = rtorrent.system_status(profile)
+        status = rtorrent.system_status(profile, include_disk=False)
         status["disk"] = _user_disk_status(profile)
         if bool(profile.get("is_remote")):
             try:
@@ -667,7 +667,7 @@ def traffic_history_get():
     try:
         try:
             from ..services import rtorrent
-            status = rtorrent.system_status(profile)
+            status = rtorrent.system_status(profile, include_disk=False)
             traffic_history.record(profile['id'], status.get('down_rate', 0), status.get('up_rate', 0), status.get('total_down', 0), status.get('total_up', 0), force=True)
         except Exception:
             pass

@@ -379,10 +379,16 @@ def register_socketio_handlers(socketio):
                     if speed_status is None:
                         speed_status = _speed_status_from_rows(pid, rows)
                         prometheus_metrics.observe_speed_status(profile, speed_status)
-                    status = rtorrent.system_status(profile, rows)
+                    status = rtorrent.system_status(profile, rows, include_disk=False)
                     rtorrent_call_count += 1
-                    # Note: The poller owns the per-profile disk snapshot used by instant profile switching; browser requests never need to probe rTorrent for it.
-                    status["disk"] = profile_status_cache.profile_disk_status(profile)
+                    cached_status = profile_status_cache.get_status(pid) or {}
+                    cached_disk = cached_status.get("disk") if isinstance(cached_status.get("disk"), dict) else None
+                    # Note: Expensive multi-path disk probes use their dedicated interval; system polls reuse the last profile-scoped disk snapshot between probes.
+                    if poller_control.should_disk_poll(now, settings, state) or cached_disk is None:
+                        status["disk"] = profile_status_cache.profile_disk_status(profile)
+                        state.last_disk_at = now
+                    else:
+                        status["disk"] = cached_disk
                     if bool(profile.get("is_remote")):
                         try:
                             usage = rtorrent.remote_system_usage(profile)
@@ -408,9 +414,6 @@ def register_socketio_handlers(socketio):
                     emitted_payload_size += len(json.dumps(status, default=str))
                     _emit_profile(socketio, "system_stats", status, pid)
                     speed_status_delivered = True
-
-                if poller_control.should_disk_poll(now, settings, state):
-                    state.last_disk_at = now
 
                 if poller_control.should_tracker_poll(now, settings, state):
                     state.last_tracker_at = now

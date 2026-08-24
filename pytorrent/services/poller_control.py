@@ -220,6 +220,14 @@ def request_immediate_poll(profile_id: int) -> None:
     state.last_heartbeat_at = 0.0
 
 
+def request_disk_poll(profile_id: int) -> None:
+    """Make the next system pass refresh disk data for one profile."""
+    # Note: Disk-setting changes refresh the disk lane immediately without forcing unrelated list/live polling.
+    state = state_for(int(profile_id))
+    state.last_disk_at = 0.0
+    state.last_system_at = 0.0
+
+
 @dataclass
 class ProfilePollState:
     profile_id: int
