@@ -90,6 +90,29 @@ def _preference_bool(value) -> bool:
     return bool(value)
 
 
+def _ui_state(value) -> dict:
+    # Note: Normalize server-owned UI state from SQLite JSON without exposing malformed values to the browser.
+    parsed = _json_payload(value, {})
+    return dict(parsed) if isinstance(parsed, dict) else {}
+
+
+def _merge_ui_state_json(current, patch) -> str:
+    """Merge a small browser-independent UI state patch into its SQLite JSON object."""
+    # Note: Patch semantics let unrelated UI controls autosave independently without overwriting each other's state.
+    state = _ui_state(current)
+    if not isinstance(patch, dict):
+        return json.dumps(state, separators=(",", ":"))
+    for raw_key, value in patch.items():
+        key = str(raw_key or "").strip()
+        if not key or len(key) > 80:
+            continue
+        if value is None:
+            state.pop(key, None)
+        else:
+            state[key] = value
+    return json.dumps(state, separators=(",", ":"), default=str)
+
+
 def normalize_footer_items(value) -> dict[str, bool]:
     parsed = _json_payload(value, {})
     if not isinstance(parsed, dict):
@@ -522,6 +545,7 @@ PROFILE_PREFERENCE_COLUMNS = frozenset({
     "system_usage_chart_mode",
     "system_usage_chart_expanded",
 })
+PROFILE_PREFERENCE_PATCH_FIELDS = frozenset({"profile_ui_state_patch"})
 
 
 def _seed_profile_preferences(conn, user_id: int, profile_id: int) -> dict:
@@ -586,7 +610,7 @@ def get_profile_preferences(user_id: int, profile_id: int | None) -> dict:
 
 
 def save_profile_preferences(user_id: int, profile_id: int | None, data: dict) -> None:
-    if not profile_id or not any(key in data for key in PROFILE_PREFERENCE_COLUMNS):
+    if not profile_id or not any(key in data for key in PROFILE_PREFERENCE_COLUMNS | PROFILE_PREFERENCE_PATCH_FIELDS):
         return
     profile_id = int(profile_id)
     now = utcnow()
@@ -620,6 +644,13 @@ def save_profile_preferences(user_id: int, profile_id: int | None, data: dict) -
             updates["system_usage_chart_mode"] = mode if mode in {"combined", "split"} else "combined"
         if data.get("system_usage_chart_expanded") is not None:
             updates["system_usage_chart_expanded"] = 1 if data.get("system_usage_chart_expanded") else 0
+        if isinstance(data.get("profile_ui_state_patch"), dict):
+            # Note: Merge per-profile UI state in SQLite so controls no longer need a browser-local persistence layer.
+            row = conn.execute(
+                "SELECT profile_ui_state_json FROM profile_preferences WHERE user_id=? AND profile_id=?",
+                (user_id, profile_id),
+            ).fetchone() or {}
+            updates["profile_ui_state_json"] = _merge_ui_state_json(row.get("profile_ui_state_json"), data.get("profile_ui_state_patch"))
         if data.get("torrent_sort_json") is not None:
             value = data.get("torrent_sort_json") if isinstance(data.get("torrent_sort_json"), str) else json.dumps(data.get("torrent_sort_json"))
             parsed = json.loads(value or "{}")
@@ -691,6 +722,7 @@ def save_preferences(data: dict, user_id: int | None = None, profile_id: int | N
     toast_notification_mode = data.get("toast_notification_mode")
     notification_history_enabled = data.get("notification_history_enabled")
     notification_history_mode = data.get("notification_history_mode")
+    user_ui_state_patch = data.get("user_ui_state_patch")
     easter_egg_enabled = data.get("easter_egg_enabled")
     easter_egg_loading_image_url = data.get("easter_egg_loading_image_url")
     easter_egg_click_image_url = data.get("easter_egg_click_image_url")
@@ -728,7 +760,7 @@ def save_preferences(data: dict, user_id: int | None = None, profile_id: int | N
     with connect() as conn:
         now = utcnow()
         current_pref = conn.execute(
-            "SELECT easter_egg_loading_image_url, easter_egg_click_image_url FROM user_preferences WHERE user_id=?",
+            "SELECT easter_egg_loading_image_url, easter_egg_click_image_url, user_ui_state_json FROM user_preferences WHERE user_id=?",
             (user_id,),
         ).fetchone()
         effective_easter_loading_url = _url_setting(data, "easter_egg_loading_image_url") if easter_egg_loading_image_url is not None else ((current_pref or {}).get("easter_egg_loading_image_url") or "")
@@ -759,7 +791,7 @@ def save_preferences(data: dict, user_id: int | None = None, profile_id: int | N
                 toast_mode = "all"
             conn.execute("UPDATE user_preferences SET toast_notification_mode=?, updated_at=? WHERE user_id=?", (toast_mode, now, user_id))
         if notification_history_enabled is not None:
-            # Note: Toast history is an opt-in UX preference; message contents remain browser-local in localStorage.
+            # Note: Toast history is opt-in; when enabled its bounded contents live in pyTorrent's user UI state instead of browser storage.
             conn.execute("UPDATE user_preferences SET notification_history_enabled=?, updated_at=? WHERE user_id=?", (1 if notification_history_enabled else 0, now, user_id))
         if notification_history_mode is not None:
             # Note: History filtering is persisted separately from the enable flag so Toast visibility never depends on archive mode.
@@ -767,6 +799,10 @@ def save_preferences(data: dict, user_id: int | None = None, profile_id: int | N
             if history_mode not in {"important", "all"}:
                 history_mode = "important"
             conn.execute("UPDATE user_preferences SET notification_history_mode=?, updated_at=? WHERE user_id=?", (history_mode, now, user_id))
+        if isinstance(user_ui_state_patch, dict):
+            # Note: Global UI state is merged server-side so independent debounced controls cannot erase another saved key.
+            value = _merge_ui_state_json((current_pref or {}).get("user_ui_state_json"), user_ui_state_patch)
+            conn.execute("UPDATE user_preferences SET user_ui_state_json=?, updated_at=? WHERE user_id=?", (value, now, user_id))
         if easter_egg_enabled is not None:
             conn.execute("UPDATE user_preferences SET easter_egg_enabled=?, updated_at=? WHERE user_id=?", (1 if (easter_egg_enabled and easter_egg_has_image) else 0, now, user_id))
         elif (easter_egg_loading_image_url is not None or easter_egg_click_image_url is not None) and not easter_egg_has_image:

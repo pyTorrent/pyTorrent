@@ -10,8 +10,17 @@ def system_disk():
     profile = request_profile()
     if not profile:
         return jsonify({"ok": False, "error": "No profile"})
+    profile_id = int(profile["id"])
     try:
-        return ok({"disk": _user_disk_status(profile)})
+        # Note: Profile-switch reads are cache-only so a slow SCGI/df response can never block footer rendering.
+        if str(request.args.get("cache_only") or "").lower() in {"1", "true", "yes", "on"}:
+            cached = profile_status_cache.get_status(profile_id) or {}
+            disk = cached.get("disk") if isinstance(cached.get("disk"), dict) else None
+            poller_control.request_immediate_poll(profile_id)
+            return ok({"disk": disk or {}, "profile_id": profile_id, "cached": True, "cache_ready": disk is not None})
+        disk = _user_disk_status(profile)
+        profile_status_cache.store_disk(profile_id, disk)
+        return ok({"disk": disk, "profile_id": profile_id, "cached": False, "cache_ready": True})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)})
 
@@ -22,7 +31,18 @@ def system_status():
     profile = request_profile()
     if not profile:
         return jsonify({"ok": False, "error": "No profile"})
+    profile_id = int(profile["id"])
     try:
+        # Note: Cache-only status is the fast profile-switch path and never performs a live rTorrent call.
+        if str(request.args.get("cache_only") or "").lower() in {"1", "true", "yes", "on"}:
+            cached = profile_status_cache.get_status(profile_id)
+            poller_control.request_immediate_poll(profile_id)
+            return ok({
+                "status": cached or {"profile_id": profile_id},
+                "profile_id": profile_id,
+                "cached": True,
+                "cache_ready": cached is not None,
+            })
         status = rtorrent.system_status(profile)
         status["disk"] = _user_disk_status(profile)
         if bool(profile.get("is_remote")):
@@ -39,8 +59,10 @@ def system_status():
             status["ram"] = psutil.virtual_memory().percent
             status["usage_source"] = "local"
             status["usage_available"] = True
+        status["profile_id"] = profile_id
         status["speed_peaks"] = speed_peaks.record(profile["id"], status.get("down_rate", 0), status.get("up_rate", 0))
-        return ok({"status": status})
+        status = profile_status_cache.store_status(profile_id, status) or status
+        return ok({"status": status, "profile_id": profile_id, "cached": False, "cache_ready": True})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)})
 
@@ -162,16 +184,37 @@ def app_status():
 
 @bp.get("/port-check")
 def port_check_get():
-    prefs = preferences.get_preferences()
+    # Note: Port-check reads are explicitly profile-bound; cache-only mode never touches rTorrent or the external checker.
+    profile = request_profile()
+    if not profile:
+        return jsonify({"ok": False, "error": "No profile"})
+    profile_id = int(profile["id"])
+    user_id = default_user_id()
+    if str(request.args.get("cache_only") or "").lower() in {"1", "true", "yes", "on"}:
+        cached = cached_port_check_status(profile=profile, user_id=user_id)
+        return ok({
+            "port_check": cached,
+            "profile_id": profile_id,
+            "cached": True,
+            "cache_ready": bool(cached.get("cache_ready")),
+        })
+    prefs = preferences.get_preferences(user_id, profile_id)
     if not bool((prefs or {}).get("port_check_enabled")):
-        return ok({"port_check": {"status": "disabled", "enabled": False}})
-    return ok({"port_check": port_check_status(force=False)})
+        return ok({"port_check": {"status": "disabled", "enabled": False, "profile_id": profile_id}, "profile_id": profile_id})
+    result = port_check_status(profile=profile, force=False, user_id=user_id)
+    return ok({"port_check": result, "profile_id": profile_id, "cached": bool(result.get("cached"))})
 
 
 
 @bp.post("/port-check")
 def port_check_post():
-    return ok({"port_check": port_check_status(force=True)})
+    # Note: Manual checks keep their existing force behavior but are pinned to the requested profile for the entire request.
+    profile = request_profile()
+    if not profile:
+        return jsonify({"ok": False, "error": "No profile"})
+    profile_id = int(profile["id"])
+    result = port_check_status(profile=profile, force=True, user_id=default_user_id())
+    return ok({"port_check": result, "profile_id": profile_id, "cached": False})
 
 
 
@@ -240,6 +283,7 @@ def cleanup_profile_cache():
     except Exception as exc:
         runtime = {"error": str(exc)}
     deleted["runtime"] = runtime
+    deleted["profile_status_cache"] = profile_status_cache.clear_profile(profile_id)
     with connect() as conn:
         exists = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='torrent_stats_cache'").fetchone()
         deleted["torrent_stats_cache"] = int((conn.execute("DELETE FROM torrent_stats_cache WHERE profile_id=?", (profile_id,)).rowcount if exists else 0) or 0)

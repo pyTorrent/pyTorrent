@@ -115,6 +115,8 @@ def _frontend_bootstrap_config(prefs: dict, profile: dict | None, current_user: 
         "toastNotificationMode": toast_mode,
         "notificationHistoryEnabled": flag("notification_history_enabled"),
         "notificationHistoryMode": history_mode,
+        "userUiState": _bootstrap_json_value(prefs.get("user_ui_state_json"), {}, dict),
+        "profileUiState": _bootstrap_json_value(prefs.get("profile_ui_state_json"), {}, dict),
         "diskMonitorPaths": _bootstrap_json_value(prefs.get("disk_monitor_paths_json"), [], list),
         "diskMonitorMode": str(prefs.get("disk_monitor_mode") or "default"),
         "diskMonitorSelectedPath": str(prefs.get("disk_monitor_selected_path") or ""),

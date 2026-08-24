@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS user_preferences (
   download_remember_last_enabled INTEGER DEFAULT 0,
   drop_location_mode TEXT DEFAULT 'default',
   free_space_check_enabled INTEGER DEFAULT 1,
+  user_ui_state_json TEXT DEFAULT '{}',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   FOREIGN KEY(user_id) REFERENCES users(id)
@@ -95,6 +96,7 @@ CREATE TABLE IF NOT EXISTS profile_preferences (
   footer_order_json TEXT,
   system_usage_chart_mode TEXT DEFAULT 'combined',
   system_usage_chart_expanded INTEGER DEFAULT 0,
+  profile_ui_state_json TEXT DEFAULT '{}',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   PRIMARY KEY(user_id, profile_id),
@@ -140,6 +142,13 @@ CREATE TABLE IF NOT EXISTS profile_runtime_stats (
   FOREIGN KEY(profile_id) REFERENCES rtorrent_profiles(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_profile_runtime_stats_user ON profile_runtime_stats(user_id, profile_id);
+
+CREATE TABLE IF NOT EXISTS profile_status_cache (
+  profile_id INTEGER PRIMARY KEY,
+  status_json TEXT NOT NULL DEFAULT '{}',
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY(profile_id) REFERENCES rtorrent_profiles(id) ON DELETE CASCADE
+);
 
 CREATE TABLE IF NOT EXISTS jobs (
   id TEXT PRIMARY KEY,

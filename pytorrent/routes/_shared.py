@@ -21,7 +21,7 @@ from flask import Blueprint, jsonify, request, abort, send_file, redirect, Respo
 from ..config import DB_PATH, JOBS_RETENTION_DAYS, SMART_QUEUE_HISTORY_RETENTION_DAYS, LOG_RETENTION_DAYS, WORKERS, PYTORRENT_TMP_DIR
 from ..db import connect, utcnow
 from ..services.auth import current_user_id as default_user_id, current_user, list_users, save_user, delete_user, login_user, logout_user, enabled as auth_enabled, require_profile_write, require_admin, is_admin
-from ..services import auth, preferences, rtorrent, torrent_stats, speed_peaks, tracker_cache, rss as rss_service, ratio_rules, backup as backup_service, download_planner, operation_logs, poller_control, database_maintenance
+from ..services import auth, preferences, rtorrent, torrent_stats, speed_peaks, tracker_cache, rss as rss_service, ratio_rules, backup as backup_service, download_planner, operation_logs, poller_control, database_maintenance, profile_status_cache
 from ..services.torrent_cache import torrent_cache
 from ..services.torrent_summary import cached_summary
 from ..services.workers import enqueue, enqueue_many, list_jobs, cancel_job, retry_job, force_job, clear_jobs, emergency_clear_jobs
@@ -121,7 +121,7 @@ def ok(payload=None):
     return jsonify(data)
 
 
-from ..services.port_check import port_check_status
+from ..services.port_check import port_check_status, cached_port_check_status
 
 
 def _safe_len(callable_obj) -> int | None:
@@ -336,17 +336,8 @@ def enqueue_remove_bulk_parts(profile: dict, data: dict) -> list[dict]:
 
 
 def _user_disk_status(profile: dict) -> dict:
-    prefs = preferences.get_disk_monitor_preferences(profile.get("id") if profile else None)
-    try:
-        paths = json.loads((prefs or {}).get("disk_monitor_paths_json") or "[]") if prefs else []
-    except Exception:
-        paths = []
-    return rtorrent.disk_usage_for_paths(
-        profile,
-        paths,
-        (prefs or {}).get("disk_monitor_mode") or "default",
-        (prefs or {}).get("disk_monitor_selected_path") or "",
-    )
+    # Note: Route and poller disk reads share one profile-scoped implementation so their cached snapshots cannot diverge.
+    return profile_status_cache.profile_disk_status(profile)
 
 
 __all__ = [name for name in globals() if not name.startswith('__')]

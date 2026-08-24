@@ -76,7 +76,17 @@ def profiles_activate(profile_id: int):
                 )
         except Exception:
             pass
-        return ok({"profile": profile})
+        # Note: Return the last application-owned status snapshot immediately; the poller refreshes it asynchronously after selection.
+        cached_status = profile_status_cache.get_status(profile_id)
+        cached_port_check = cached_port_check_status(profile=profile, user_id=default_user_id())
+        poller_control.request_immediate_poll(profile_id)
+        return ok({
+            "profile": profile,
+            "status_cache": cached_status,
+            "status_cache_ready": cached_status is not None,
+            "port_check_cache": cached_port_check,
+            "port_check_cache_ready": bool(cached_port_check.get("cache_ready")),
+        })
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 404
 
@@ -127,7 +137,9 @@ def profiles_import():
 
 @bp.get("/preferences")
 def prefs_get():
-    return ok({"preferences": preferences.get_preferences(profile_id=request_profile_id())})
+    profile_id = request_profile_id()
+    # Note: Echo the resolved profile so the browser can discard a preference response that completed after a profile switch.
+    return ok({"preferences": preferences.get_preferences(profile_id=profile_id), "profile_id": profile_id})
 
 
 

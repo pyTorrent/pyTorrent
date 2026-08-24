@@ -15,14 +15,60 @@ MAX_PORT_CHECK_CANDIDATES = 256
 
 
 def _app_setting_get(key: str) -> str | None:
+    # Note: Port-check cache reads stay inside the application database and never depend on browser storage.
     with connect() as conn:
         row = conn.execute("SELECT value FROM app_settings WHERE key=?", (key,)).fetchone()
         return row.get("value") if row else None
 
 
 def _app_setting_set(key: str, value: str) -> None:
+    # Note: The database is the durable source for the per-profile port-check result.
     with connect() as conn:
         conn.execute("INSERT OR REPLACE INTO app_settings(key,value) VALUES(?,?)", (key, value))
+
+
+def cached_port_check_status(profile: dict | None = None, user_id: int | None = None) -> dict:
+    """Return the newest saved port-check result for one profile without contacting rTorrent or the network."""
+    # Note: Profile switching can render this cache immediately even when the target rTorrent instance is overloaded or offline.
+    profile = profile or preferences.active_profile(user_id)
+    prefs = preferences.get_preferences(user_id, int(profile.get("id"))) if profile else preferences.get_preferences(user_id)
+    enabled = bool((prefs or {}).get("port_check_enabled"))
+    if not profile:
+        return {"status": "unknown", "enabled": enabled, "cache_ready": False, "error": "No profile"}
+    profile_id = int(profile.get("id") or 0)
+    if not enabled:
+        return {"status": "disabled", "enabled": False, "profile_id": profile_id, "cached": True, "cache_ready": True}
+
+    newest: dict[str, Any] | None = None
+    newest_epoch = 0.0
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT value FROM app_settings WHERE key LIKE ?",
+            (f"port_check:{profile_id}:%",),
+        ).fetchall()
+    for row in rows:
+        try:
+            data = json.loads(row.get("value") or "{}")
+            if not isinstance(data, dict):
+                continue
+            checked_at_epoch = float(data.get("checked_at_epoch") or 0.0)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if newest is None or checked_at_epoch >= newest_epoch:
+            newest = data
+            newest_epoch = checked_at_epoch
+
+    if newest is None:
+        return {"status": "unknown", "enabled": True, "profile_id": profile_id, "cached": True, "cache_ready": False}
+    newest = dict(newest)
+    newest["profile_id"] = profile_id
+    newest["enabled"] = True
+    newest["cached"] = True
+    newest["cache_ready"] = True
+    newest["stale"] = bool(not newest_epoch or time.time() - newest_epoch >= PORT_CHECK_CACHE_SECONDS)
+    if not newest.get("checked_at"):
+        newest["checked_at"] = _iso_from_epoch(newest_epoch)
+    return newest
 
 
 def _iso_from_epoch(value: Any) -> str | None:
@@ -133,6 +179,7 @@ def _check_ports(public_ip: str, ports: list[int], checker) -> dict:
 
 def port_check_status(profile: dict | None = None, force: bool = False, user_id: int | None = None) -> dict:
     """Return cached or freshly checked incoming-port status for one rTorrent profile."""
+    # Note: The caller may bind an explicit profile so a delayed check can never drift to whichever profile became active later.
     profile = profile or preferences.active_profile(user_id)
     prefs = preferences.get_preferences(user_id, int(profile.get("id"))) if profile else preferences.get_preferences(user_id)
     enabled = bool((prefs or {}).get("port_check_enabled"))
@@ -154,6 +201,9 @@ def port_check_status(profile: dict | None = None, force: bool = False, user_id:
                 if time.time() - float(data.get("checked_at_epoch") or 0) < PORT_CHECK_CACHE_SECONDS:
                     data["cached"] = True
                     data["enabled"] = enabled
+                    data["profile_id"] = int(profile.get("id") or 0)
+                    data["cache_ready"] = True
+                    data["stale"] = False
                     if not data.get("checked_at"):
                         data["checked_at"] = _iso_from_epoch(data.get("checked_at_epoch"))
                     return data
@@ -164,6 +214,7 @@ def port_check_status(profile: dict | None = None, force: bool = False, user_id:
     result = {
         "status": "unknown",
         "enabled": enabled,
+        "profile_id": int(profile.get("id") or 0),
         "port": ports[0],
         "ports": ports,
         "port_range": port_info["raw"],

@@ -10,7 +10,7 @@ from ..db import default_user_id
 from .torrent_cache import torrent_cache
 from .torrent_summary import cached_summary
 from .frontend_assets import static_hash
-from . import rtorrent, smart_queue, traffic_history, automation_rules, torrent_stats, auth, speed_peaks, poller_control, download_planner, profile_speed_limits, connection_diagnostics, prometheus_metrics
+from . import rtorrent, smart_queue, traffic_history, automation_rules, torrent_stats, auth, speed_peaks, poller_control, download_planner, profile_speed_limits, connection_diagnostics, prometheus_metrics, profile_status_cache
 
 
 def _profile_room(profile_id: int) -> str:
@@ -381,6 +381,8 @@ def register_socketio_handlers(socketio):
                         prometheus_metrics.observe_speed_status(profile, speed_status)
                     status = rtorrent.system_status(profile, rows)
                     rtorrent_call_count += 1
+                    # Note: The poller owns the per-profile disk snapshot used by instant profile switching; browser requests never need to probe rTorrent for it.
+                    status["disk"] = profile_status_cache.profile_disk_status(profile)
                     if bool(profile.get("is_remote")):
                         try:
                             usage = rtorrent.remote_system_usage(profile)
@@ -399,6 +401,8 @@ def register_socketio_handlers(socketio):
                     traffic_history.record(pid, status.get("down_rate", 0), status.get("up_rate", 0), status.get("total_down", 0), status.get("total_up", 0))
                     status["speed_peaks"] = speed_status["speed_peaks"]
                     status["poller"] = poller_control.snapshot(pid)
+                    # Note: Persist the already-built poller payload per profile so the UI can switch without waiting for any live SCGI work.
+                    status = profile_status_cache.store_status(pid, status) or status
                     # Note: The exporter captures this already-built system payload instead of polling on scrape.
                     prometheus_metrics.observe_system_stats(profile, status)
                     emitted_payload_size += len(json.dumps(status, default=str))
