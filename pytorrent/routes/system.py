@@ -61,15 +61,10 @@ def system_status():
                 status["usage_available"] = status.get("cpu") is not None or status.get("ram") is not None
                 status["usage_error"] = str(exc)
         else:
-            status["cpu"] = psutil.cpu_percent(interval=None)
-            status["ram"] = psutil.virtual_memory().percent
-            try:
-                status["load_avg"] = [round(float(value), 2) for value in psutil.getloadavg()]
-            except (AttributeError, OSError):
-                status["load_avg"] = []
-            status["cpu_stale"] = False
-            status["usage_source"] = "local"
-            status["usage_available"] = True
+            # Note: Local CPU/RAM/load use the same process-wide sampler as the poller so request-thread first samples cannot inject a false 0% CPU reading.
+            usage = rtorrent.local_system_usage()
+            status.update(usage)
+            status["usage_available"] = usage.get("cpu") is not None or usage.get("ram") is not None
         status["profile_id"] = profile_id
         status["speed_peaks"] = speed_peaks.record(profile["id"], status.get("down_rate", 0), status.get("up_rate", 0))
         status = profile_status_cache.store_status(profile_id, status) or status

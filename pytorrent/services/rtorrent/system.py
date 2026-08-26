@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Any
 from threading import RLock
 import time
+import psutil
 from urllib.parse import urlparse
 from .client import *
 from .config import default_download_path
@@ -564,6 +565,106 @@ def remote_public_ip(profile: dict, force: bool = False) -> str:
     return value
 
 
+_LOCAL_USAGE_CACHE_LOCK = RLock()
+_LOCAL_USAGE_CACHE: tuple[float, dict[str, Any]] | None = None
+_LOCAL_CPU_SAMPLE: tuple[float, float] | None = None
+_LOCAL_CPU_ZERO_STREAK = 0
+_REMOTE_CPU_ZERO_STREAK: dict[str, int] = {}
+_LOCAL_USAGE_TTL_SECONDS = 1.0
+
+
+def _local_cpu_counters() -> tuple[float, float]:
+    """Return monotonic-style total and idle CPU counters for the pyTorrent host."""
+    # Note: Build CPU percentage from process-wide counters instead of psutil.cpu_percent(interval=None), whose first call in a new request thread can legitimately report 0.0.
+    values = psutil.cpu_times()
+    guest = float(getattr(values, "guest", 0.0) or 0.0)
+    guest_nice = float(getattr(values, "guest_nice", 0.0) or 0.0)
+    total = sum(float(value or 0.0) for value in values) - guest - guest_nice
+    idle = float(getattr(values, "idle", 0.0) or 0.0) + float(getattr(values, "iowait", 0.0) or 0.0)
+    return total, idle
+
+
+def _cpu_percent_from_counters(total: float, idle: float, previous: tuple[float, float] | None) -> float | None:
+    """Return CPU percentage only when the counter delta is internally consistent."""
+    # Note: Linux iowait accounting may occasionally move backwards; reject that sample instead of letting a negative busy delta become a false 0% in the UI.
+    if previous is None:
+        return None
+    prev_total, prev_idle = previous
+    total_delta = float(total) - float(prev_total)
+    idle_delta = float(idle) - float(prev_idle)
+    busy_delta = total_delta - idle_delta
+    if total_delta <= 0.0 or busy_delta < 0.0 or busy_delta > total_delta:
+        return None
+    return round((busy_delta * 100.0) / total_delta, 1)
+
+
+def _stabilize_cpu_zero(cpu_pct: float | None, cached_cpu: float | None, zero_streak: int) -> tuple[float | None, bool, int]:
+    """Debounce one isolated zero while allowing sustained real 0% CPU usage."""
+    # Note: Large mostly-idle hosts can produce a single zero-delta interval; require two consecutive fresh zero samples before replacing a known non-zero value with 0%.
+    if cpu_pct is None:
+        return None, False, max(0, int(zero_streak or 0))
+    if cpu_pct > 0.0:
+        return cpu_pct, False, 0
+    streak = max(0, int(zero_streak or 0))
+    if cached_cpu is not None and cached_cpu > 0.0 and streak == 0:
+        return cached_cpu, True, 1
+    return 0.0, False, streak + 1
+
+
+def local_system_usage(force: bool = False) -> dict:
+    """Return stable local CPU/RAM/load metrics without thread-local psutil first-sample zeros."""
+    global _LOCAL_USAGE_CACHE, _LOCAL_CPU_SAMPLE, _LOCAL_CPU_ZERO_STREAK
+    with _LOCAL_USAGE_CACHE_LOCK:
+        now = time.monotonic()
+        cached = _LOCAL_USAGE_CACHE
+        if cached and not force and now - cached[0] < _LOCAL_USAGE_TTL_SECONDS:
+            result = dict(cached[1])
+            result["cached"] = True
+            return result
+
+        total, idle = _local_cpu_counters()
+        previous = _LOCAL_CPU_SAMPLE
+        if previous is None:
+            # Note: Only process startup needs a short baseline; normal system polls never block.
+            previous = (total, idle)
+            time.sleep(0.1)
+            total, idle = _local_cpu_counters()
+
+        cpu_pct = _cpu_percent_from_counters(total, idle, previous)
+        cpu_stale = False
+        cached_cpu = None
+        if cached:
+            try:
+                candidate = float((cached[1] or {}).get("cpu"))
+                if 0.0 <= candidate <= 100.0:
+                    cached_cpu = candidate
+            except (TypeError, ValueError):
+                pass
+        if cpu_pct is None and cached_cpu is not None:
+            cpu_pct = cached_cpu
+            cpu_stale = True
+        elif cpu_pct is not None:
+            cpu_pct, zero_stale, _LOCAL_CPU_ZERO_STREAK = _stabilize_cpu_zero(cpu_pct, cached_cpu, _LOCAL_CPU_ZERO_STREAK)
+            cpu_stale = cpu_stale or zero_stale
+
+        try:
+            load_avg = [round(float(value), 2) for value in psutil.getloadavg()]
+        except (AttributeError, OSError):
+            load_avg = []
+        usage = {
+            "cpu": cpu_pct,
+            "ram": round(float(psutil.virtual_memory().percent), 1),
+            "load_avg": load_avg,
+            "cpu_stale": cpu_stale,
+            "source": "local",
+            "usage_source": "local",
+            "cached": False,
+        }
+        _LOCAL_CPU_SAMPLE = (total, idle)
+        _LOCAL_USAGE_CACHE = (now, dict(usage))
+        return dict(usage)
+
+
 def _remote_usage_host_key(profile: dict) -> str:
     # Note: Key remote CPU/RAM by the actual SCGI endpoint, including proxy path/token, so different remote hosts behind one local proxy can never share CPU counter deltas.
     parsed = urlparse(str(profile.get("scgi_url") or ""))
@@ -629,18 +730,25 @@ def remote_system_usage(profile: dict, force: bool = False) -> dict:
             total, idle, mem_total, mem_avail, load1, load5, load15 = _remote_usage_sample(profile)
 
         prev_total, prev_idle = previous
-        dt = max(0, total - int(prev_total or 0))
-        di = max(0, idle - int(prev_idle or 0))
-        cpu_pct = round(((dt - di) * 100.0 / dt), 1) if dt > 0 else None
+        # Note: Remote and local sampling share the same validated counter-delta calculation, so rare backwards iowait cannot become a false 0% point.
+        cpu_pct = _cpu_percent_from_counters(float(total), float(idle), (float(prev_total), float(prev_idle)))
         cpu_stale = False
-        if cpu_pct is None and cached:
+        cached_cpu = None
+        if cached:
             try:
-                cached_cpu = float((cached[1] or {}).get("cpu"))
-                if 0.0 <= cached_cpu <= 100.0:
-                    cpu_pct = cached_cpu
-                    cpu_stale = True
+                candidate = float((cached[1] or {}).get("cpu"))
+                if 0.0 <= candidate <= 100.0:
+                    cached_cpu = candidate
             except (TypeError, ValueError):
                 pass
+        if cpu_pct is None and cached_cpu is not None:
+            cpu_pct = cached_cpu
+            cpu_stale = True
+        elif cpu_pct is not None:
+            zero_streak = int(_REMOTE_CPU_ZERO_STREAK.get(host_key, 0) or 0)
+            cpu_pct, zero_stale, zero_streak = _stabilize_cpu_zero(cpu_pct, cached_cpu, zero_streak)
+            _REMOTE_CPU_ZERO_STREAK[host_key] = zero_streak
+            cpu_stale = cpu_stale or zero_stale
         ram_pct = round(((mem_total - mem_avail) * 100.0 / mem_total), 1) if mem_total > 0 else None
         usage = {
             "cpu": cpu_pct,
@@ -940,6 +1048,7 @@ def clear_profile_runtime_caches(profile_id: int) -> dict[str, int]:
             if _REMOTE_USAGE_CACHE.pop(remote_host, None) is not None:
                 removed["remote_usage"] += 1
             _REMOTE_CPU_SAMPLES.pop(remote_host, None)
+            _REMOTE_CPU_ZERO_STREAK.pop(remote_host, None)
             _REMOTE_USAGE_HOST_LOCKS.pop(remote_host, None)
     if _REMOTE_PUBLIC_IP_CACHE.pop(profile_id, None) is not None:
         removed["remote_public_ip"] += 1

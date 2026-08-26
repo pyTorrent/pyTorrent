@@ -2,7 +2,6 @@ from __future__ import annotations
 import threading
 import time
 import json
-import psutil
 from flask import request
 from flask_socketio import emit, join_room, leave_room, disconnect
 from .preferences import active_profile, get_profile
@@ -436,15 +435,10 @@ def register_socketio_handlers(socketio):
                             status["usage_available"] = status.get("cpu") is not None or status.get("ram") is not None
                             status["usage_error"] = str(exc)
                     else:
-                        status["cpu"] = psutil.cpu_percent(interval=None)
-                        status["ram"] = psutil.virtual_memory().percent
-                        try:
-                            status["load_avg"] = [round(float(value), 2) for value in psutil.getloadavg()]
-                        except (AttributeError, OSError):
-                            status["load_avg"] = []
-                        status["cpu_stale"] = False
-                        status["usage_source"] = "local"
-                        status["usage_available"] = True
+                        # Note: Reuse the process-wide local sampler so WebSocket and HTTP status reads cannot reset each other's CPU baseline or emit first-call zeros.
+                        usage = rtorrent.local_system_usage()
+                        status.update(usage)
+                        status["usage_available"] = usage.get("cpu") is not None or usage.get("ram") is not None
                     status["profile_id"] = pid
                     traffic_history.record(pid, status.get("down_rate", 0), status.get("up_rate", 0), status.get("total_down", 0), status.get("total_up", 0))
                     status["speed_peaks"] = speed_status["speed_peaks"]

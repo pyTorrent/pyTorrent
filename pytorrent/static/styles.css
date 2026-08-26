@@ -3598,6 +3598,21 @@ html[data-ui-framework="pytorrent"] .file-priority-table .file-row-actions .btn-
   color: var(--bs-primary);
 }
 
+/* Note: Load average spans the full expanded panel while CPU and RAM keep their existing two-column layout. */
+.system-usage-load {
+  grid-column: 1 / -1;
+}
+
+.system-usage-load .system-usage-expanded-label b {
+  color: var(--bs-secondary-color);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.system-usage-load-chart {
+  height: 132px;
+}
+
 .system-usage-expanded-chart {
   background: rgba(var(--bs-tertiary-bg-rgb), 0.46);
   border-radius: var(--pytorrent-inset-radius, 0.45rem);
@@ -3647,6 +3662,10 @@ html[data-ui-framework="pytorrent"] .file-priority-table .file-row-actions .btn-
 
   .system-usage-expanded-chart {
     height: 96px;
+  }
+
+  .system-usage-load-chart {
+    height: 108px;
   }
 }
 

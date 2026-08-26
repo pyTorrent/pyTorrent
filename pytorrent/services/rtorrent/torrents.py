@@ -703,7 +703,11 @@ def _tracker_int(value, default=None):
 
 
 def _tracker_rows(c: ScgiRtorrentClient, torrent_hash: str) -> list[list]:
-    fields = ("t.url=", "t.is_enabled=", "t.scrape_complete=", "t.scrape_incomplete=", "t.scrape_downloaded=")
+    # Note: Include announce/scrape timestamps in the existing t.multicall so tracker cache warmup stays one SCGI request per torrent instead of three extra calls per tracker.
+    fields = (
+        "t.url=", "t.is_enabled=", "t.scrape_complete=", "t.scrape_incomplete=", "t.scrape_downloaded=",
+        "t.activity_time_last=", "t.scrape_time_last=", "t.activity_time_next=",
+    )
     errors: list[str] = []
     for args in ((torrent_hash, "", *fields), ("", torrent_hash, *fields)):
         try:
@@ -726,7 +730,7 @@ def _tracker_rows(c: ScgiRtorrentClient, torrent_hash: str) -> list[list]:
                     continue
         if url:
             enabled = _safe_tracker_call(c, "t.is_enabled", target, 1)
-            rows.append([url, enabled, None, None, None])
+            rows.append([url, enabled, None, None, None, None, None, None])
     if rows:
         return rows
     raise RuntimeError("Cannot read trackers: " + "; ".join(errors))
@@ -738,11 +742,12 @@ def torrent_trackers(profile: dict, torrent_hash: str) -> list[dict]:
     trackers = []
     for idx, r in enumerate(rows):
         target = _tracker_target(torrent_hash, idx)
-        last_announce = _safe_tracker_call(c, "t.activity_time_last", target, 0)
-        scrape_time = _safe_tracker_call(c, "t.scrape_time_last", target, 0)
+        # Note: Standard t.multicall rows already contain timing fields; legacy fallback rows retain the old direct getter behavior only when those fields are unavailable.
+        last_announce = _tracker_int(r[5], 0) if len(r) > 5 and r[5] is not None else _tracker_int(_safe_tracker_call(c, "t.activity_time_last", target, 0), 0)
+        scrape_time = _tracker_int(r[6], 0) if len(r) > 6 and r[6] is not None else _tracker_int(_safe_tracker_call(c, "t.scrape_time_last", target, 0), 0)
         if not last_announce:
             last_announce = scrape_time
-        next_announce = _safe_tracker_call(c, "t.activity_time_next", target, 0)
+        next_announce = _tracker_int(r[7], 0) if len(r) > 7 and r[7] is not None else _tracker_int(_safe_tracker_call(c, "t.activity_time_next", target, 0), 0)
         raw_seeds = _tracker_int(r[2], None)
         raw_peers = _tracker_int(r[3], None)
         raw_downloaded = _tracker_int(r[4], None)

@@ -366,11 +366,11 @@
           class="fa-solid fa-book"></i> Docs API</a>
     </footer>
     <section id="systemUsageExpandedPanel" class="system-usage-expanded d-none"
-      aria-label="Expanded CPU and RAM usage charts" aria-hidden="true">
+      aria-label="Expanded CPU, RAM and load average charts" aria-hidden="true">
       <div class="system-usage-expanded-header">
         <div><b>System usage</b><small>Last 60 live samples</small></div><button id="systemUsageCollapseBtn"
-          class="btn btn-sm btn-outline-secondary" type="button" title="Collapse CPU / RAM charts"
-          aria-label="Collapse CPU and RAM charts"><i class="fa-solid fa-chevron-down"></i></button>
+          class="btn btn-sm btn-outline-secondary" type="button" title="Collapse system usage charts"
+          aria-label="Collapse system usage charts"><i class="fa-solid fa-chevron-down"></i></button>
       </div>
       <div class="system-usage-expanded-grid">
         <div class="system-usage-expanded-card system-usage-cpu">
@@ -382,6 +382,12 @@
           <div class="system-usage-expanded-label"><span>RAM</span><b id="systemRamExpandedValue">-</b></div><canvas
             id="systemRamExpandedChart" class="system-usage-expanded-chart" width="320" height="120"
             aria-label="Expanded RAM usage chart"></canvas>
+        </div>
+        <!-- Note: Load average reuses the existing live system samples and therefore adds no backend polling or SCGI requests. -->
+        <div class="system-usage-expanded-card system-usage-load">
+          <div class="system-usage-expanded-label"><span>Load average</span><b id="systemLoadExpandedValue">-</b></div><canvas
+            id="systemLoadExpandedChart" class="system-usage-expanded-chart system-usage-load-chart" width="660" height="120"
+            aria-label="Expanded load average 1, 5 and 15 minute chart"></canvas>
         </div>
       </div>
     </section>

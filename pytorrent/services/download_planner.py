@@ -2,7 +2,6 @@ from __future__ import annotations
 import json
 import threading
 import time
-import psutil
 from datetime import datetime, timezone
 from typing import Any
 from ..db import connect, default_user_id, utcnow
@@ -494,20 +493,24 @@ def evaluate(profile: dict, settings: dict | None = None, now: datetime | None =
     if quiet or pause_downloads:
         down = 0
     cpu = None
-    if settings["load_protection_enabled"]:
-        cpu_load = float(psutil.cpu_percent(interval=None))
-        if cpu_load >= float(settings["load_cpu_percent"]):
+    if settings["load_protection_enabled"] or settings["auto_pause_cpu_enabled"]:
+        # Note: Both planner protections share one process-wide stable CPU sample so a second thread-local psutil read cannot collapse to a false 0%.
+        usage = rtorrent.local_system_usage()
+        sampled_cpu = usage.get("cpu") if isinstance(usage, dict) else None
+        if sampled_cpu is not None:
+            cpu = float(sampled_cpu)
+    if settings["load_protection_enabled"] and cpu is not None:
+        if cpu >= float(settings["load_cpu_percent"]):
             pause_downloads = True
             reasons.append("high_load")
     if settings["auto_pause_cpu_enabled"]:
-        cpu = float(psutil.cpu_percent(interval=None))
         pid = int(profile.get("id") or 0)
-        if cpu >= float(settings["auto_pause_cpu_percent"]):
+        if cpu is not None and cpu >= float(settings["auto_pause_cpu_percent"]):
             _HIGH_CPU_SINCE.setdefault(pid, time.monotonic())
             if time.monotonic() - _HIGH_CPU_SINCE[pid] >= 10:
                 pause_downloads = True
                 reasons.append("high_cpu")
-        else:
+        elif cpu is not None:
             _HIGH_CPU_SINCE.pop(pid, None)
     disk = None
     if settings["auto_pause_disk_enabled"]:
