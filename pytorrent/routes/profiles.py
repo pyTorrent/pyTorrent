@@ -1,6 +1,6 @@
 from __future__ import annotations
 from ._shared import *
-from ..services.rtorrent.diagnostics import profile_diagnostics
+from ..services.rtorrent.diagnostics import profile_diagnostics, passive_profile_diagnostics
 from ..services import auth
 from ..services.deletion import DeletionError
 from ..utils import human_size
@@ -115,9 +115,8 @@ def profiles_diagnostics(profile_id: int):
 @bp.get("/profiles/diagnostics")
 def profiles_diagnostics_all():
     rows = preferences.list_profiles()
-    diagnostics = []
-    for profile in rows:
-        diagnostics.append(profile_diagnostics(profile))
+    # Note: Automatic profile-list refreshes are passive; explicit per-profile diagnostics still run the complete live SCGI checks.
+    diagnostics = [passive_profile_diagnostics(profile) for profile in rows]
     return ok({"diagnostics": diagnostics})
 
 

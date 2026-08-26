@@ -546,7 +546,17 @@ def delete_user(user_id: int) -> dict[str, object]:
             ).fetchone()
             if int((other or {}).get("n") or 0) == 0:
                 raise ValueError("Cannot delete the last active administrator")
-        return purge_user(conn, uid)
+        deleted = purge_user(conn, uid)
+    # Note: User deletion can remove several owned profiles outside preferences.delete_profile(), so clear every process-local profile cache after the DB transaction commits.
+    deleted_profile_ids = [int(profile_id) for profile_id in (deleted.get("deleted_profiles") or [])]
+    if deleted_profile_ids:
+        from . import poller_control, preferences
+        from .websocket import invalidate_poller_profiles_cache
+        for profile_id in deleted_profile_ids:
+            preferences.clear_profile_connection_runtime(profile_id)
+            poller_control.invalidate_settings_cache(profile_id)
+        invalidate_poller_profiles_cache()
+    return deleted
 
 
 def _public_user(row: dict[str, Any] | None) -> dict[str, Any] | None:

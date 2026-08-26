@@ -32,6 +32,13 @@ def _state(profile_id: int) -> dict[str, Any]:
         )
 
 
+def clear_profile(profile_id: int) -> int:
+    """Clear passive SCGI observations for one profile."""
+    # Note: Connection diagnostics describe an endpoint, so repointing/restoring a profile must not label observations from the previous rTorrent as current.
+    with _LOCK:
+        return 1 if _PROFILE_STATE.pop(int(profile_id or 0), None) is not None else 0
+
+
 def record_scgi_activity(
     profile_id: int,
     source: str,

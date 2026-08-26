@@ -1,5 +1,5 @@
 from __future__ import annotations
-from threading import RLock
+from threading import RLock, Lock
 from time import time
 from . import rtorrent, operation_logs
 
@@ -12,7 +12,17 @@ class TorrentCache:
         self._data: dict[int, dict[str, dict]] = {}
         self._errors: dict[int, str] = {}
         self._updated_at: dict[int, float] = {}
+        self._refresh_locks: dict[int, Lock] = {}
 
+
+    def _refresh_lock(self, profile_id: int) -> Lock:
+        # Note: One full refresh lane per profile prevents duplicate d.multicall2 calls while preserving explicit refresh semantics.
+        with self._lock:
+            lock = self._refresh_locks.get(profile_id)
+            if lock is None:
+                lock = Lock()
+                self._refresh_locks[profile_id] = lock
+            return lock
     def snapshot(self, profile_id: int) -> list[dict]:
         with self._lock:
             return list(self._data.get(profile_id, {}).values())
@@ -32,9 +42,18 @@ class TorrentCache:
 
     def refresh_if_stale(self, profile: dict, max_age_seconds: float) -> dict:
         profile_id = int(profile["id"])
-        if self.is_stale(profile_id, max_age_seconds):
-            return self.refresh(profile)
-        return {"ok": True, "profile_id": profile_id, "skipped": True, "age_seconds": self.age_seconds(profile_id)}
+        if not self.is_stale(profile_id, max_age_seconds):
+            return {"ok": True, "profile_id": profile_id, "skipped": True, "age_seconds": self.age_seconds(profile_id)}
+        lock = self._refresh_lock(profile_id)
+        if not lock.acquire(blocking=False):
+            # Note: A concurrent full refresh already owns the expensive RPC; stale callers reuse the current snapshot instead of queueing another identical call.
+            return {"ok": True, "profile_id": profile_id, "skipped": True, "refresh_inflight": True, "age_seconds": self.age_seconds(profile_id)}
+        try:
+            if not self.is_stale(profile_id, max_age_seconds):
+                return {"ok": True, "profile_id": profile_id, "skipped": True, "age_seconds": self.age_seconds(profile_id)}
+            return self._refresh_unlocked(profile)
+        finally:
+            lock.release()
 
     def clear_profile(self, profile_id: int) -> int:
         """Clear cached torrent rows for one profile and return removed row count."""
@@ -89,6 +108,12 @@ class TorrentCache:
             return {"ok": False, "profile_id": profile_id, "error": error, "updated": [], "missing": [], "unknown": [], "requires_full_refresh": False}
 
     def refresh(self, profile: dict) -> dict:
+        profile_id = int(profile["id"])
+        # Note: Explicit refreshes keep their existing fresh-data guarantee but share one full-refresh lane per profile.
+        with self._refresh_lock(profile_id):
+            return self._refresh_unlocked(profile)
+
+    def _refresh_unlocked(self, profile: dict) -> dict:
         profile_id = int(profile["id"])
         try:
             rows = rtorrent.list_torrents(profile)

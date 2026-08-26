@@ -319,21 +319,107 @@ def _save_profile_conn(conn, data: dict, user_id: int, now: str | None = None):
     return conn.execute("SELECT * FROM rtorrent_profiles WHERE id=?", (profile_id,)).fetchone()
 
 
+def invalidate_poller_profile_list_cache() -> None:
+    """Invalidate the scheduler profile-list snapshot after profile table mutations."""
+    # Note: This lazy import avoids coupling normal preference reads to the websocket runtime while making profile writes visible immediately.
+    try:
+        from .websocket import invalidate_poller_profiles_cache
+        invalidate_poller_profiles_cache()
+    except Exception:
+        pass
+
+
 def save_profile(data: dict, user_id: int | None = None):
     user_id = user_id or auth.current_user_id() or default_user_id()
     with connect() as conn:
-        return _save_profile_conn(conn, data, int(user_id))
+        saved = _save_profile_conn(conn, data, int(user_id))
+    invalidate_poller_profile_list_cache()
+    return saved
+
+
+def _clear_profile_derived_db_caches(profile_id: int) -> None:
+    """Clear persisted data that is only a derived snapshot of the current rTorrent endpoint."""
+    # Note: Historical traffic/log data and user configuration intentionally survive endpoint changes; only rebuildable current-state caches are removed.
+    profile_id = int(profile_id or 0)
+    if not profile_id:
+        return
+    with connect() as conn:
+        existing = {str(row["name"]) for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+        for table in ("profile_runtime_stats", "torrent_stats_cache", "tracker_summary_cache"):
+            if table in existing:
+                conn.execute(f"DELETE FROM {table} WHERE profile_id=?", (profile_id,))
+        if "app_settings" in existing:
+            conn.execute("DELETE FROM app_settings WHERE key LIKE ?", (f"port_check:{profile_id}:%",))
+
+
+def clear_profile_connection_runtime(profile_id: int) -> None:
+    """Clear profile-scoped runtime snapshots after an rTorrent endpoint change, restore or deletion."""
+    # Note: Connection changes must not reuse torrent/status/CPU metadata from the previous SCGI target that happened to use the same profile id.
+    profile_id = int(profile_id or 0)
+    if not profile_id:
+        return
+    try:
+        _clear_profile_derived_db_caches(profile_id)
+    except Exception:
+        pass
+    try:
+        from .torrent_cache import torrent_cache
+        torrent_cache.clear_profile(profile_id)
+    except Exception:
+        pass
+    try:
+        from .torrent_summary import invalidate_summary
+        invalidate_summary(profile_id)
+    except Exception:
+        pass
+    try:
+        from .rtorrent.system import clear_profile_runtime_caches
+        clear_profile_runtime_caches(profile_id)
+    except Exception:
+        pass
+    try:
+        from . import profile_status_cache
+        profile_status_cache.clear_profile(profile_id)
+    except Exception:
+        pass
+    try:
+        from . import poller_control
+        # Note: Repointed/restored profiles should probe the new endpoint on the next scheduler wake instead of waiting for timestamps from the previous target.
+        poller_control.request_immediate_poll(profile_id)
+    except Exception:
+        pass
+    try:
+        from .websocket import invalidate_profile_poller_runtime
+        invalidate_profile_poller_runtime(profile_id)
+    except Exception:
+        pass
+    try:
+        from . import download_planner
+        download_planner.reset_runtime_state(profile_id)
+    except Exception:
+        pass
+    try:
+        from . import connection_diagnostics
+        connection_diagnostics.clear_profile(profile_id)
+    except Exception:
+        pass
 
 
 def update_profile(profile_id: int, data: dict, user_id: int | None = None):
     user_id = user_id or auth.current_user_id() or default_user_id()
     now = utcnow()
+    connection_changed = False
     with connect() as conn:
         row = conn.execute("SELECT * FROM rtorrent_profiles WHERE id=?", (profile_id,)).fetchone()
         if not row or not auth.can_write_profile(profile_id, user_id):
             raise ValueError("Profil nie istnieje")
         # Note: Partial profile edits preserve scheduler settings so rTorrent connection forms cannot overwrite Job scheduling values.
         values = _profile_values({**dict(row), **(data or {})})
+        connection_changed = (
+            str(row.get("scgi_url") or "") != str(values["scgi_url"] or "")
+            or int(row.get("timeout_seconds") or 0) != int(values["timeout_seconds"] or 0)
+            or int(row.get("is_remote") or 0) != int(values["is_remote"] or 0)
+        )
         owner_user_id = int(row["user_id"])
         if values["is_default"]:
             # The default flag belongs to the profile owner, not to the admin currently editing it.
@@ -347,7 +433,12 @@ def update_profile(profile_id: int, data: dict, user_id: int | None = None):
                 now, profile_id,
             ),
         )
-        return conn.execute("SELECT * FROM rtorrent_profiles WHERE id=?", (profile_id,)).fetchone()
+        updated = conn.execute("SELECT * FROM rtorrent_profiles WHERE id=?", (profile_id,)).fetchone()
+    if connection_changed:
+        # Note: Invalidate only when the SCGI target semantics changed; renaming a profile does not discard useful runtime data.
+        clear_profile_connection_runtime(profile_id)
+    invalidate_poller_profile_list_cache()
+    return updated
 
 
 def delete_profile(profile_id: int, user_id: int | None = None):
@@ -357,16 +448,13 @@ def delete_profile(profile_id: int, user_id: int | None = None):
         result = purge_profile(conn, int(profile_id))
 
     # Note: Database cleanup is atomic. Runtime caches are best-effort and must never turn a successful DB delete into a 500.
+    clear_profile_connection_runtime(int(profile_id))
     try:
-        from .torrent_cache import torrent_cache
-        from .torrent_summary import invalidate_summary
-        from .rtorrent.system import clear_profile_runtime_caches
-
-        torrent_cache.clear_profile(int(profile_id))
-        invalidate_summary(int(profile_id))
-        clear_profile_runtime_caches(int(profile_id))
+        from .poller_control import invalidate_settings_cache
+        invalidate_settings_cache(int(profile_id))
     except Exception:
         pass
+    invalidate_poller_profile_list_cache()
     return result
 
 
@@ -409,6 +497,7 @@ def import_profiles(payload: dict, user_id: int | None = None) -> list[dict]:
     with connect() as conn:
         for item in valid_rows:
             imported.append(dict(_save_profile_conn(conn, item, user_id)))
+    invalidate_poller_profile_list_cache()
     return imported
 
 

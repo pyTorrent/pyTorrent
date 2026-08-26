@@ -333,6 +333,10 @@ def restore_app_backup(backup_id: int, user_id: int | None = None) -> dict:
         raise ValueError("This is not an application backup")
     tables = payload.get("tables") or {}
     restored = {}
+    previous_profile_ids: set[int] = set()
+    if "rtorrent_profiles" in tables:
+        with connect() as conn:
+            previous_profile_ids = {int(row["id"]) for row in conn.execute("SELECT id FROM rtorrent_profiles").fetchall()}
     with connect() as conn:
         # FK checks are disabled only while rows are restored in backup order.
         # The complete candidate database is validated before this transaction commits.
@@ -358,6 +362,19 @@ def restore_app_backup(backup_id: int, user_id: int | None = None) -> dict:
             restored[table] = len(rows)
         _prune_non_backup_fk_orphans(conn, set(APP_BACKUP_TABLES))
         _assert_foreign_keys_valid(conn)
+    if "poller_settings" in restored:
+        # Note: App restore writes the poller table directly, so drop process-local settings snapshots after the transaction commits.
+        from . import poller_control
+        poller_control.invalidate_settings_cache()
+    if "rtorrent_profiles" in restored:
+        # Note: App restore can replace SCGI targets while keeping profile ids, so no runtime snapshot from the pre-restore endpoints may survive.
+        from . import preferences
+        from .websocket import invalidate_poller_profiles_cache
+        with connect() as conn:
+            current_profile_ids = [int(row["id"]) for row in conn.execute("SELECT id FROM rtorrent_profiles").fetchall()]
+        for profile_id in sorted(previous_profile_ids | set(current_profile_ids)):
+            preferences.clear_profile_connection_runtime(profile_id)
+        invalidate_poller_profiles_cache()
     return {"restored": restored, "backup_type": "app"}
 
 
@@ -444,6 +461,16 @@ def restore_profile_backup(backup_id: int, target_profile_id: int, user_id: int 
                 count += 1
             restored[table] = count
         _assert_foreign_keys_valid(conn)
+    if "poller_settings" in restored:
+        # Note: Profile restore bypasses save_settings(), so invalidate only the restored profile's in-memory poller settings.
+        from . import poller_control
+        poller_control.invalidate_settings_cache(int(target_profile_id))
+    if "rtorrent_profiles" in restored:
+        # Note: A profile backup can restore a different SCGI URL into the same id; clear old endpoint snapshots before the poller sees the restored row.
+        from . import preferences
+        from .websocket import invalidate_poller_profiles_cache
+        preferences.clear_profile_connection_runtime(int(target_profile_id))
+        invalidate_poller_profiles_cache()
     return {"restored": restored, "backup_type": "profile", "profile_id": int(target_profile_id)}
 
 

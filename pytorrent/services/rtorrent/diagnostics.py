@@ -1,6 +1,34 @@
 from __future__ import annotations
 from .client import *
-from .. import poller_control
+from .. import poller_control, profile_status_cache
+def passive_profile_diagnostics(profile: dict) -> dict:
+    """Return the latest passive poller snapshot without running an active SCGI test."""
+    # Note: Automatic profile-list health is rebuilt from the current poller/status snapshot on every request; explicit Diagnostics remains fully live and never reads or writes a diagnostics cache.
+    profile_id = int(profile.get("id") or 0)
+    status = profile_status_cache.get_status(profile_id) or {}
+    try:
+        settings = poller_control.get_settings(profile_id)
+        runtime = poller_control.snapshot(profile_id, settings)
+    except Exception:
+        settings = {}
+        runtime = {}
+    error = str(runtime.get("last_error") or "").strip()
+    result = {
+        "profile_id": profile_id,
+        "ok": bool(status) and not bool(error),
+        "status": "error" if error else ("normal" if status else "unknown"),
+        "version": str(status.get("version") or ""),
+        "library_version": "",
+        "base_paths": {},
+        "write_permissions": {},
+        "free_disk": {},
+        "response_time_ms": runtime.get("last_tick_ms") or 0,
+        "slow_threshold_ms": settings.get("slow_response_threshold_ms", poller_control.DEFAULTS["slow_response_threshold_ms"]),
+        "source": "poller_snapshot",
+    }
+    if error:
+        result["error"] = error
+    return result
 
 def scgi_diagnostics(profile: dict) -> dict:
     c = client_for(profile)
@@ -113,6 +141,7 @@ def profile_diagnostics(profile: dict) -> dict:
     # Note: Profile diagnostics uses the same slow-response threshold as Tools -> Poller for this profile.
     if result.get("ok") and result.get("response_time_ms", 0) > slow_threshold_ms:
         result["status"] = "slow"
+    # Note: Manual profile diagnostics is intentionally uncached so every click measures the current SCGI, filesystem and permission state.
     return result
 
 

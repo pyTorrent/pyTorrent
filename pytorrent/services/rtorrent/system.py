@@ -236,6 +236,20 @@ def _cached_path_listing(profile: dict, base: str) -> dict[str, Any] | None:
         return payload
 
 
+def clear_path_listing_cache(profile_id: int) -> int:
+    """Drop cached path-browser listings for one profile."""
+    # Note: Directory writes and SCGI endpoint changes invalidate listings immediately so the picker never serves a stale filesystem view after a mutation.
+    profile_id = int(profile_id or 0)
+    if not profile_id:
+        return 0
+    removed = 0
+    with _PATH_BROWSE_LISTING_CACHE_LOCK:
+        for key in [key for key in _PATH_BROWSE_LISTING_CACHE if int(key[0]) == profile_id]:
+            _PATH_BROWSE_LISTING_CACHE.pop(key, None)
+            removed += 1
+    return removed
+
+
 def _store_path_listing(profile: dict, base: str, payload: dict[str, Any]) -> None:
     key = _path_listing_cache_key(profile, base)
     cached_payload = _clone_path_listing(payload)
@@ -289,7 +303,7 @@ def _slice_path_listing(payload: dict[str, Any], *, limit: int, query: str, sear
     return result
 
 
-def browse_path(profile: dict, path: str | None = None, *, max_dirs: int | None = None, search: str | None = None, cache_only: bool = False) -> dict:
+def browse_path(profile: dict, path: str | None = None, *, max_dirs: int | None = None, search: str | None = None, cache_only: bool = False, force_refresh: bool = False) -> dict:
     """List allowed rTorrent directories through one lightweight remote listing and cache it for search/show-all."""
     base, fallback_root, used_fallback = _safe_browse_base(profile, path)
     try:
@@ -303,7 +317,8 @@ def browse_path(profile: dict, path: str | None = None, *, max_dirs: int | None 
     query = str(search or "").strip()
     search_too_short = bool(query) and len(query) < _PATH_BROWSE_SEARCH_MIN_CHARS
 
-    cached = _cached_path_listing(profile, base)
+    # Note: Normal navigation/search reuses the expensive remote listing; the explicit Reload action bypasses it and replaces the cache with a current filesystem snapshot.
+    cached = None if force_refresh else _cached_path_listing(profile, base)
     if cached is not None:
         cached["listing_cached"] = True
         return _slice_path_listing(cached, limit=limit, query=query, search_too_short=search_too_short)
@@ -500,6 +515,7 @@ def create_directory(profile: dict, parent: str, name: str) -> dict:
     output = str(_rt_execute(c, "execute.capture", "sh", "-c", script, "pytorrent-mkdir", clean_parent, target) or "").strip()
     if not output.startswith("OK\t"):
         raise RuntimeError(output.split("\t", 1)[1] if "\t" in output else "Cannot create directory")
+    clear_path_listing_cache(int(profile.get("id") or 0))
     return {"path": output.split("\t", 1)[1], "name": clean_name}
 
 
@@ -526,6 +542,7 @@ def rename_empty_directory(profile: dict, path: str, new_name: str) -> dict:
     output = str(_rt_execute(c, "execute.capture", "sh", "-c", script, "pytorrent-rename-dir", source, target) or "").strip()
     if not output.startswith("OK\t"):
         raise RuntimeError(output.split("\t", 1)[1] if "\t" in output else "Cannot rename directory")
+    clear_path_listing_cache(int(profile.get("id") or 0))
     return {"path": output.split("\t", 1)[1], "name": clean_name, "parent": parent}
 
 def remote_public_ip(profile: dict, force: bool = False) -> str:
@@ -548,10 +565,13 @@ def remote_public_ip(profile: dict, force: bool = False) -> str:
 
 
 def _remote_usage_host_key(profile: dict) -> str:
-    # Note: CPU/RAM describe the host, so profiles using different SCGI ports on the same hostname share one sample.
+    # Note: Key remote CPU/RAM by the actual SCGI endpoint, including proxy path/token, so different remote hosts behind one local proxy can never share CPU counter deltas.
     parsed = urlparse(str(profile.get("scgi_url") or ""))
     host = str(parsed.hostname or "").strip().lower().rstrip(".")
-    return host or f"profile-{int(profile.get('id') or 0)}"
+    port = int(parsed.port or 0)
+    path = str(parsed.path or "/").strip() or "/"
+    endpoint = f"{host}:{port}{path}" if host else ""
+    return endpoint or f"profile-{int(profile.get('id') or 0)}"
 
 
 def _remote_usage_host_lock(host_key: str):
@@ -561,6 +581,23 @@ def _remote_usage_host_lock(host_key: str):
             lock = RLock()
             _REMOTE_USAGE_HOST_LOCKS[host_key] = lock
         return lock
+
+
+def _remote_usage_sample(profile: dict) -> tuple[int, int, int, int]:
+    """Read one non-blocking CPU counter and RAM sample from the rTorrent host."""
+    # Note: Sampling /proc once avoids holding the SCGI lane during a remote sleep; CPU is derived from deltas between samples.
+    script = (
+        'read cpu user nice system idle iowait irq softirq steal guest guest_nice < /proc/stat; '
+        'total=$((user+nice+system+idle+iowait+irq+softirq+steal)); idle_total=$((idle+iowait)); '
+        "mem_total=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo); "
+        "mem_avail=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo); "
+        'printf "%s %s %s %s" "$total" "$idle_total" "$mem_total" "$mem_avail"'
+    )
+    output = str(_rt_execute(client_for(profile), "execute.capture", "sh", "-c", script) or "").strip()
+    parts = output.split()
+    if len(parts) < 4:
+        raise RuntimeError(f"Cannot read remote CPU/RAM usage: {output}")
+    return int(parts[0]), int(parts[1]), int(parts[2]), int(parts[3])
 
 
 def remote_system_usage(profile: dict, force: bool = False) -> dict:
@@ -580,25 +617,24 @@ def remote_system_usage(profile: dict, force: bool = False) -> dict:
             usage["cached"] = True
             return usage
 
-        script = (
-            'read cpu user nice system idle iowait irq softirq steal guest guest_nice < /proc/stat; '
-            'total1=$((user+nice+system+idle+iowait+irq+softirq+steal)); idle1=$((idle+iowait)); '
-            'sleep 1; '
-            'read cpu user nice system idle iowait irq softirq steal guest guest_nice < /proc/stat; '
-            'total2=$((user+nice+system+idle+iowait+irq+softirq+steal)); idle2=$((idle+iowait)); '
-            'dt=$((total2-total1)); di=$((idle2-idle1)); '
-            'cpu_pct=$(awk -v dt="$dt" -v di="$di" "BEGIN { if (dt > 0) printf \"%.1f\", (dt-di)*100/dt; else printf \"0.0\" }"); '
-            "mem_total=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo); "
-            "mem_avail=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo); "
-            'ram_pct=$(awk -v t="$mem_total" -v a="$mem_avail" "BEGIN { if (t > 0) printf \"%.1f\", (t-a)*100/t; else printf \"0.0\" }"); '
-            'printf "%s %s" "$cpu_pct" "$ram_pct"'
-        )
-        output = str(_rt_execute(client_for(profile), "execute.capture", "sh", "-c", script) or "").strip()
-        parts = output.split()
-        if len(parts) < 2:
-            raise RuntimeError(f"Cannot read remote CPU/RAM usage: {output}")
-        usage = {"cpu": float(parts[0]), "ram": float(parts[1]), "source": "rtorrent-remote", "usage_source": "rtorrent-remote", "cached": False}
+        total, idle, mem_total, mem_avail = _remote_usage_sample(profile)
         with _REMOTE_USAGE_CACHE_LOCK:
+            previous = _REMOTE_CPU_SAMPLES.get(host_key)
+
+        # Note: Only the first process-local sample needs a short baseline; later polls are immediate and use the previous counter snapshot.
+        if previous is None:
+            previous = (total, idle)
+            time.sleep(0.1)
+            total, idle, mem_total, mem_avail = _remote_usage_sample(profile)
+
+        prev_total, prev_idle = previous
+        dt = max(0, total - int(prev_total or 0))
+        di = max(0, idle - int(prev_idle or 0))
+        cpu_pct = round(((dt - di) * 100.0 / dt), 1) if dt > 0 else 0.0
+        ram_pct = round(((mem_total - mem_avail) * 100.0 / mem_total), 1) if mem_total > 0 else 0.0
+        usage = {"cpu": cpu_pct, "ram": ram_pct, "source": "rtorrent-remote", "usage_source": "rtorrent-remote", "cached": False}
+        with _REMOTE_USAGE_CACHE_LOCK:
+            _REMOTE_CPU_SAMPLES[host_key] = (total, idle)
             _REMOTE_USAGE_CACHE[host_key] = (now, usage)
         return dict(usage)
 
@@ -754,7 +790,7 @@ def _profile_cache_key(profile: dict) -> int:
 
 
 def _adaptive_meta_ttl(duration_ms: float) -> float:
-    # Note: Slow rTorrent metadata calls get a longer TTL, while fast servers keep the footer fresh.
+    # Note: Keep the original footer freshness window while the metadata itself is fetched through one system.multicall instead of many SCGI requests.
     if duration_ms >= 5000:
         return 30.0
     if duration_ms >= 2000:
@@ -762,6 +798,54 @@ def _adaptive_meta_ttl(duration_ms: float) -> float:
     if duration_ms >= 800:
         return 8.0
     return 3.0
+
+
+def _multicall_unwrap(value: Any) -> Any:
+    # Note: Normalize one XML-RPC multicall slot without issuing any secondary getter request.
+    if isinstance(value, dict) and ("faultCode" in value or "faultString" in value):
+        return None
+    if isinstance(value, (list, tuple)) and len(value) == 1:
+        return value[0]
+    return value
+
+
+def _rtorrent_meta_multicall(c: Any) -> dict[str, Any]:
+    """Read footer metadata through one XML-RPC system.multicall."""
+    # Note: pyTorrent communicates with rTorrent through XML-RPC/SCGI, where system.multicall is a built-in XML-RPC method; getter aliases stay in the same request for per-field compatibility.
+    groups = {
+        "version": ("system.client_version",),
+        "down_limit": ("throttle.global_down.max_rate",),
+        "up_limit": ("throttle.global_up.max_rate",),
+        "open_sockets": ("network.open_sockets",),
+        "max_open_sockets": ("network.max_open_sockets",),
+        "open_files": ("network.open_files", "network.current_open_files", "network.open_file_count"),
+        "max_open_files": ("network.max_open_files",),
+        "open_http": ("network.http.open", "network.http.current_open", "network.http.current_opened", "network.http.open_sockets"),
+        "max_open_http": ("network.http.max_open",),
+        "max_downloads_global": ("throttle.max_downloads.global",),
+        "max_uploads_global": ("throttle.max_uploads.global",),
+        "port_range": ("network.port_range",),
+        "port_open": ("network.port_open", "network.open_port"),
+        "rtorrent_time": ("system.time_seconds", "system.time"),
+    }
+    calls: list[dict[str, Any]] = []
+    mapping: list[tuple[str, str]] = []
+    for key, method_names in groups.items():
+        for method_name in method_names:
+            for candidate in _rtorrent_read_candidates(method_name):
+                calls.append({"methodName": candidate, "params": []})
+                mapping.append((key, candidate))
+    raw = c.call("system.multicall", calls)
+    if not isinstance(raw, (list, tuple)) or len(raw) != len(calls):
+        raise RuntimeError("Invalid system.multicall response from rTorrent")
+    values: dict[str, Any] = {}
+    for (key, _method), item in zip(mapping, raw):
+        if key in values and values[key] not in (None, ""):
+            continue
+        value = _multicall_unwrap(item)
+        if value not in (None, ""):
+            values[key] = value
+    return values
 
 
 def _cached_rtorrent_meta(profile: dict, c: Any) -> dict[str, Any]:
@@ -774,59 +858,73 @@ def _cached_rtorrent_meta(profile: dict, c: Any) -> dict[str, Any]:
             meta["status_meta_cache"] = {"hit": True, "ttl_seconds": cached.get("ttl_seconds"), "duration_ms": cached.get("duration_ms")}
             return meta
     started = time.monotonic()
-    version = str(c.system.client_version())
+    batched = _rtorrent_meta_multicall(c)
     try:
-        down_limit = int(c.throttle.global_down.max_rate())
+        down_limit = int(batched.get("down_limit") or 0)
     except Exception:
         down_limit = 0
     try:
-        up_limit = int(c.throttle.global_up.max_rate())
+        up_limit = int(batched.get("up_limit") or 0)
     except Exception:
         up_limit = 0
+    port_range = str(batched.get("port_range") or "").strip()
+    listen_port = port_range.split("-", 1)[0].strip() if port_range else batched.get("port_open")
+    # Note: Missing optional getters stay nullable; no second SCGI pass is issued after the single batched metadata read.
     meta = {
-        "version": version,
+        "version": str(batched.get("version") or ""),
         "down_limit": down_limit,
         "up_limit": up_limit,
         "down_limit_h": human_rate(down_limit) if down_limit else "∞",
         "up_limit_h": human_rate(up_limit) if up_limit else "∞",
-        "open_sockets": _safe_rtorrent_first_int(c, ("network.open_sockets",)),
-        "max_open_sockets": _safe_rtorrent_first_int(c, ("network.max_open_sockets",)),
-        "open_files": _safe_rtorrent_first_int(c, ("network.open_files", "network.current_open_files", "network.open_file_count")),
-        "max_open_files": _safe_rtorrent_first_int(c, ("network.max_open_files",)),
-        "open_http": _safe_rtorrent_first_int(c, ("network.http.open", "network.http.current_open", "network.http.current_opened", "network.http.open_sockets")),
-        "max_open_http": _safe_rtorrent_first_int(c, ("network.http.max_open",)),
-        "max_downloads_global": _safe_rtorrent_first_int(c, ("throttle.max_downloads.global",)),
-        "max_uploads_global": _safe_rtorrent_first_int(c, ("throttle.max_uploads.global",)),
-        "listen_port": _rtorrent_listen_port(c),
-        "rtorrent_time": _safe_rtorrent_time(c),
+        "open_sockets": _safe_rtorrent_int(lambda: batched.get("open_sockets")),
+        "max_open_sockets": _safe_rtorrent_int(lambda: batched.get("max_open_sockets")),
+        "open_files": _safe_rtorrent_int(lambda: batched.get("open_files")),
+        "max_open_files": _safe_rtorrent_int(lambda: batched.get("max_open_files")),
+        "open_http": _safe_rtorrent_int(lambda: batched.get("open_http")),
+        "max_open_http": _safe_rtorrent_int(lambda: batched.get("max_open_http")),
+        "max_downloads_global": _safe_rtorrent_int(lambda: batched.get("max_downloads_global")),
+        "max_uploads_global": _safe_rtorrent_int(lambda: batched.get("max_uploads_global")),
+        "listen_port": listen_port if listen_port not in (None, "") else None,
+        "rtorrent_time": _safe_rtorrent_int(lambda: batched.get("rtorrent_time")),
     }
     duration_ms = round((time.monotonic() - started) * 1000.0, 2)
     ttl = _adaptive_meta_ttl(duration_ms)
     with _STATUS_META_LOCK:
         _STATUS_META_CACHE[profile_id] = {"value": dict(meta), "expires_at": now + ttl, "ttl_seconds": ttl, "duration_ms": duration_ms}
-    meta["status_meta_cache"] = {"hit": False, "ttl_seconds": ttl, "duration_ms": duration_ms}
+    meta["status_meta_cache"] = {"hit": False, "ttl_seconds": ttl, "duration_ms": duration_ms, "batched": True}
     return meta
+
+
+def clear_status_meta_cache(profile_id: int) -> bool:
+    """Clear cached rTorrent status metadata for one profile."""
+    # Note: Runtime setters invalidate only footer metadata so changed limits/config become visible immediately without discarding disk or remote CPU/RAM caches.
+    profile_id = int(profile_id or 0)
+    with _STATUS_META_LOCK:
+        return _STATUS_META_CACHE.pop(profile_id, None) is not None
 
 
 def clear_profile_runtime_caches(profile_id: int) -> dict[str, int]:
     """Clear rTorrent runtime caches that are scoped to a single profile."""
-    # Note: This is used by Cleanup to force fresh disk/status/remote readings without restarting pyTorrent.
+    # Note: Cleanup and profile endpoint changes use this to force fresh disk/status/path/remote readings without restarting pyTorrent.
     profile_id = int(profile_id or 0)
-    removed = {"disk_usage": 0, "remote_usage": 0, "remote_public_ip": 0, "status_meta": 0}
+    removed = {"disk_usage": 0, "path_listing": 0, "remote_usage": 0, "remote_public_ip": 0, "status_meta": 0}
     prefix_candidates = (f"default-disk:{profile_id}:", f"remote-df:{profile_id}:")
     for key in list(_DISK_USAGE_CACHE.keys()):
         if any(str(key).startswith(prefix) for prefix in prefix_candidates):
             _DISK_USAGE_CACHE.pop(key, None)
             removed["disk_usage"] += 1
+    removed["path_listing"] = clear_path_listing_cache(profile_id)
     with _REMOTE_USAGE_CACHE_LOCK:
         remote_host = _REMOTE_USAGE_PROFILE_HOSTS.pop(profile_id, None)
-        if remote_host and _REMOTE_USAGE_CACHE.pop(remote_host, None) is not None:
-            removed["remote_usage"] += 1
+        if remote_host:
+            if _REMOTE_USAGE_CACHE.pop(remote_host, None) is not None:
+                removed["remote_usage"] += 1
+            _REMOTE_CPU_SAMPLES.pop(remote_host, None)
+            _REMOTE_USAGE_HOST_LOCKS.pop(remote_host, None)
     if _REMOTE_PUBLIC_IP_CACHE.pop(profile_id, None) is not None:
         removed["remote_public_ip"] += 1
-    with _STATUS_META_LOCK:
-        if _STATUS_META_CACHE.pop(profile_id, None) is not None:
-            removed["status_meta"] += 1
+    if clear_status_meta_cache(profile_id):
+        removed["status_meta"] += 1
     return removed
 
 def _safe_rtorrent_int(callable_obj, default=None):
@@ -834,15 +932,6 @@ def _safe_rtorrent_int(callable_obj, default=None):
     try:
         value = callable_obj()
         return int(value)
-    except Exception:
-        return default
-
-
-def _safe_rtorrent_value(callable_obj, default=None):
-    """Return any rTorrent metric without failing the whole status poll."""
-    try:
-        value = callable_obj()
-        return default if value is None else value
     except Exception:
         return default
 
@@ -861,49 +950,6 @@ def _rtorrent_read_candidates(method_name: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(candidates))
 
 
-def _safe_rtorrent_first_int(c, method_names, default=None):
-    """Try several rTorrent XMLRPC getter names and return the first integer value."""
-    for method_name in method_names:
-        for candidate in _rtorrent_read_candidates(method_name):
-            value = _safe_rtorrent_int(lambda name=candidate: c.call(name), None)
-            if value is not None:
-                return value
-    return default
-
-
-def _safe_rtorrent_first_value(c, method_names, default=None):
-    """Try several rTorrent XMLRPC getter names and return the first non-empty value."""
-    for method_name in method_names:
-        for candidate in _rtorrent_read_candidates(method_name):
-            value = _safe_rtorrent_value(lambda name=candidate: c.call(name), None)
-            if value not in (None, ""):
-                return value
-    return default
-
-
-def _rtorrent_listen_port(c):
-    """Return the configured incoming port, preferring network.port_range over port-open state."""
-    port_range = _safe_rtorrent_first_value(c, ("network.port_range",))
-    if port_range:
-        first = str(port_range).split("-", 1)[0].strip()
-        if first:
-            return first
-    value = _safe_rtorrent_first_value(c, ("network.port_open", "network.open_port"))
-    if value not in (None, ""):
-        return value
-    return None
-
-def _safe_rtorrent_time(c):
-    """Read rTorrent server time when supported; otherwise let the browser clock remain authoritative."""
-    candidates = (
-        lambda: c.system.time_seconds(),
-        lambda: c.system.time(),
-    )
-    for candidate in candidates:
-        value = _safe_rtorrent_int(candidate)
-        if value:
-            return value
-    return None
 
 def system_status(profile: dict, rows: list[dict] | None = None, *, include_disk: bool = True) -> dict:
     # Note: Callers that use the configured disk-monitor cache can skip the redundant default-directory disk probe.

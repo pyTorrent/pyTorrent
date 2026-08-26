@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
 import time
+import threading
 from dataclasses import dataclass, field
 from typing import Any
 from ..db import connect, utcnow
@@ -116,6 +117,21 @@ def _key(profile_id: int) -> str:
     return f"poller.settings.{int(profile_id)}"
 
 
+_SETTINGS_CACHE: dict[int, dict] = {}
+_SETTINGS_CACHE_LOCK = threading.RLock()
+
+
+def invalidate_settings_cache(profile_id: int | None = None) -> int:
+    """Invalidate process-local poller settings after out-of-band database restores/deletes."""
+    # Note: Normal saves update RAM directly; backup restore and profile deletion bypass save_settings(), so they explicitly invalidate the affected cache entries.
+    with _SETTINGS_CACHE_LOCK:
+        if profile_id is None:
+            removed = len(_SETTINGS_CACHE)
+            _SETTINGS_CACHE.clear()
+            return removed
+        return 1 if _SETTINGS_CACHE.pop(int(profile_id), None) is not None else 0
+
+
 
 def _coerce_float(value: Any, default: float, lo: float, hi: float) -> float:
     try:
@@ -185,8 +201,13 @@ def normalize_settings(data: dict | None) -> dict:
 
 
 def get_settings(profile_id: int) -> dict:
+    profile_id = int(profile_id)
+    with _SETTINGS_CACHE_LOCK:
+        cached = _SETTINGS_CACHE.get(profile_id)
+        if cached is not None:
+            return dict(cached)
     with connect() as conn:
-        row = conn.execute("SELECT settings_json FROM poller_settings WHERE profile_id=?", (int(profile_id),)).fetchone()
+        row = conn.execute("SELECT settings_json FROM poller_settings WHERE profile_id=?", (profile_id,)).fetchone()
         if not row:
             legacy = conn.execute("SELECT value FROM app_settings WHERE key=?", (_key(profile_id),)).fetchone()
             if legacy:
@@ -194,21 +215,30 @@ def get_settings(profile_id: int) -> dict:
                     settings = normalize_settings(json.loads(legacy.get("value") or "{}"))
                 except Exception:
                     settings = normalize_settings({})
-                conn.execute("INSERT OR REPLACE INTO poller_settings(profile_id,settings_json,updated_at) VALUES(?,?,?)", (int(profile_id), json.dumps(settings), utcnow()))
-                return settings
+                conn.execute("INSERT OR REPLACE INTO poller_settings(profile_id,settings_json,updated_at) VALUES(?,?,?)", (profile_id, json.dumps(settings), utcnow()))
+                with _SETTINGS_CACHE_LOCK:
+                    _SETTINGS_CACHE[profile_id] = dict(settings)
+                return dict(settings)
     try:
         data = json.loads(row.get("settings_json") or "{}") if row else {}
     except Exception:
         data = {}
-    return normalize_settings(data)
+    settings = normalize_settings(data)
+    # Note: Poller settings are process-cached because the hot scheduling loop otherwise reads SQLite several times per second.
+    with _SETTINGS_CACHE_LOCK:
+        _SETTINGS_CACHE[profile_id] = dict(settings)
+    return dict(settings)
 
 
 def save_settings(profile_id: int, data: dict) -> dict:
     settings = normalize_settings(data)
+    profile_id = int(profile_id)
     with connect() as conn:
-        conn.execute("INSERT OR REPLACE INTO poller_settings(profile_id,settings_json,updated_at) VALUES(?,?,?)", (int(profile_id), json.dumps(settings), utcnow()))
+        conn.execute("INSERT OR REPLACE INTO poller_settings(profile_id,settings_json,updated_at) VALUES(?,?,?)", (profile_id, json.dumps(settings), utcnow()))
+    with _SETTINGS_CACHE_LOCK:
+        _SETTINGS_CACHE[profile_id] = dict(settings)
     state_for(profile_id).last_heartbeat_at = 0.0
-    return settings
+    return dict(settings)
 
 
 def request_immediate_poll(profile_id: int) -> None:

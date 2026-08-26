@@ -53,6 +53,16 @@ _PROFILE_LOCKS: dict[int, threading.Lock] = {}
 _PROFILE_LOCKS_GUARD = threading.Lock()
 
 
+def reset_runtime_state(profile_id: int) -> None:
+    """Forget endpoint-specific planner throttling state without changing persisted settings/history."""
+    # Note: Repointing/restoring a profile must re-evaluate immediately and reapply limits to the new rTorrent even when the desired numbers match the previous endpoint.
+    profile_id = int(profile_id or 0)
+    _LAST_RUN.pop(profile_id, None)
+    _LAST_LIMITS.pop(profile_id, None)
+    _HIGH_CPU_SINCE.pop(profile_id, None)
+    _PLANNER_CONNECTION_STATUS.pop(profile_id, None)
+
+
 def _profile_lock(profile_id: int) -> threading.Lock:
     """Keep one planner run per profile active at a time."""
     with _PROFILE_LOCKS_GUARD:

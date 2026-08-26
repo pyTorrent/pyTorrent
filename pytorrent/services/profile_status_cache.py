@@ -173,7 +173,7 @@ def profile_disk_status(profile: dict) -> dict[str, Any]:
 
 def clear_profile(profile_or_id: dict | int | None) -> int:
     """Clear persisted and in-memory system status cache for one profile."""
-    # Note: Maintenance cleanup removes both cache tiers for exactly one profile.
+    # Note: Maintenance cleanup and profile endpoint changes remove both cache tiers for exactly one profile.
     profile_id = _profile_id(profile_or_id)
     if not profile_id:
         return 0

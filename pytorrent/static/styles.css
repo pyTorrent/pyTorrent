@@ -4481,6 +4481,17 @@ body.sorting-preference-cards * {
   white-space: nowrap;
 }
 
+#statClock {
+  /* Note: The clock is always HH:MM:SS; a fixed inline box plus tabular digits prevents the first footer item from shifting its siblings every second. */
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  inline-size: 8ch;
+  min-inline-size: 8ch;
+  max-inline-size: 8ch;
+  text-align: center;
+}
+
 /* Torrent stats: keep metadata and refresh controls aligned without nested statistic tabs. */
 .torrent-stats-header {
   display: flex;

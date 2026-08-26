@@ -537,6 +537,7 @@ def path_browse():
     search = request.args.get("search") or ""
     max_dirs = request.args.get("max_dirs")
     cache_only = str(request.args.get("cache_only") or "").lower() in {"1", "true", "yes"}
+    force_refresh = str(request.args.get("refresh") or "").lower() in {"1", "true", "yes"}
     if str(request.args.get("all") or "").lower() in {"1", "true", "yes"}:
         max_dirs = "0"
     try:
@@ -544,7 +545,7 @@ def path_browse():
     except Exception:
         parsed_max_dirs = None
     try:
-        return ok(_annotate_path_directories(profile, rtorrent.browse_path(profile, base, max_dirs=parsed_max_dirs, search=search, cache_only=cache_only)))
+        return ok(_annotate_path_directories(profile, rtorrent.browse_path(profile, base, max_dirs=parsed_max_dirs, search=search, cache_only=cache_only, force_refresh=force_refresh)))
     except rtorrent.PathBrowseTimeoutError as exc:
         # Note: A dedicated 504 distinguishes a bounded remote filesystem timeout from invalid path input.
         return jsonify({"ok": False, "error": str(exc), "timeout": True}), 504
@@ -667,12 +668,7 @@ def traffic_history_get():
     if range_name not in {'15m', '1h', '3h', '6h', '24h', '7d', '30d', '90d'}:
         range_name = '7d'
     try:
-        try:
-            from ..services import rtorrent
-            status = rtorrent.system_status(profile, include_disk=False)
-            traffic_history.record(profile['id'], status.get('down_rate', 0), status.get('up_rate', 0), status.get('total_down', 0), status.get('total_up', 0), force=True)
-        except Exception:
-            pass
+        # Note: History reads are side-effect free; the background/foreground poller is the single writer so opening a chart cannot duplicate or timestamp stale speed samples.
         return ok({'history': traffic_history.history(profile['id'], range_name)})
     except Exception as exc:
         return jsonify({'ok': False, 'error': str(exc), 'history': {'range': range_name, 'rows': []}})

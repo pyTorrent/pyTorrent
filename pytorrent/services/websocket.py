@@ -17,11 +17,36 @@ def _profile_room(profile_id: int) -> str:
     return f"profile:{int(profile_id)}"
 
 
+_POLLER_PROFILES_CACHE: tuple[float, list[dict]] = (0.0, [])
+_POLLER_PROFILES_CACHE_LOCK = threading.RLock()
+_POLLER_PROFILES_CACHE_TTL_SECONDS = 2.0
+
+
 def _poller_profiles() -> list[dict]:
+    # Note: The scheduler reuses a short in-memory profile list so its sub-second wake loop does not repeatedly query SQLite.
+    global _POLLER_PROFILES_CACHE
+    now = time.monotonic()
+    with _POLLER_PROFILES_CACHE_LOCK:
+        cached_at, cached_rows = _POLLER_PROFILES_CACHE
+        if cached_at and now - cached_at < _POLLER_PROFILES_CACHE_TTL_SECONDS:
+            return [dict(row) for row in cached_rows]
     from ..db import connect
     with connect() as conn:
-        # Note: Background polling must be profile-scoped and browser-independent, even when auth is disabled.
-        return conn.execute("SELECT * FROM rtorrent_profiles ORDER BY id").fetchall()
+        rows = conn.execute("SELECT * FROM rtorrent_profiles ORDER BY id").fetchall()
+    rows = [dict(row) for row in rows]
+    with _POLLER_PROFILES_CACHE_LOCK:
+        _POLLER_PROFILES_CACHE = (now, rows)
+    return [dict(row) for row in rows]
+
+
+def invalidate_poller_profiles_cache() -> int:
+    """Drop the process-local profile list snapshot after profile configuration changes."""
+    # Note: Profile create/edit/delete/restore must reach the background poller immediately while normal scheduler wake-ups still reuse RAM.
+    global _POLLER_PROFILES_CACHE
+    with _POLLER_PROFILES_CACHE_LOCK:
+        removed = len(_POLLER_PROFILES_CACHE[1])
+        _POLLER_PROFILES_CACHE = (0.0, [])
+    return removed
 
 
 def emit_profile_event(socketio, event: str, payload: dict, profile_id: int) -> None:
@@ -43,6 +68,13 @@ def _rtorrent_transport_unavailable(error) -> bool:
 
 
 _speed_limits_applied: dict[int, tuple[int, int]] = {}
+
+def invalidate_profile_poller_runtime(profile_id: int) -> int:
+    """Drop endpoint-specific poller markers for one profile."""
+    # Note: A profile repointed to another rTorrent must reapply its configured limits instead of trusting the previous endpoint's applied marker.
+    return 1 if _speed_limits_applied.pop(int(profile_id or 0), None) is not None else 0
+
+
 _socket_profiles: dict[str, int] = {}
 _profile_socket_counts: dict[int, int] = {}
 _socket_profile_lock = threading.Lock()

@@ -295,6 +295,8 @@ def copy_job_scheduling(source_profile_id: int, target_profile_id: int, user_id:
             "UPDATE rtorrent_profiles SET max_parallel_jobs=?,ordered_parallel_jobs=?,light_parallel_jobs=?,light_job_timeout_seconds=?,heavy_job_timeout_seconds=?,pending_job_timeout_seconds=?,updated_at=? WHERE id=?",
             (*values, utcnow(), int(target_profile_id)),
         )
+    # Note: Job scheduling lives on rtorrent_profiles, so invalidate the scheduler's profile-row snapshot just like a normal profile edit.
+    preferences.invalidate_poller_profile_list_cache()
     return {"scope": "job_scheduling", "copied": len(fields)}
 
 def copy_labels(source_profile_id: int, target_profile_id: int, user_id: int | None = None) -> dict[str, Any]:

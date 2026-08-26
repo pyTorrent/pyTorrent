@@ -458,6 +458,23 @@ class MockRtorrentState:
         """Handle the subset of rTorrent XML-RPC methods needed by pyTorrent."""
         with self.lock:
             self.tick()
+            if method == "system.multicall":
+                # Note: Mirror the XML-RPC built-in used by pyTorrent status and Smart Queue batching so load tests exercise the optimized production path.
+                calls = args[0] if args and isinstance(args[0], (list, tuple)) else []
+                results = []
+                for spec in calls:
+                    if not isinstance(spec, dict):
+                        results.append({"faultCode": 1, "faultString": "Invalid system.multicall item"})
+                        continue
+                    sub_method = str(spec.get("methodName") or "")
+                    sub_params = tuple(spec.get("params") or ())
+                    try:
+                        results.append([self.call(sub_method, sub_params)])
+                    except Fault as exc:
+                        results.append({"faultCode": int(exc.faultCode), "faultString": str(exc.faultString)})
+                    except Exception as exc:
+                        results.append({"faultCode": 1, "faultString": str(exc)})
+                return results
             if method in {"system.time", "system.time_seconds"}:
                 return int(time.time())
             if method in self.config:
@@ -652,7 +669,13 @@ class MockRtorrentState:
         if '${HOME:-}' in script or "${HOME:-}" in script:
             return "/mock"
         if "/proc/stat" in script and "/proc/meminfo" in script:
-            return "17.4 61.2"
+            # Note: Return monotonically increasing Linux-style counters so the optimized remote CPU sampler is exercised end to end.
+            ticks = max(1, int((time.monotonic() - self.started_at) * 1000))
+            total_ticks = 1_000_000 + ticks
+            idle_ticks = 800_000 + int(ticks * 0.826)
+            mem_total_kib = 8 * 1024 * 1024
+            mem_available_kib = int(mem_total_kib * 0.388)
+            return f"{total_ticks} {idle_ticks} {mem_total_kib} {mem_available_kib}"
         if "df -Pk" in script:
             return self.disk_usage_output(str(self.config.get("directory.default") or "/mock/downloads"))
         return ""

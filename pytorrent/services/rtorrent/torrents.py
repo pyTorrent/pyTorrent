@@ -1847,6 +1847,12 @@ def set_limits(profile: dict, down: int | None, up: int | None):
             except Exception:
                 pass
         raise
+    # Note: Successful runtime limit changes invalidate only cached footer metadata so the new limits are visible on the next status read.
+    try:
+        from .system import clear_status_meta_cache
+        clear_status_meta_cache(int(profile.get("id") or 0))
+    except Exception:
+        pass
     return {"ok": True, "down": int(down or 0), "up": int(up or 0)}
 
 

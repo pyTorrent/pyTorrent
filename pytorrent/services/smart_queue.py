@@ -492,7 +492,7 @@ def _call_rtorrent_setter(client: Any, method: str, value: int) -> bool:
     return False
 
 
-def _ensure_rtorrent_download_cap(client: Any, max_active: int) -> dict[str, Any]:
+def _ensure_rtorrent_download_cap(client: Any, max_active: int, profile_id: int | None = None) -> dict[str, Any]:
     """Raise rTorrent download caps that can silently limit Smart Queue to one item."""
     result: dict[str, Any] = {'checked': False, 'updated': False, 'items': []}
     # Note: rTorrent may have separate global and per-throttle limits. When div=1,
@@ -515,6 +515,12 @@ def _ensure_rtorrent_download_cap(client: Any, max_active: int) -> dict[str, Any
         except Exception as exc:
             item.update({'error': str(exc)})
         result['items'].append(item)
+    if result.get('updated') and profile_id:
+        # Note: Smart Queue can raise rTorrent slot limits; invalidate footer metadata without touching unrelated runtime caches.
+        try:
+            rtorrent.clear_status_meta_cache(int(profile_id))
+        except Exception:
+            pass
     return result
 
 
@@ -536,54 +542,96 @@ def _start_download(client: Any, profile_id: int, torrent: dict[str, Any]) -> di
     return result
 
 
+def _smart_queue_multicall(client: Any, hashes: list[str], fields: tuple[tuple[str, str], ...]) -> dict[str, dict[str, Any]]:
+    """Read Smart Queue verification fields in one XML-RPC round trip."""
+    # Note: Smart Queue uses system.multicall exclusively; transport/shape failures become per-item diagnostics instead of triggering legacy getter calls or aborting the queue cycle.
+    clean_hashes = [str(h or "").strip() for h in hashes if str(h or "").strip()]
+    calls = [{"methodName": method, "params": [h]} for h in clean_hashes for _key, method in fields]
+    if not calls:
+        return {}
+    try:
+        raw = client.call("system.multicall", calls)
+        if not isinstance(raw, (list, tuple)) or len(raw) != len(calls):
+            raise RuntimeError("Invalid system.multicall response from rTorrent")
+    except Exception as exc:
+        error = str(exc or "rTorrent system.multicall failed")
+        return {
+            h: {"_multicall_error": error, **{f"{key}_error": error for key, _method in fields}}
+            for h in clean_hashes
+        }
+    result = {h: {} for h in clean_hashes}
+    offset = 0
+    for h in clean_hashes:
+        for key, _method in fields:
+            value = raw[offset]
+            offset += 1
+            if isinstance(value, dict) and ("faultCode" in value or "faultString" in value):
+                result[h][f"{key}_error"] = str(value.get("faultString") or value.get("faultCode") or "rTorrent multicall fault")
+                continue
+            if isinstance(value, (list, tuple)) and len(value) == 1:
+                value = value[0]
+            result[h][key] = value
+    return result
+
+
 def _verify_started_downloads(
     client: Any,
     hashes: list[str],
     attempts: int = SMART_QUEUE_START_VERIFY_ATTEMPTS,
     delay: float = SMART_QUEUE_START_VERIFY_DELAY_SECONDS,
 ) -> tuple[list[str], list[dict[str, Any]]]:
-    """Verify started torrents with a slower, lightweight confirmation loop.
-
-    rTorrent can accept a large batch of d.start commands immediately but expose
-    d.state/d.is_active gradually. The verifier therefore waits longer than the
-    old five-second window and polls only cheap state fields during the loop.
-    Detailed diagnostics are read only for torrents that still did not confirm.
-    """
+    """Verify started torrents with batched, read-only state checks."""
     pending = [h for h in hashes if h]
     seen_started: set[str] = set()
     checks = max(1, int(attempts or 1))
     wait = max(0.1, float(delay or 0.1))
+    verify_fields = (("state", "d.state"), ("active", "d.is_active"))
 
     for attempt in range(checks):
         if attempt:
             time.sleep(wait)
+        batched = _smart_queue_multicall(client, pending, verify_fields)
+        transport_error = ""
         for h in list(pending):
-            if _read_live_started_flag(client, h):
+            values = batched.get(h, {})
+            if values.get("_multicall_error"):
+                transport_error = str(values.get("_multicall_error") or "rTorrent system.multicall failed")
+                continue
+            try:
+                started = bool(int(values.get("state") or 0) or int(values.get("active") or 0))
+            except Exception:
+                started = False
+            if started:
                 seen_started.add(h)
                 pending.remove(h)
-        if not pending:
+        if not pending or transport_error:
             break
 
     started = [h for h in hashes if h in seen_started]
+    if transport_error:
+        # Note: A failed batched verification is reported as pending/rpc_error immediately; do not spend another SCGI retry cycle on diagnostic getters.
+        pending_states = {
+            h: {
+                "hash": h,
+                "state_error": transport_error,
+                "active_error": transport_error,
+                "started": False,
+                "pending_reason": "rpc_error",
+            }
+            for h in hashes if h and h not in seen_started
+        }
+    else:
+        pending_states = _read_live_start_states(client, [h for h in hashes if h and h not in seen_started])
     no_effect: list[dict[str, Any]] = []
     for h in hashes:
         if h and h not in seen_started:
-            live = _read_live_start_state(client, h)
+            live = pending_states.get(h) or {'hash': h, 'started': False, 'pending_reason': 'rpc_error', 'state_error': 'missing Smart Queue verification result'}
             live['verify_attempts'] = checks
             live['verify_delay_seconds'] = wait
             no_effect.append(live)
     return started, no_effect
 
 
-def _read_live_started_flag(client: Any, torrent_hash: str) -> bool:
-    """Return True when rTorrent reports that a download has left the stopped state."""
-    for method in ('d.state', 'd.is_active'):
-        try:
-            if int(client.call(method, torrent_hash) or 0):
-                return True
-        except Exception:
-            continue
-    return False
 
 
 def _start_and_verify_downloads(client: Any, profile_id: int, torrents: list[dict[str, Any]]) -> dict[str, Any]:
@@ -618,9 +666,6 @@ def _start_and_verify_downloads(client: Any, profile_id: int, torrents: list[dic
         SMART_QUEUE_START_VERIFY_ATTEMPTS,
         SMART_QUEUE_START_VERIFY_DELAY_SECONDS,
     )
-    # Note: A successful d.start/d.resume RPC is the queue outcome. rTorrent may keep the item idle/queued
-    # for longer than the verification window, so unconfirmed accepted starts are pending confirmation,
-    # not a failed/no-effect start.
     return {
         'active_verified': active_verified,
         'start_failed': start_failed,
@@ -635,8 +680,7 @@ def _start_and_verify_downloads(client: Any, profile_id: int, torrents: list[dic
     }
 
 
-def _read_live_start_state(client: Any, torrent_hash: str) -> dict[str, Any]:
-    result: dict[str, Any] = {'hash': torrent_hash}
+def _read_live_start_states(client: Any, hashes: list[str]) -> dict[str, dict[str, Any]]:
     fields = (
         ('name', 'd.name'),
         ('state', 'd.state'),
@@ -651,17 +695,36 @@ def _read_live_start_state(client: Any, torrent_hash: str) -> dict[str, Any]:
         ('message', 'd.message'),
         ('label', 'd.custom1'),
     )
-    for key, method in fields:
-        try:
-            value = client.call(method, torrent_hash)
-            result[key] = int(value or 0) if key in {'state', 'active', 'open', 'complete', 'hashing', 'priority', 'down_rate', 'peers', 'seeds'} else str(value or '')
-        except Exception as exc:
-            result[f'{key}_error'] = str(exc)
-    # Note: Manual Start in rTorrent is successful when d.state becomes 1.
-    # d.is_active can stay 0 for queued/idle downloads, so it must not be used as the only success check.
-    result['started'] = bool(int(result.get('state') or 0) or int(result.get('active') or 0))
-    result['pending_reason'] = _classify_pending_start_state(result)
-    return result
+    # Note: A single system.multicall is authoritative for Smart Queue diagnostics; per-field faults are preserved as diagnostics instead of triggering extra SCGI calls.
+    batched = _smart_queue_multicall(client, hashes, fields)
+    results: dict[str, dict[str, Any]] = {}
+    numeric = {'state', 'active', 'open', 'complete', 'hashing', 'priority', 'down_rate', 'peers', 'seeds'}
+    for h in hashes:
+        if not h:
+            continue
+        values = batched.get(h, {})
+        result: dict[str, Any] = {'hash': h}
+        for key, _method in fields:
+            error_key = f'{key}_error'
+            if error_key in values:
+                result[error_key] = str(values[error_key])
+                continue
+            if key not in values:
+                result[error_key] = 'missing value in rTorrent system.multicall response'
+                continue
+            try:
+                result[key] = int(values[key] or 0) if key in numeric else str(values[key] or '')
+            except Exception as exc:
+                result[error_key] = str(exc)
+        result['started'] = bool(int(result.get('state') or 0) or int(result.get('active') or 0))
+        result['pending_reason'] = _classify_pending_start_state(result)
+        results[h] = result
+    return results
+
+
+def _read_live_start_state(client: Any, torrent_hash: str) -> dict[str, Any]:
+    # Note: Single-item Smart Queue diagnostics use the same one-request multicall path as batch verification.
+    return _read_live_start_states(client, [torrent_hash]).get(torrent_hash, {'hash': torrent_hash, 'pending_reason': 'rpc_error'})
 
 
 def _classify_pending_start_state(state: dict[str, Any]) -> str:
@@ -1272,7 +1335,7 @@ def _surge_refill_over_limit(profile: dict, settings: dict[str, Any], profile_id
         reverse=True,
     )
     c = rtorrent.client_for(profile)
-    rtorrent_cap = _ensure_rtorrent_download_cap(c, max(max_active, len(downloading) + batch_size))
+    rtorrent_cap = _ensure_rtorrent_download_cap(c, max(max_active, len(downloading) + batch_size), profile_id)
     label_failed: list[str] = []
     to_start = candidates[:batch_size]
     to_label_waiting = candidates[batch_size:]
@@ -1634,7 +1697,7 @@ def check(profile: dict | None = None, user_id: int | None = None, force: bool =
     protected_stalled = max(0, len(stalled) - len([h for h in stop_hashes if h in stalled_hashes]))
 
     c = rtorrent.client_for(profile)
-    rtorrent_cap = _ensure_rtorrent_download_cap(c, max_active)
+    rtorrent_cap = _ensure_rtorrent_download_cap(c, max_active, profile_id)
     for t in downloading:
         h = str(t.get('hash') or '')
         if not h or not _has_stalled_label(str(t.get('label') or '')):

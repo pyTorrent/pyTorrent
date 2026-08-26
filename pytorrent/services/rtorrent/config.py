@@ -612,6 +612,13 @@ def set_config(profile: dict, values: dict, apply_now: bool = True, apply_on_sta
                 pass
         raise
 
+    if updated:
+        # Note: Applied runtime config may change footer metrics such as limits/slots; invalidate only that metadata cache after successful setters.
+        try:
+            from .system import clear_status_meta_cache
+            clear_status_meta_cache(int(profile.get("id") or 0))
+        except Exception:
+            pass
     return {"ok": not errors, "updated": updated, "stored": stored, "errors": errors}
 
 

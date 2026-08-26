@@ -69,11 +69,10 @@ class ScgiRtorrentClient:
         return ScgiMethod(self, name)
 
     def call(self, method_name: str, *args):
-        # Note: Serialize each complete request/retry cycle per endpoint so concurrent background features cannot stampede rTorrent SCGI.
-        with _scgi_endpoint_gate(self.host, self.port):
-            return self._call_serialized(method_name, *args)
+        # Note: Retry backoff runs outside the endpoint gate so a failed background call cannot block unrelated UI RPCs while sleeping.
+        return self._call_with_retries(method_name, *args)
 
-    def _call_serialized(self, method_name: str, *args):
+    def _call_with_retries(self, method_name: str, *args):
         body = dumps(args, methodname=method_name, allow_none=True).encode("utf-8")
         headers = {
             "CONTENT_LENGTH": str(len(body)),
@@ -90,15 +89,17 @@ class ScgiRtorrentClient:
         last_exc = None
         for attempt in range(1, attempts + 1):
             try:
-                with socket.create_connection((self.host, self.port), timeout=self.timeout) as sock:
-                    sock.settimeout(self.timeout)
-                    sock.sendall(payload)
-                    chunks: list[bytes] = []
-                    while True:
-                        chunk = sock.recv(65536)
-                        if not chunk:
-                            break
-                        chunks.append(chunk)
+                # Note: Only the active socket exchange is serialized; retry sleep intentionally releases the shared SCGI lane.
+                with _scgi_endpoint_gate(self.host, self.port):
+                    with socket.create_connection((self.host, self.port), timeout=self.timeout) as sock:
+                        sock.settimeout(self.timeout)
+                        sock.sendall(payload)
+                        chunks: list[bytes] = []
+                        while True:
+                            chunk = sock.recv(65536)
+                            if not chunk:
+                                break
+                            chunks.append(chunk)
                 response = b"".join(chunks)
                 if not response:
                     raise ConnectionError("Empty response from rTorrent SCGI")
@@ -133,7 +134,8 @@ _REMOTE_USAGE_CACHE: dict[str, tuple[float, dict]] = {}
 _REMOTE_USAGE_PROFILE_HOSTS: dict[int, str] = {}
 _REMOTE_USAGE_CACHE_LOCK = threading.Lock()
 _REMOTE_USAGE_HOST_LOCKS: dict[str, threading.Lock] = {}
-_REMOTE_USAGE_TTL_SECONDS = 60.0
+_REMOTE_USAGE_TTL_SECONDS = 2.0
+_REMOTE_CPU_SAMPLES: dict[str, tuple[int, int]] = {}
 _REMOTE_PUBLIC_IP_CACHE: dict[int, tuple[float, str]] = {}
 _REMOTE_PUBLIC_IP_TTL_SECONDS = 6 * 60 * 60.0
 PY_MANUAL_PAUSE_FIELD = "py_manual_pause"
