@@ -583,21 +583,22 @@ def _remote_usage_host_lock(host_key: str):
         return lock
 
 
-def _remote_usage_sample(profile: dict) -> tuple[int, int, int, int]:
-    """Read one non-blocking CPU counter and RAM sample from the rTorrent host."""
-    # Note: Sampling /proc once avoids holding the SCGI lane during a remote sleep; CPU is derived from deltas between samples.
+def _remote_usage_sample(profile: dict) -> tuple[int, int, int, int, float, float, float]:
+    """Read one non-blocking CPU/RAM/load-average sample from the rTorrent host."""
+    # Note: CPU counters, RAM and load average share one execute.capture call so the extra tooltip data adds no SCGI round trip.
     script = (
         'read cpu user nice system idle iowait irq softirq steal guest guest_nice < /proc/stat; '
         'total=$((user+nice+system+idle+iowait+irq+softirq+steal)); idle_total=$((idle+iowait)); '
         "mem_total=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo); "
         "mem_avail=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo); "
-        'printf "%s %s %s %s" "$total" "$idle_total" "$mem_total" "$mem_avail"'
+        "read load1 load5 load15 rest < /proc/loadavg; "
+        'printf "%s %s %s %s %s %s %s" "$total" "$idle_total" "$mem_total" "$mem_avail" "$load1" "$load5" "$load15"'
     )
     output = str(_rt_execute(client_for(profile), "execute.capture", "sh", "-c", script) or "").strip()
     parts = output.split()
-    if len(parts) < 4:
-        raise RuntimeError(f"Cannot read remote CPU/RAM usage: {output}")
-    return int(parts[0]), int(parts[1]), int(parts[2]), int(parts[3])
+    if len(parts) < 7:
+        raise RuntimeError(f"Cannot read remote CPU/RAM/load average usage: {output}")
+    return int(parts[0]), int(parts[1]), int(parts[2]), int(parts[3]), float(parts[4]), float(parts[5]), float(parts[6])
 
 
 def remote_system_usage(profile: dict, force: bool = False) -> dict:
@@ -617,7 +618,7 @@ def remote_system_usage(profile: dict, force: bool = False) -> dict:
             usage["cached"] = True
             return usage
 
-        total, idle, mem_total, mem_avail = _remote_usage_sample(profile)
+        total, idle, mem_total, mem_avail, load1, load5, load15 = _remote_usage_sample(profile)
         with _REMOTE_USAGE_CACHE_LOCK:
             previous = _REMOTE_CPU_SAMPLES.get(host_key)
 
@@ -625,14 +626,31 @@ def remote_system_usage(profile: dict, force: bool = False) -> dict:
         if previous is None:
             previous = (total, idle)
             time.sleep(0.1)
-            total, idle, mem_total, mem_avail = _remote_usage_sample(profile)
+            total, idle, mem_total, mem_avail, load1, load5, load15 = _remote_usage_sample(profile)
 
         prev_total, prev_idle = previous
         dt = max(0, total - int(prev_total or 0))
         di = max(0, idle - int(prev_idle or 0))
-        cpu_pct = round(((dt - di) * 100.0 / dt), 1) if dt > 0 else 0.0
-        ram_pct = round(((mem_total - mem_avail) * 100.0 / mem_total), 1) if mem_total > 0 else 0.0
-        usage = {"cpu": cpu_pct, "ram": ram_pct, "source": "rtorrent-remote", "usage_source": "rtorrent-remote", "cached": False}
+        cpu_pct = round(((dt - di) * 100.0 / dt), 1) if dt > 0 else None
+        cpu_stale = False
+        if cpu_pct is None and cached:
+            try:
+                cached_cpu = float((cached[1] or {}).get("cpu"))
+                if 0.0 <= cached_cpu <= 100.0:
+                    cpu_pct = cached_cpu
+                    cpu_stale = True
+            except (TypeError, ValueError):
+                pass
+        ram_pct = round(((mem_total - mem_avail) * 100.0 / mem_total), 1) if mem_total > 0 else None
+        usage = {
+            "cpu": cpu_pct,
+            "ram": ram_pct,
+            "load_avg": [round(load1, 2), round(load5, 2), round(load15, 2)],
+            "cpu_stale": cpu_stale,
+            "source": "rtorrent-remote",
+            "usage_source": "rtorrent-remote",
+            "cached": False,
+        }
         with _REMOTE_USAGE_CACHE_LOCK:
             _REMOTE_CPU_SAMPLES[host_key] = (total, idle)
             _REMOTE_USAGE_CACHE[host_key] = (now, usage)
@@ -814,6 +832,7 @@ def _rtorrent_meta_multicall(c: Any) -> dict[str, Any]:
     # Note: pyTorrent communicates with rTorrent through XML-RPC/SCGI, where system.multicall is a built-in XML-RPC method; getter aliases stay in the same request for per-field compatibility.
     groups = {
         "version": ("system.client_version",),
+        "library_version": ("system.library_version",),
         "down_limit": ("throttle.global_down.max_rate",),
         "up_limit": ("throttle.global_up.max_rate",),
         "open_sockets": ("network.open_sockets",),
@@ -872,6 +891,7 @@ def _cached_rtorrent_meta(profile: dict, c: Any) -> dict[str, Any]:
     # Note: Missing optional getters stay nullable; no second SCGI pass is issued after the single batched metadata read.
     meta = {
         "version": str(batched.get("version") or ""),
+        "library_version": str(batched.get("library_version") or ""),
         "down_limit": down_limit,
         "up_limit": up_limit,
         "down_limit_h": human_rate(down_limit) if down_limit else "∞",
@@ -967,6 +987,7 @@ def system_status(profile: dict, rows: list[dict] | None = None, *, include_disk
     status = {
         "ok": True,
         "version": meta.get("version"),
+        "library_version": meta.get("library_version"),
         "total": len(rows),
         "active": sum(1 for t in rows if t["state"]),
         "seeding": sum(1 for t in rows if t["complete"] and t["state"] and not t.get("paused")),

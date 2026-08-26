@@ -49,14 +49,25 @@ def system_status():
             try:
                 usage = rtorrent.remote_system_usage(profile)
                 status.update(usage)
-                status["usage_available"] = True
+                status["usage_available"] = usage.get("cpu") is not None or usage.get("ram") is not None
             except Exception as exc:
+                # Note: A transiently slow remote host keeps the last valid CPU/RAM/load sample instead of replacing the graph with a false zero.
+                previous = profile_status_cache.get_status(profile_id) or {}
+                for key in ("cpu", "ram", "load_avg"):
+                    if previous.get(key) is not None:
+                        status[key] = previous.get(key)
+                status["cpu_stale"] = status.get("cpu") is not None
                 status["usage_source"] = "rtorrent-remote"
-                status["usage_available"] = False
+                status["usage_available"] = status.get("cpu") is not None or status.get("ram") is not None
                 status["usage_error"] = str(exc)
         else:
             status["cpu"] = psutil.cpu_percent(interval=None)
             status["ram"] = psutil.virtual_memory().percent
+            try:
+                status["load_avg"] = [round(float(value), 2) for value in psutil.getloadavg()]
+            except (AttributeError, OSError):
+                status["load_avg"] = []
+            status["cpu_stale"] = False
             status["usage_source"] = "local"
             status["usage_available"] = True
         status["profile_id"] = profile_id

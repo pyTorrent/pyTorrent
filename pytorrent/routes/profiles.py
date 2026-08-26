@@ -8,6 +8,7 @@ from ..utils import human_size
 @bp.get("/profiles")
 def profiles_list():
     profiles = []
+    diagnostics = []
     for row in preferences.list_profiles():
         item = dict(row)
         # Note: Frontend actions can hide write-only operations without trusting this flag; backend still enforces permissions.
@@ -24,8 +25,11 @@ def profiles_list():
         item["profile_backup_interval_hours"] = settings.get("interval_hours")
         item["profile_backup_retention_days"] = settings.get("retention_days")
         profiles.append(item)
+        # Note: Profile picker health/version data comes from the existing poller snapshot, avoiding a second HTTP render pass and any live SCGI work.
+        diagnostics.append(passive_profile_diagnostics(item))
     return ok({
         "profiles": profiles,
+        "diagnostics": diagnostics,
         "active": preferences.active_profile(),
         "can_manage_profiles": (not auth.enabled()) or auth.is_admin(),
     })

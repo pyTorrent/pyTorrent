@@ -18,7 +18,7 @@ def passive_profile_diagnostics(profile: dict) -> dict:
         "ok": bool(status) and not bool(error),
         "status": "error" if error else ("normal" if status else "unknown"),
         "version": str(status.get("version") or ""),
-        "library_version": "",
+        "library_version": str(status.get("library_version") or ""),
         "base_paths": {},
         "write_permissions": {},
         "free_disk": {},
