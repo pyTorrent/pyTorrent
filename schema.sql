@@ -113,6 +113,7 @@ CREATE TABLE IF NOT EXISTS rtorrent_profiles (
   is_default INTEGER DEFAULT 0,
   timeout_seconds INTEGER DEFAULT 5,
   max_parallel_jobs INTEGER DEFAULT 5,
+  ordered_parallel_jobs INTEGER DEFAULT 1,
   light_parallel_jobs INTEGER DEFAULT 4,
   light_job_timeout_seconds INTEGER DEFAULT 300,
   heavy_job_timeout_seconds INTEGER DEFAULT 7200,

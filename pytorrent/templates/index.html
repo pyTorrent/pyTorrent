@@ -1069,6 +1069,13 @@
                   <div class="section-title"><i class="fa-solid fa-server"></i> rTorrent profiles</div>
                   <div id="profileList" class="mb-3 small"><span
                       class="spinner-border spinner-border-sm me-2"></span>Loading profiles...</div>
+                  <!-- Note: Worker scheduling has one configuration surface; rTorrent profiles only link to the active profile's Jobs settings. -->
+                  <div class="view-preferences-note">
+                    <i class="fa-solid fa-gauge-high"></i>
+                    <span>Concurrency and watchdog settings for the active rTorrent profile are configured in Job scheduling.</span>
+                    <button class="btn btn-sm btn-outline-primary" type="button" data-open-tool="jobs"><i
+                        class="fa-solid fa-arrow-right"></i> Job configuration</button>
+                  </div>
                   <!-- Note: The profile-level preset copies only normal UI preferences; technical automation and path-specific settings stay local to each rTorrent instance. -->
                   <div class="view-preferences-note">
                     <i class="fa-solid fa-circle-info"></i>
@@ -1094,10 +1101,7 @@
                         scgi://host:port/RPC2 format.</small></label><label
                       class="profile-form-field"><span>Timeout</span><input id="profileTimeout" class="form-control"
                         type="number" value="5" min="1"><small>Seconds to wait for rTorrent
-                        response.</small></label><label class="profile-form-field"><span>Parallel jobs</span><input
-                        id="profileParallel" class="form-control" type="number" value="5" min="1"><small>Maximum queued
-                        actions running at once.</small></label><label
-                      class="profile-form-field profile-check-field"><span>Location</span><span
+                        response.</small></label><label class="profile-form-field profile-check-field"><span>Location</span><span
                         class="form-check form-switch mb-0"><input id="profileRemote" class="form-check-input"
                           type="checkbox"><span class="form-check-label">Remote location</span></span><small>Check this
                         if you want to connect to a remote rTorrent instance instead of localhost.</small></label>
@@ -1496,13 +1500,19 @@
                   <div class="section-title"><i class="fa-solid fa-gauge-high"></i> Job scheduling</div>
                   <div class="tool-note mb-3">These settings are stored per active rTorrent profile. Light jobs are
                     control actions such as start, stop, pause, resume, labels, ratio assignment, reannounce and speed
-                    limits. Heavy jobs are long or destructive actions such as move, remove and adding torrents.</div>
+                    limits. Heavy jobs are long or destructive actions such as move, remove and adding torrents.
+                    Order-sensitive heavy jobs stay sequential by default and can be allowed to overlap explicitly below.</div>
                   <!-- Note: Copying job scheduling never copies the source profile connection or identity fields. -->
                   <div class="view-preferences-note"><i class="fa-solid fa-circle-info"></i><span>Shared profile configuration. Concurrency and watchdog timeouts affect every user of the active rTorrent profile.</span><button class="btn btn-sm btn-outline-primary d-none" type="button" data-profile-copy-scope="job_scheduling" data-profile-copy-label="job scheduling settings"><i class="fa-solid fa-copy"></i> Copy shared settings</button></div>
                   <div class="job-settings-grid"><label class="form-field"><span>Heavy parallel jobs</span><input
                         id="jobHeavyParallel" class="form-control form-control-sm" type="number" min="1" max="64"
-                        value="5"><small>Maximum heavy jobs running at once for this profile. Default:
-                        5.</small></label><label class="form-field"><span>Light parallel jobs</span><input
+                        value="5"><small>Overall maximum heavy jobs running at once for this profile. Ordered jobs are
+                        also limited by the separate setting below. Default: 5.</small></label><label
+                        class="form-field"><span>Ordered heavy jobs</span><input id="jobOrderedParallel"
+                        class="form-control form-control-sm" type="number" min="1" max="64" value="1"><small>Maximum
+                        order-sensitive heavy jobs, such as move, remove and profile transfer, allowed to overlap.
+                        Default: 1. Set 2 to allow two at once; the Heavy parallel jobs limit still applies. Use values
+                        above 1 only when those operations may safely overlap.</small></label><label class="form-field"><span>Light parallel jobs</span><input
                         id="jobLightParallel" class="form-control form-control-sm" type="number" min="1" max="64"
                         value="4"><small>Separate slot pool for lightweight control jobs so they do not wait behind
                         heavy IO work. Default: 4.</small></label><label class="form-field"><span>Light timeout

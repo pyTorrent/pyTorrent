@@ -21,7 +21,7 @@ _light_executor = ThreadPoolExecutor(max_workers=max(4, min(WORKERS, 16)), threa
 _socketio = None
 _heavy_semaphores: dict[int, tuple[int, threading.Semaphore]] = {}
 _light_semaphores: dict[int, tuple[int, threading.Semaphore]] = {}
-_exclusive_locks: dict[int, threading.Lock] = {}
+_ordered_semaphores: dict[int, tuple[int, threading.Semaphore]] = {}
 _active_runners: set[str] = set()
 _sem_lock = threading.Lock()
 _runner_lock = threading.Lock()
@@ -90,6 +90,11 @@ def _profile_light_limit(profile: dict) -> int:
     return _bounded_int(profile.get("light_parallel_jobs"), 4)
 
 
+def _profile_ordered_limit(profile: dict) -> int:
+    # Note: Ordered heavy jobs stay sequential by default but can be explicitly allowed to overlap per profile.
+    return _bounded_int(profile.get("ordered_parallel_jobs"), 1)
+
+
 def _get_sem(profile: dict, light: bool = False) -> threading.Semaphore:
     profile_id = int(profile["id"])
     limit = _profile_light_limit(profile) if light else _profile_heavy_limit(profile)
@@ -101,11 +106,13 @@ def _get_sem(profile: dict, light: bool = False) -> threading.Semaphore:
         return registry[profile_id][1]
 
 
-def _get_exclusive_lock(profile_id: int) -> threading.Lock:
+def _get_ordered_sem(profile_id: int, limit: int) -> threading.Semaphore:
+    # Note: Ordered-job slots are separate from the overall heavy-job pool so the stricter safety limit can default to one.
     with _sem_lock:
-        if profile_id not in _exclusive_locks:
-            _exclusive_locks[profile_id] = threading.Lock()
-        return _exclusive_locks[profile_id]
+        current = _ordered_semaphores.get(profile_id)
+        if not current or current[0] != limit:
+            _ordered_semaphores[profile_id] = (limit, threading.Semaphore(limit))
+        return _ordered_semaphores[profile_id][1]
 
 
 def _job_row(job_id: str):
@@ -157,14 +164,32 @@ def _ordered_profile_ids(row) -> set[int]:
     return ids
 
 
-def _ordered_locks_for(row) -> list[threading.Lock]:
-    """Acquire locks in stable order to avoid deadlocks between cross-profile jobs."""
-    return [_get_exclusive_lock(profile_id) for profile_id in sorted(_ordered_profile_ids(row))]
-
-
-def _has_prior_ordered_jobs(profile_ids: set[int], rowid: int) -> bool:
+def _ordered_profile_limits(profile_ids: set[int]) -> dict[int, int]:
+    # Note: Cross-profile jobs must respect the ordered-job limit of every profile they touch.
     if not profile_ids:
-        return False
+        return {}
+    placeholders = ",".join("?" for _ in profile_ids)
+    with connect() as conn:
+        rows = conn.execute(
+            f"SELECT id, ordered_parallel_jobs FROM rtorrent_profiles WHERE id IN ({placeholders})",
+            tuple(sorted(profile_ids)),
+        ).fetchall()
+    limits = {int(row["id"]): _profile_ordered_limit(row) for row in rows}
+    return {profile_id: limits.get(profile_id, 1) for profile_id in profile_ids}
+
+
+def _ordered_sems_for(row) -> list[threading.Semaphore]:
+    """Return ordered-job semaphores in stable profile order to avoid cross-profile deadlocks."""
+    # Note: Stable semaphore acquisition preserves the old deadlock protection while allowing more than one ordered job when configured.
+    profile_ids = _ordered_profile_ids(row)
+    limits = _ordered_profile_limits(profile_ids)
+    return [_get_ordered_sem(profile_id, limits[profile_id]) for profile_id in sorted(profile_ids)]
+
+
+def _prior_ordered_job_counts(profile_ids: set[int], rowid: int) -> dict[int, int]:
+    # Note: Only the configured number of oldest ordered jobs per profile may proceed; later jobs keep FIFO queue order.
+    if not profile_ids:
+        return {}
     with connect() as conn:
         rows = conn.execute(
             """
@@ -176,7 +201,20 @@ def _has_prior_ordered_jobs(profile_ids: set[int], rowid: int) -> bool:
             """,
             (rowid,),
         ).fetchall()
-    return _has_ordered_blocker_rows(profile_ids, rows)
+    counts = {profile_id: 0 for profile_id in profile_ids}
+    for row in rows:
+        if not _is_ordered_job(row) or _is_priority_job(row):
+            continue
+        for profile_id in profile_ids.intersection(_ordered_profile_ids(row)):
+            counts[profile_id] += 1
+    return counts
+
+
+def _ordered_queue_has_capacity(profile_ids: set[int], rowid: int) -> bool:
+    # Note: A job is eligible when it is inside the concurrency window of every profile it touches.
+    limits = _ordered_profile_limits(profile_ids)
+    prior_counts = _prior_ordered_job_counts(profile_ids, rowid)
+    return all(prior_counts.get(profile_id, 0) < limits.get(profile_id, 1) for profile_id in profile_ids)
 
 
 def _has_ordered_blocker_rows(profile_ids: set[int], rows) -> bool:
@@ -219,7 +257,8 @@ def _prepare_enqueue_payload(action_name: str, profile_id: int, payload: dict, f
 
 
 def _wait_for_prior_ordered_jobs(job_id: str, profile_ids: set[int], rowid: int) -> bool:
-    while _has_prior_ordered_jobs(profile_ids, rowid):
+    # Note: The queue now waits for an ordered-job slot instead of requiring every earlier ordered job to finish.
+    while not _ordered_queue_has_capacity(profile_ids, rowid):
         fresh = _job_row(job_id)
         if not fresh or fresh["status"] == "cancelled":
             return False
@@ -569,16 +608,17 @@ def _fail_missing_profile(job_id: str, job: dict) -> None:
     _emit("job_update", {"id": job_id, "profile_id": job.get("profile_id"), "status": "failed", "error": "profile not found"})
 
 
-def _acquire_ordered_locks(job_id: str, job: dict) -> list[threading.Lock] | None:
+def _acquire_ordered_slots(job_id: str, job: dict) -> list[threading.Semaphore] | None:
+    # Note: Ordered jobs retain FIFO admission while the per-profile semaphore permits the configured overlap.
     if not _is_ordered_job(job) or _is_priority_job(job):
         return []
     involved_profile_ids = _ordered_profile_ids(job)
     if not _wait_for_prior_ordered_jobs(job_id, involved_profile_ids, int(job["_rowid"])):
         return None
-    ordered_locks = _ordered_locks_for(job)
-    for lock in ordered_locks:
-        lock.acquire()
-    return ordered_locks
+    ordered_sems = _ordered_sems_for(job)
+    for sem in ordered_sems:
+        sem.acquire()
+    return ordered_sems
 
 
 def _load_running_payload(job_id: str, job: dict) -> dict:
@@ -613,10 +653,14 @@ def _emit_destination_profile_refresh(job: dict, payload: dict, action_name: str
         pass
 
 
-def _defer_profile_transfer_bulk_refresh(action_name: str, payload: dict) -> bool:
-    """Return true when a later ordered bulk part will perform the shared cache refresh."""
-    # Note: Large profile transfers avoid two full torrent-cache scans after every 100-item part; the final ordered part refreshes both source and target profiles once.
+def _defer_profile_transfer_bulk_refresh(job: dict, action_name: str, payload: dict) -> bool:
+    """Return true when a later sequential bulk part will perform the shared cache refresh."""
+    # Note: Refresh deferral is safe only while the transfer's source/target ordered limits keep all bulk parts sequential.
     if action_name != "profile_transfer":
+        return False
+    profile_ids = _ordered_profile_ids(job)
+    limits = _ordered_profile_limits(profile_ids)
+    if profile_ids and all(limits.get(profile_id, 1) > 1 for profile_id in profile_ids):
         return False
     context = (payload or {}).get("job_context") or {}
     try:
@@ -642,7 +686,7 @@ def _finish_running_job(job_id: str, profile: dict, job: dict, payload: dict, re
     })
     action_name = str(job["action"] or "")
     _emit_disk_refresh_requested(int(profile["id"]), action_name, payload, result or {})
-    defer_bulk_refresh = _defer_profile_transfer_bulk_refresh(action_name, payload)
+    defer_bulk_refresh = _defer_profile_transfer_bulk_refresh(job, action_name, payload)
     if not defer_bulk_refresh:
         _emit_torrent_refresh(profile, action_name)
         _emit_destination_profile_refresh(job, payload, action_name)
@@ -694,10 +738,11 @@ def _handle_job_exception(job_id: str, job: dict, payload: dict, exc: Exception)
 
 
 def _run(job_id: str):
+    # Note: Ordered-heavy slots and the overall heavy/light pool are acquired independently so both configured limits apply.
     if not _claim_runner(job_id):
         return
     sem = None
-    ordered_locks: list[threading.Lock] = []
+    ordered_sems: list[threading.Semaphore] = []
     job = {}
     payload = {}
     try:
@@ -708,10 +753,10 @@ def _run(job_id: str):
         if not profile:
             _fail_missing_profile(job_id, job)
             return
-        acquired_locks = _acquire_ordered_locks(job_id, job)
-        if acquired_locks is None:
+        acquired_ordered_sems = _acquire_ordered_slots(job_id, job)
+        if acquired_ordered_sems is None:
             return
-        ordered_locks = acquired_locks
+        ordered_sems = acquired_ordered_sems
         sem = _get_sem(profile, light=_is_light_job(job))
         sem.acquire()
         job = _job_row(job_id)
@@ -733,8 +778,8 @@ def _run(job_id: str):
     finally:
         if sem:
             sem.release()
-        for lock in reversed(ordered_locks):
-            lock.release()
+        for ordered_sem in reversed(ordered_sems):
+            ordered_sem.release()
         _release_runner(job_id)
 
 

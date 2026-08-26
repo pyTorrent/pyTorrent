@@ -283,6 +283,7 @@ def copy_job_scheduling(source_profile_id: int, target_profile_id: int, user_id:
     source, _ = _validate_profiles(source_profile_id, target_profile_id, actor_id)
     fields = (
         "max_parallel_jobs",
+        "ordered_parallel_jobs",
         "light_parallel_jobs",
         "light_job_timeout_seconds",
         "heavy_job_timeout_seconds",
@@ -291,7 +292,7 @@ def copy_job_scheduling(source_profile_id: int, target_profile_id: int, user_id:
     values = [source.get(field) for field in fields]
     with connect() as conn:
         conn.execute(
-            "UPDATE rtorrent_profiles SET max_parallel_jobs=?,light_parallel_jobs=?,light_job_timeout_seconds=?,heavy_job_timeout_seconds=?,pending_job_timeout_seconds=?,updated_at=? WHERE id=?",
+            "UPDATE rtorrent_profiles SET max_parallel_jobs=?,ordered_parallel_jobs=?,light_parallel_jobs=?,light_job_timeout_seconds=?,heavy_job_timeout_seconds=?,pending_job_timeout_seconds=?,updated_at=? WHERE id=?",
             (*values, utcnow(), int(target_profile_id)),
         )
     return {"scope": "job_scheduling", "copied": len(fields)}

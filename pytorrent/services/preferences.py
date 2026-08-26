@@ -274,6 +274,7 @@ def active_profile(user_id: int | None = None):
 
 
 def _profile_values(data: dict) -> dict:
+    # Note: Scheduler limits are normalized with the profile so API, migrations, and Job scheduling share the same bounds.
     name = str(data.get("name") or "rTorrent").strip() or "rTorrent"
     scgi_url = str(data.get("scgi_url") or "").strip()
     if not scgi_url.startswith("scgi://"):
@@ -283,6 +284,7 @@ def _profile_values(data: dict) -> dict:
         "scgi_url": scgi_url,
         "timeout_seconds": _int_setting(data, "timeout_seconds", 5, 1, 300),
         "max_parallel_jobs": _int_setting(data, "max_parallel_jobs", 5, 1, 64),
+        "ordered_parallel_jobs": _int_setting(data, "ordered_parallel_jobs", 1, 1, 64),
         "light_parallel_jobs": _int_setting(data, "light_parallel_jobs", 4, 1, 64),
         "light_job_timeout_seconds": _int_setting(data, "light_job_timeout_seconds", 300, 30, 86400),
         "heavy_job_timeout_seconds": _int_setting(data, "heavy_job_timeout_seconds", 7200, 300, 172800),
@@ -293,15 +295,16 @@ def _profile_values(data: dict) -> dict:
 
 
 def _save_profile_conn(conn, data: dict, user_id: int, now: str | None = None):
+    # Note: New profiles persist the complete scheduler configuration, including the ordered-heavy concurrency limit.
     values = _profile_values(data)
     now = now or utcnow()
     if values["is_default"]:
         conn.execute("UPDATE rtorrent_profiles SET is_default=0 WHERE user_id=?", (user_id,))
     cur = conn.execute(
-        "INSERT INTO rtorrent_profiles(user_id,name,scgi_url,is_default,timeout_seconds,max_parallel_jobs,light_parallel_jobs,light_job_timeout_seconds,heavy_job_timeout_seconds,pending_job_timeout_seconds,is_remote,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO rtorrent_profiles(user_id,name,scgi_url,is_default,timeout_seconds,max_parallel_jobs,ordered_parallel_jobs,light_parallel_jobs,light_job_timeout_seconds,heavy_job_timeout_seconds,pending_job_timeout_seconds,is_remote,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (
             user_id, values["name"], values["scgi_url"], values["is_default"],
-            values["timeout_seconds"], values["max_parallel_jobs"], values["light_parallel_jobs"],
+            values["timeout_seconds"], values["max_parallel_jobs"], values["ordered_parallel_jobs"], values["light_parallel_jobs"],
             values["light_job_timeout_seconds"], values["heavy_job_timeout_seconds"], values["pending_job_timeout_seconds"],
             values["is_remote"], now, now,
         ),
@@ -324,21 +327,22 @@ def save_profile(data: dict, user_id: int | None = None):
 
 def update_profile(profile_id: int, data: dict, user_id: int | None = None):
     user_id = user_id or auth.current_user_id() or default_user_id()
-    values = _profile_values(data)
     now = utcnow()
     with connect() as conn:
-        row = conn.execute("SELECT id,user_id FROM rtorrent_profiles WHERE id=?", (profile_id,)).fetchone()
+        row = conn.execute("SELECT * FROM rtorrent_profiles WHERE id=?", (profile_id,)).fetchone()
         if not row or not auth.can_write_profile(profile_id, user_id):
             raise ValueError("Profil nie istnieje")
+        # Note: Partial profile edits preserve scheduler settings so rTorrent connection forms cannot overwrite Job scheduling values.
+        values = _profile_values({**dict(row), **(data or {})})
         owner_user_id = int(row["user_id"])
         if values["is_default"]:
             # The default flag belongs to the profile owner, not to the admin currently editing it.
             conn.execute("UPDATE rtorrent_profiles SET is_default=0 WHERE user_id=?", (owner_user_id,))
         conn.execute(
-            "UPDATE rtorrent_profiles SET name=?, scgi_url=?, is_default=?, timeout_seconds=?, max_parallel_jobs=?, light_parallel_jobs=?, light_job_timeout_seconds=?, heavy_job_timeout_seconds=?, pending_job_timeout_seconds=?, is_remote=?, updated_at=? WHERE id=?",
+            "UPDATE rtorrent_profiles SET name=?, scgi_url=?, is_default=?, timeout_seconds=?, max_parallel_jobs=?, ordered_parallel_jobs=?, light_parallel_jobs=?, light_job_timeout_seconds=?, heavy_job_timeout_seconds=?, pending_job_timeout_seconds=?, is_remote=?, updated_at=? WHERE id=?",
             (
                 values["name"], values["scgi_url"], values["is_default"], values["timeout_seconds"],
-                values["max_parallel_jobs"], values["light_parallel_jobs"], values["light_job_timeout_seconds"],
+                values["max_parallel_jobs"], values["ordered_parallel_jobs"], values["light_parallel_jobs"], values["light_job_timeout_seconds"],
                 values["heavy_job_timeout_seconds"], values["pending_job_timeout_seconds"], values["is_remote"],
                 now, profile_id,
             ),
