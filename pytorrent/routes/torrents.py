@@ -55,15 +55,16 @@ def trackers_summary():
         bg_limit = min(250, max(1, int(request.args.get("bg_limit") or 80)))
         warm = str(request.args.get("warm") or "").lower() in {"1", "true", "yes"}
         hashes = [t.get("hash") for t in torrent_cache.snapshot(profile["id"]) if t.get("hash")]
-        prefs = preferences.get_preferences()
+        # Note: Tracker preferences are resolved for the same explicit profile as the torrent snapshot.
+        prefs = preferences.get_preferences(profile_id=int(profile["id"]))
         include_favicons = bool(prefs and prefs.get("tracker_favicons_enabled"))
         loader = lambda h: rtorrent.torrent_trackers(profile, h)
         summary = tracker_cache.summary(profile, hashes, loader, scan_limit=scan_limit, include_favicons=include_favicons)
         if warm and int(summary.get("pending") or 0) > 0:
             summary["warming"] = tracker_cache.warm_summary_cache(profile, hashes, loader, batch_size=bg_limit)
-        return ok({"summary": summary})
+        return ok({"summary": summary, "profile_id": int(profile["id"])})
     except Exception as exc:
-        return ok({"summary": {"hashes": {}, "trackers": [], "errors": [{"error": str(exc)}], "scanned": 0, "pending": 0}, "error": str(exc)})
+        return ok({"summary": {"hashes": {}, "trackers": [], "errors": [{"error": str(exc)}], "scanned": 0, "pending": 0}, "error": str(exc), "profile_id": int(profile["id"])})
 
 
 
@@ -71,7 +72,9 @@ def trackers_summary():
 
 @bp.get("/tracker-favicon/<path:domain>")
 def tracker_favicon(domain: str):
-    prefs = preferences.get_preferences()
+    # Note: Favicon enablement follows the explicitly requested profile instead of a concurrently changing active profile.
+    profile = request_profile()
+    prefs = preferences.get_preferences(profile_id=int(profile["id"])) if profile else preferences.get_preferences()
     force = str(request.args.get("refresh") or "").lower() in {"1", "true", "yes", "force"}
     # Note: Manual refresh must work from CLI even when tracker favicons are disabled in Preferences.
     enabled = force or bool(prefs and prefs.get("tracker_favicons_enabled"))
@@ -962,18 +965,20 @@ def torrent_space_check():
 
 @bp.get("/download-location/preferences")
 def download_location_preferences_get():
+    # Note: Download-location reads echo the resolved profile alongside merged preferences.
     profile = request_profile()
     prefs = preferences.get_preferences(profile_id=profile.get("id") if profile else None)
     profile_default = active_default_download_path(profile) if profile else ""
-    return ok({"preferences": prefs, "default_path": profile_default})
+    return ok({"preferences": prefs, "default_path": profile_default, "profile_id": int(profile["id"]) if profile else 0})
 
 
 @bp.post("/download-location/preferences")
 def download_location_preferences_save():
+    # Note: Download-location saves echo their target profile so delayed responses can be discarded safely.
     profile_id = request_profile_id(require_write=True)
     prefs = preferences.save_preferences(request.get_json(silent=True) or {}, profile_id=profile_id)
     profile = preferences.get_profile(profile_id, auth.current_user_id() or default_user_id()) if profile_id else request_profile()
-    return ok({"preferences": prefs, "default_path": active_default_download_path(profile) if profile else ""})
+    return ok({"preferences": prefs, "default_path": active_default_download_path(profile) if profile else "", "profile_id": int(profile_id or 0)})
 
 
 @bp.post("/torrents/preview")

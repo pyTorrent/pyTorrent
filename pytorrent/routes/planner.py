@@ -25,7 +25,9 @@ def download_planner_get():
     profile, error = _profile_or_error()
     if error:
         return error
-    return ok({"settings": download_planner.get_settings(int(profile["id"]), current_user_id())})
+    profile_id = int(profile["id"])
+    # Note: Profile id is echoed so slow planner loads cannot repaint another active profile.
+    return ok({"settings": download_planner.get_settings(profile_id, current_user_id()), "profile_id": profile_id})
 
 
 @bp.post("/download-planner")
@@ -35,8 +37,9 @@ def download_planner_save():
     if error:
         return error
     try:
-        settings = download_planner.save_settings(int(profile["id"]), request.get_json(silent=True) or {}, current_user_id())
-        return ok({"settings": settings})
+        profile_id = int(profile["id"])
+        settings = download_planner.save_settings(profile_id, request.get_json(silent=True) or {}, current_user_id())
+        return ok({"settings": settings, "profile_id": profile_id})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
 
@@ -58,10 +61,12 @@ def download_planner_check():
 
 @bp.get("/download-planner/preview")
 def download_planner_preview():
+    # Note: Preview/history echo their source profile so the browser can reject delayed cross-profile results.
     profile, error = _profile_or_error()
     if error:
         return error
-    return ok({"preview": download_planner.preview(profile), "history": download_planner.history(int(profile["id"]), int(request.args.get("history_limit") or 40)), "history_total": download_planner.history_count(int(profile["id"]))})
+    profile_id = int(profile["id"])
+    return ok({"preview": download_planner.preview(profile), "history": download_planner.history(profile_id, int(request.args.get("history_limit") or 40)), "history_total": download_planner.history_count(profile_id), "profile_id": profile_id})
 
 
 @bp.delete("/download-planner/history")
@@ -90,20 +95,23 @@ def download_planner_override():
 
 @bp.get("/poller/settings")
 def poller_settings_get():
+    # Note: Poller reads echo the resolved profile id for frontend race protection.
     profile, error = _profile_or_error()
     if error:
         return error
     pid = int(profile["id"])
     settings = poller_control.get_settings(pid)
-    return ok({"settings": settings, "runtime": poller_control.snapshot(pid, settings)})
+    return ok({"settings": settings, "runtime": poller_control.snapshot(pid, settings), "profile_id": pid})
 
 
 @bp.post("/poller/settings")
 def poller_settings_save():
+    # Note: Poller saves echo the resolved profile id so stale save responses cannot repaint another profile.
     profile, error = _profile_or_error()
     if error:
         return error
     try:
-        return ok({"settings": poller_control.save_settings(int(profile["id"]), request.get_json(silent=True) or {})})
+        profile_id = int(profile["id"])
+        return ok({"settings": poller_control.save_settings(profile_id, request.get_json(silent=True) or {}), "profile_id": profile_id})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400

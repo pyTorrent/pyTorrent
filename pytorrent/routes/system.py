@@ -168,8 +168,9 @@ def app_status():
         except Exception as exc:
             status["poller"] = {"settings": {}, "runtime": {}, "error": str(exc)}
     try:
-        prefs = preferences.get_preferences()
-        status["port_check"] = {"status": "disabled", "enabled": False} if not bool((prefs or {}).get("port_check_enabled")) else port_check_status(force=False)
+        # Note: App diagnostics keep preferences and port checks bound to the same explicit request profile.
+        prefs = preferences.get_preferences(profile_id=int(profile["id"])) if profile else preferences.get_preferences()
+        status["port_check"] = {"status": "disabled", "enabled": False} if not bool((prefs or {}).get("port_check_enabled")) else port_check_status(profile=profile, force=False)
     except Exception as exc:
         status["port_check"] = {"status": "error", "error": str(exc)}
     try:
@@ -520,7 +521,8 @@ def path_default():
     if not profile:
         return jsonify({"ok": False, "error": "No profile"}), 400
     try:
-        return ok({"path": active_default_download_path(profile), "profile_default_path": rtorrent.default_download_path(profile)})
+        # Note: Echo the path source profile so delayed frontend path hydration can reject stale responses.
+        return ok({"path": active_default_download_path(profile), "profile_default_path": rtorrent.default_download_path(profile), "profile_id": int(profile["id"])})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
 

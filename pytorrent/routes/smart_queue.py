@@ -4,23 +4,25 @@ from ._shared import *
 
 @bp.get('/smart-queue')
 def smart_queue_get():
+    # Note: Smart Queue reads echo their source profile for stale-response rejection in the shared frontend.
     from ..services import smart_queue
     profile = request_profile()
     if not profile:
-        return ok({'settings': {}, 'exclusions': [], 'error': 'No profile'})
+        return ok({'settings': {}, 'exclusions': [], 'error': 'No profile', 'profile_id': 0})
     try:
         history_limit = max(1, min(int(request.args.get('history_limit', 10) or 10), 100))
         settings = smart_queue.get_settings(profile['id'])
         exclusions = smart_queue.list_exclusions(profile['id'])
         history = smart_queue.list_history(profile['id'], limit=history_limit)
         history_total = smart_queue.count_history(profile['id'])
-        return ok({'settings': settings, 'exclusions': exclusions, 'history': history, 'history_total': history_total, 'cooldown_remaining_seconds': smart_queue.cooldown_remaining(settings), 'refill_remaining_seconds': smart_queue.refill_remaining(settings), 'surge_refill_remaining_seconds': smart_queue.surge_refill_remaining(settings)})
+        return ok({'settings': settings, 'exclusions': exclusions, 'history': history, 'history_total': history_total, 'cooldown_remaining_seconds': smart_queue.cooldown_remaining(settings), 'refill_remaining_seconds': smart_queue.refill_remaining(settings), 'surge_refill_remaining_seconds': smart_queue.surge_refill_remaining(settings), 'profile_id': int(profile['id'])})
     except Exception as exc:
         return jsonify({'ok': False, 'error': str(exc), 'settings': {}, 'exclusions': []})
 
 
 @bp.post('/smart-queue')
 def smart_queue_save():
+    # Note: Smart Queue saves keep an explicit profile identity in their response contract.
     from ..services import smart_queue
     profile = request_profile()
     if not profile:
@@ -28,7 +30,7 @@ def smart_queue_save():
     try:
         payload = request.get_json(silent=True) or {}
         settings = smart_queue.save_settings(profile['id'], payload)
-        return ok({'settings': settings, 'cooldown_remaining_seconds': smart_queue.cooldown_remaining(settings), 'refill_remaining_seconds': smart_queue.refill_remaining(settings), 'surge_refill_remaining_seconds': smart_queue.surge_refill_remaining(settings)})
+        return ok({'settings': settings, 'cooldown_remaining_seconds': smart_queue.cooldown_remaining(settings), 'refill_remaining_seconds': smart_queue.refill_remaining(settings), 'surge_refill_remaining_seconds': smart_queue.surge_refill_remaining(settings), 'profile_id': int(profile['id'])})
     except Exception as exc:
         return jsonify({'ok': False, 'error': str(exc)})
 

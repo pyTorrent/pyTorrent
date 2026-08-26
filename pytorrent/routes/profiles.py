@@ -149,7 +149,8 @@ def prefs_save():
     # Personal/global preferences never modify shared rTorrent state. Only shared profile fields require write access.
     require_write = preferences.has_shared_profile_preference_fields(payload)
     profile_id = request_profile_id(require_write=require_write)
-    return ok({"preferences": preferences.save_preferences(payload, profile_id=profile_id)})
+    # Note: Echo the resolved profile so delayed saves can be ignored after a profile switch.
+    return ok({"preferences": preferences.save_preferences(payload, profile_id=profile_id), "profile_id": profile_id})
 
 
 @bp.post("/preferences/table-columns/recommended")
