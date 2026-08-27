@@ -1,0 +1,126 @@
+/* PyTorrent UI theme: Jelly Orbit */
+
+html[data-ui-framework="pytorrent"][data-pytorrent-theme="jelly-orbit"] {
+  /* Note: This native theme changes the shared PyTorrent token geometry and visual character without adding a second component implementation. */
+  --pt-compact-radius: .65rem .18rem .65rem .18rem;
+  --pt-radius-sm: .75rem .25rem .75rem .25rem;
+  --pt-radius: 1rem .35rem 1rem .35rem;
+  --pt-radius-lg: 1.4rem .45rem 1.4rem .45rem;
+  --pt-control-height: 2.05rem;
+  --pt-button-radius: 1.2rem .3rem 1.2rem .3rem;
+  --pt-button-radius-sm: 1rem .25rem 1rem .25rem;
+  --pt-button-radius-xs: .75rem .2rem .75rem .2rem;
+  --pt-button-font-weight: 760;
+  --pt-button-shadow: 0 7px 18px rgba(48, 58, 163, .18);
+  --pt-button-hover-shadow: 0 11px 24px rgba(8, 145, 178, .24);
+  --pt-button-hover-transform: translateY(-2px) rotate(-.35deg);
+  --pt-button-active-transform: translateY(1px) scale(.98);
+  --pt-control-radius: .85rem .25rem .85rem .25rem;
+  --pt-control-radius-sm: .7rem .2rem .7rem .2rem;
+  --pt-menu-radius: .45rem 1.25rem .45rem 1.25rem;
+  --pt-menu-item-radius: .3rem .85rem .3rem .85rem;
+  --pt-nav-radius: 1rem .25rem 1rem .25rem;
+  --pt-shell-radius: 1.65rem .55rem 1.65rem .55rem;
+  --pt-surface-radius: .55rem 1.35rem .55rem 1.35rem;
+  --pt-surface-inset-radius: .8rem .2rem .8rem .2rem;
+  --pytorrent-shell-radius: 1.65rem .55rem 1.65rem .55rem;
+  --pytorrent-surface-radius: .55rem 1.35rem .55rem 1.35rem;
+  --pytorrent-sidebar-filter-radius: .8rem .2rem .8rem .2rem;
+  --pytorrent-selected-accent-width: 5px;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-theme="jelly-orbit"]:not([data-bs-theme="dark"]) {
+  --pt-page: #f4fffd;
+  --pt-page-rgb: 244, 255, 253;
+  --pt-surface: #fbfffe;
+  --pt-surface-rgb: 251, 255, 254;
+  --pt-surface-soft: #e5f7ff;
+  --pt-surface-soft-rgb: 229, 247, 255;
+  --pt-surface-raised: #ffffff;
+  --pt-text: #172033;
+  --pt-text-muted: #53647a;
+  --pt-text-subtle: #8492a5;
+  --pt-border: #bddfeb;
+  --pt-border-strong: #82bdcf;
+  --pt-primary: #6137b8;
+  --pt-primary-rgb: 97, 55, 184;
+  --pt-primary-strong: #4c2894;
+  --pt-primary-soft: #eee6ff;
+  --pt-success: #167d61;
+  --pt-success-rgb: 22, 125, 97;
+  --pt-warning: #ad6700;
+  --pt-warning-rgb: 173, 103, 0;
+  --pt-danger: #c6335d;
+  --pt-danger-rgb: 198, 51, 93;
+  --pt-info: #087d98;
+  --pt-info-rgb: 8, 125, 152;
+  --pt-focus: rgba(8, 125, 152, .25);
+  --pt-shadow-sm: 0 6px 16px rgba(8, 125, 152, .1);
+  --pt-shadow-md: 0 22px 42px rgba(97, 55, 184, .16);
+  --pt-primary-contrast: #ffffff;
+  --pt-primary-button-bg: linear-gradient(135deg, #6137b8, #087d98);
+  --pt-primary-button-hover-bg: linear-gradient(135deg, #4c2894, #066a82);
+  --pytorrent-page-bg: radial-gradient(ellipse at 10% 10%, rgba(97, 55, 184, .09), transparent 35%), radial-gradient(ellipse at 90% 15%, rgba(8, 125, 152, .12), transparent 32%), #f4fffd;
+  --pytorrent-statusbar-bg: #e5f7ff;
+  --pytorrent-table-header-bg: linear-gradient(90deg, #e5f7ff, #eee6ff);
+  --pytorrent-table-header-idle-bg: #fbfffe;
+  --pytorrent-theme-progress-start: #087d98;
+  --pytorrent-theme-progress-mid: #6137b8;
+  --pytorrent-theme-progress-end: #c6335d;
+  --pytorrent-theme-progress-complete: #167d61;
+  --pytorrent-theme-progress-track: #e5f7ff;
+  --pytorrent-theme-progress-fill: linear-gradient(90deg, #087d98, #6137b8, #c6335d);
+  --pytorrent-theme-success-badge-bg: #167d61;
+  --pytorrent-theme-success-badge-color: #ffffff;
+  --bs-body-color-rgb: 23, 32, 51;
+  --bs-secondary-rgb: 83, 100, 122;
+  --bs-border-color-translucent: rgba(23, 32, 51, .12);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-theme="jelly-orbit"][data-bs-theme="dark"] {
+  --pt-page: #0b1020;
+  --pt-page-rgb: 11, 16, 32;
+  --pt-surface: #12192b;
+  --pt-surface-rgb: 18, 25, 43;
+  --pt-surface-soft: #1d2840;
+  --pt-surface-soft-rgb: 29, 40, 64;
+  --pt-surface-raised: #172038;
+  --pt-text: #effcff;
+  --pt-text-muted: #b7c9d8;
+  --pt-text-subtle: #75869b;
+  --pt-border: #31556b;
+  --pt-border-strong: #4f8099;
+  --pt-primary: #bca8ff;
+  --pt-primary-rgb: 188, 168, 255;
+  --pt-primary-strong: #d2c5ff;
+  --pt-primary-soft: #3a3167;
+  --pt-success: #69d6ac;
+  --pt-success-rgb: 105, 214, 172;
+  --pt-warning: #ffd166;
+  --pt-warning-rgb: 255, 209, 102;
+  --pt-danger: #ff779b;
+  --pt-danger-rgb: 255, 119, 155;
+  --pt-info: #67d7ee;
+  --pt-info-rgb: 103, 215, 238;
+  --pt-focus: rgba(103, 215, 238, .28);
+  --pt-shadow-sm: 0 7px 20px rgba(103, 215, 238, .12);
+  --pt-shadow-md: 0 24px 48px rgba(188, 168, 255, .18);
+  --pt-primary-contrast: #14102a;
+  --pt-primary-button-bg: linear-gradient(135deg, #bca8ff, #67d7ee);
+  --pt-primary-button-hover-bg: linear-gradient(135deg, #d2c5ff, #8ce7f7);
+  --pytorrent-page-bg: radial-gradient(ellipse at 10% 10%, rgba(188, 168, 255, .13), transparent 35%), radial-gradient(ellipse at 90% 15%, rgba(103, 215, 238, .13), transparent 32%), #0b1020;
+  --pytorrent-statusbar-bg: #1d2840;
+  --pytorrent-table-header-bg: linear-gradient(90deg, #1d2840, #2a2548);
+  --pytorrent-table-header-idle-bg: #12192b;
+  --pytorrent-theme-progress-start: #67d7ee;
+  --pytorrent-theme-progress-mid: #bca8ff;
+  --pytorrent-theme-progress-end: #ff779b;
+  --pytorrent-theme-progress-complete: #69d6ac;
+  --pytorrent-theme-progress-track: #1d2840;
+  --pytorrent-theme-progress-fill: linear-gradient(90deg, #67d7ee, #bca8ff, #ff779b);
+  --pytorrent-theme-success-badge-bg: #69d6ac;
+  --pytorrent-theme-success-badge-color: #0a2118;
+  --bs-body-color-rgb: 239, 252, 255;
+  --bs-secondary-rgb: 183, 201, 216;
+  --bs-border-color-translucent: rgba(239, 252, 255, .11);
+}

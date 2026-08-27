@@ -1,4 +1,4 @@
-/* PyTorrent UI theme: Tailwind Syntax-inspired */
+/* PyTorrent UI theme: Tailwind Syntax */
 
 html[data-ui-framework="pytorrent"][data-pytorrent-theme="syntax"] {
   /* Note: Compact badges and progress meters keep this theme's corner character in both light and dark modes. */

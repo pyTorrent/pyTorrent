@@ -1,0 +1,127 @@
+/* PyTorrent UI theme: Bubblegum Blast */
+
+html[data-ui-framework="pytorrent"][data-pytorrent-theme="bubblegum-blast"] {
+  /* Note: This native theme changes the shared PyTorrent token geometry and visual character without adding a second component implementation. */
+  --pt-compact-radius: 999px;
+  --pt-radius-sm: .8rem;
+  --pt-radius: 1.1rem;
+  --pt-radius-lg: 1.55rem;
+  --pt-control-height: 2rem;
+  --pt-button-radius: 999px;
+  --pt-button-radius-sm: 999px;
+  --pt-button-radius-xs: 999px;
+  --pt-button-font-weight: 780;
+  --pt-button-letter-spacing: .015em;
+  --pt-button-shadow: 0 4px 0 rgba(99, 35, 70, .18), 0 8px 18px rgba(216, 27, 96, .12);
+  --pt-button-hover-shadow: 0 6px 0 rgba(99, 35, 70, .16), 0 12px 24px rgba(124, 58, 237, .16);
+  --pt-button-hover-transform: translateY(-2px) scale(1.015);
+  --pt-button-active-transform: translateY(1px) scale(.98);
+  --pt-control-radius: 1rem;
+  --pt-control-radius-sm: .9rem;
+  --pt-menu-radius: 1.35rem;
+  --pt-menu-item-radius: .9rem;
+  --pt-nav-radius: 999px;
+  --pt-shell-radius: 1.6rem;
+  --pt-surface-radius: 1.25rem;
+  --pt-surface-inset-radius: 1rem;
+  --pytorrent-shell-radius: 1.6rem;
+  --pytorrent-surface-radius: 1.25rem;
+  --pytorrent-sidebar-filter-radius: 1rem;
+  --pytorrent-selected-accent-width: 6px;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-theme="bubblegum-blast"]:not([data-bs-theme="dark"]) {
+  --pt-page: #fff5fb;
+  --pt-page-rgb: 255, 245, 251;
+  --pt-surface: #fffafd;
+  --pt-surface-rgb: 255, 250, 253;
+  --pt-surface-soft: #ffe4f1;
+  --pt-surface-soft-rgb: 255, 228, 241;
+  --pt-surface-raised: #ffffff;
+  --pt-text: #2a1422;
+  --pt-text-muted: #76566a;
+  --pt-text-subtle: #a17f95;
+  --pt-border: #f3bad8;
+  --pt-border-strong: #de8eb8;
+  --pt-primary: #c2185b;
+  --pt-primary-rgb: 194, 24, 91;
+  --pt-primary-strong: #a3124c;
+  --pt-primary-soft: #ffd8e9;
+  --pt-success: #147d5b;
+  --pt-success-rgb: 20, 125, 91;
+  --pt-warning: #b96900;
+  --pt-warning-rgb: 185, 105, 0;
+  --pt-danger: #c92f4f;
+  --pt-danger-rgb: 201, 47, 79;
+  --pt-info: #147a9f;
+  --pt-info-rgb: 20, 122, 159;
+  --pt-focus: rgba(194, 24, 91, .25);
+  --pt-shadow-sm: 0 4px 14px rgba(194, 24, 91, .09);
+  --pt-shadow-md: 0 20px 45px rgba(124, 58, 237, .14);
+  --pt-primary-contrast: #ffffff;
+  --pt-primary-button-bg: linear-gradient(115deg, #c2185b 0%, #db2777 45%, #7c3aed 100%);
+  --pt-primary-button-hover-bg: linear-gradient(115deg, #a3124c 0%, #c2185b 45%, #6d28d9 100%);
+  --pytorrent-page-bg: radial-gradient(circle at 12% 12%, #ffe18a 0 6%, transparent 7%), radial-gradient(circle at 88% 20%, #bcecff 0 8%, transparent 9%), linear-gradient(135deg, #fff5fb, #f5f0ff);
+  --pytorrent-statusbar-bg: #ffe4f1;
+  --pytorrent-table-header-bg: linear-gradient(90deg, #ffe4f1, #eee5ff);
+  --pytorrent-table-header-idle-bg: #fffafd;
+  --pytorrent-theme-progress-start: #f59e0b;
+  --pytorrent-theme-progress-mid: #db2777;
+  --pytorrent-theme-progress-end: #7c3aed;
+  --pytorrent-theme-progress-complete: #147d5b;
+  --pytorrent-theme-progress-track: #ffe4f1;
+  --pytorrent-theme-progress-fill: linear-gradient(90deg, #f59e0b, #db2777, #7c3aed);
+  --pytorrent-theme-success-badge-bg: #147d5b;
+  --pytorrent-theme-success-badge-color: #ffffff;
+  --bs-body-color-rgb: 42, 20, 34;
+  --bs-secondary-rgb: 118, 86, 106;
+  --bs-border-color-translucent: rgba(42, 20, 34, .12);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-theme="bubblegum-blast"][data-bs-theme="dark"] {
+  --pt-page: #140914;
+  --pt-page-rgb: 20, 9, 20;
+  --pt-surface: #20101f;
+  --pt-surface-rgb: 32, 16, 31;
+  --pt-surface-soft: #35152d;
+  --pt-surface-soft-rgb: 53, 21, 45;
+  --pt-surface-raised: #291327;
+  --pt-text: #fff4fb;
+  --pt-text-muted: #d8b8cd;
+  --pt-text-subtle: #96788c;
+  --pt-border: #663552;
+  --pt-border-strong: #9a4c76;
+  --pt-primary: #ff70b5;
+  --pt-primary-rgb: 255, 112, 181;
+  --pt-primary-strong: #ff9bcb;
+  --pt-primary-soft: #4d1838;
+  --pt-success: #55d6a4;
+  --pt-success-rgb: 85, 214, 164;
+  --pt-warning: #ffd166;
+  --pt-warning-rgb: 255, 209, 102;
+  --pt-danger: #ff7189;
+  --pt-danger-rgb: 255, 113, 137;
+  --pt-info: #78d5f5;
+  --pt-info-rgb: 120, 213, 245;
+  --pt-focus: rgba(255, 112, 181, .3);
+  --pt-shadow-sm: 0 4px 18px rgba(255, 112, 181, .14);
+  --pt-shadow-md: 0 22px 50px rgba(124, 58, 237, .22);
+  --pt-primary-contrast: #2b1021;
+  --pt-primary-button-bg: linear-gradient(115deg, #ff8ac5 0%, #ffb14a 50%, #bca4ff 100%);
+  --pt-primary-button-hover-bg: linear-gradient(115deg, #ff9dce 0%, #ffc266 50%, #ccb9ff 100%);
+  --pytorrent-page-bg: radial-gradient(circle at 12% 12%, rgba(255, 209, 102, .18) 0 6%, transparent 7%), radial-gradient(circle at 88% 20%, rgba(120, 213, 245, .16) 0 8%, transparent 9%), linear-gradient(135deg, #140914, #1c1030);
+  --pytorrent-statusbar-bg: #35152d;
+  --pytorrent-table-header-bg: linear-gradient(90deg, #35152d, #2c2148);
+  --pytorrent-table-header-idle-bg: #20101f;
+  --pytorrent-theme-progress-start: #ffd166;
+  --pytorrent-theme-progress-mid: #ff70b5;
+  --pytorrent-theme-progress-end: #bca4ff;
+  --pytorrent-theme-progress-complete: #55d6a4;
+  --pytorrent-theme-progress-track: #35152d;
+  --pytorrent-theme-progress-fill: linear-gradient(90deg, #ffd166, #ff70b5, #bca4ff);
+  --pytorrent-theme-success-badge-bg: #55d6a4;
+  --pytorrent-theme-success-badge-color: #112219;
+  --bs-body-color-rgb: 255, 244, 251;
+  --bs-secondary-rgb: 216, 184, 205;
+  --bs-border-color-translucent: rgba(255, 244, 251, .11);
+}

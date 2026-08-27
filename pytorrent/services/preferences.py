@@ -11,31 +11,26 @@ from .deletion import purge_profile
 # either group as a compatible visual skin.
 BOOTSTRAP_THEMES = BOOTSTRAP_THEME_LABELS
 PYTORRENT_THEMES = {
-    "default": "PyTorrent Default (Beta)",
+    "default": "PyTorrent Default",
     **{key: label.replace("pyTorrent", "PyTorrent") for key, label in PYTORRENT_FRAMEWORK_EXTRA_THEMES.items()},
 }
 PYTORRENT_BOOTSTRAP_THEME_PREFIX = "bootstrap:"
 
 
 def normalize_pytorrent_theme(value, fallback=None):
+    # Note: Stable PyTorrent theme preferences accept only registered native IDs or explicitly prefixed Bootstrap skins.
     theme = str(value or "").strip()
-    if theme == "default-beta":
-        return "default"
     if theme in PYTORRENT_THEMES:
         return theme
     if theme.startswith(PYTORRENT_BOOTSTRAP_THEME_PREFIX):
         bootstrap_theme = theme[len(PYTORRENT_BOOTSTRAP_THEME_PREFIX):]
         if bootstrap_theme in BOOTSTRAP_THEMES:
             return f"{PYTORRENT_BOOTSTRAP_THEME_PREFIX}{bootstrap_theme}"
-    # Backward compatibility with older PyTorrent preferences which stored a
-    # compatible Bootstrap theme ID directly (for example pytorrent-ocean).
-    if theme in BOOTSTRAP_THEMES and theme not in PYTORRENT_THEMES:
-        return f"{PYTORRENT_BOOTSTRAP_THEME_PREFIX}{theme}"
     return fallback
 
 UI_FRAMEWORKS = {
     "bootstrap": "Bootstrap",
-    "pytorrent": "PyTorrent (Beta)",
+    "pytorrent": "PyTorrent",
 }
 
 FONT_FAMILIES = {

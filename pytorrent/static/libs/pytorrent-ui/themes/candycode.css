@@ -1,4 +1,4 @@
-/* PyTorrent UI theme: Candycode-inspired */
+/* PyTorrent UI theme: Candycode */
 
 html[data-ui-framework="pytorrent"][data-pytorrent-theme="candycode"] {
   /* Note: Compact badges and progress meters keep this theme's corner character in both light and dark modes. */
