@@ -50,3 +50,7 @@ data/mock_rtorrent_state.json
 docker/rtorrent-data/*/*
 !docker/rtorrent-data/downloads/.downloads_dir
 !docker/rtorrent-data/watch/.watch_dir
+
+ 
+
+optimalizations.md

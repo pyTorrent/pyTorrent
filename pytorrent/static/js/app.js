@@ -94,7 +94,17 @@ let moduleSourcesPromise = null;
 
 async function loadModuleSources(){
   if(moduleSourcesPromise) return moduleSourcesPromise;
-  moduleSourcesPromise = Promise.all(moduleImportSpecs.map(([path]) => versionedImport(path))).then((modules) => {
+  // Note: Module imports report their real completion share so the loader no longer sits at one low percentage during the largest frontend bootstrap batch.
+  let loadedModules = 0;
+  const totalModules = Math.max(1, moduleImportSpecs.length);
+  window.pyTorrentInitialLoaderProgress?.setStep('bootstrap', {percent: 4, label: 'Loading interface modules', auto: false});
+  moduleSourcesPromise = Promise.all(moduleImportSpecs.map(async ([path]) => {
+    const mod = await versionedImport(path);
+    loadedModules += 1;
+    const percent = 4 + (18 * loadedModules / totalModules);
+    window.pyTorrentInitialLoaderProgress?.setStep('bootstrap', {percent, label: 'Loading interface modules', auto: false});
+    return mod;
+  })).then((modules) => {
     moduleSources = modules.map((mod, index) => mod[moduleImportSpecs[index][1]]);
     return moduleSources;
   });
@@ -115,6 +125,15 @@ export async function buildRuntimeSource(){
 
 export async function startApp(){
   const runtimeSource = await buildRuntimeSource();
+  // Note: Yield one paint after module loading so the interface-start milestone is visible before the synchronous shared runtime initializes.
+  window.pyTorrentInitialLoaderProgress?.setStep('interface');
+  await new Promise(resolve => {
+    let settled = false;
+    const finish = () => { if(!settled){ settled = true; resolve(); } };
+    setTimeout(finish, 50);
+    if(typeof requestAnimationFrame === 'function') requestAnimationFrame(finish);
+    else finish();
+  });
   // Keep the original shared lexical scope while loading the source from smaller ES modules.
   // `io` is passed explicitly so Socket.IO remains available inside the generated runtime.
   return Function('io', runtimeSource)(window.io);
