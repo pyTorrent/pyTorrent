@@ -4,6 +4,8 @@
   data-bootstrap-skin="{{ prefs.bootstrap_theme if prefs and prefs.bootstrap_theme else 'default' }}"
   data-pytorrent-theme="{{ prefs.pytorrent_theme if prefs and prefs.pytorrent_theme else 'default' }}"
   data-pytorrent-motion="{% if not prefs or prefs.pytorrent_animations_enabled %}on{% else %}off{% endif %}"
+  data-pytorrent-theme-effects="{% if prefs and prefs.ui_framework == 'pytorrent' and not normalized_pytorrent_theme.startswith('bootstrap:') and prefs.pytorrent_theme_effects_enabled %}on{% else %}off{% endif %}"
+  data-pytorrent-immersive-effects="{% if prefs and prefs.ui_framework == 'pytorrent' and not normalized_pytorrent_theme.startswith('bootstrap:') and prefs.pytorrent_theme_effects_enabled and prefs.pytorrent_immersive_effects_enabled %}on{% else %}off{% endif %}"
   data-theme-status-accents="{% if prefs and prefs.theme_status_accents_enabled %}on{% else %}off{% endif %}"
   data-app-font="{{ prefs.font_family if prefs and prefs.font_family else 'default' }}"
   style="--ui-scale: {{ ((prefs.interface_scale if prefs and prefs.interface_scale else 80) / 100) }};">
@@ -33,6 +35,10 @@
   <link href="{{ frontend_asset_url('font_css') }}" rel="stylesheet">
   <link href="{{ frontend_asset_url('flag_icons_css') }}" rel="stylesheet">
   <link href="{{ static_url('styles.css') }}" rel="stylesheet">
+  {% if active_ui_framework == 'pytorrent' %}
+  <!-- Note: Theme effect primitives are loaded only for the PyTorrent runtime and stay inert until the opt-in preference is enabled. -->
+  <link id="pytorrentThemeEffectsStylesheet" href="{{ static_url('libs/pytorrent-ui/effects/pytorrentThemeEffects.css') }}" rel="stylesheet">
+  {% endif %}
 </head>
 
 <body>
@@ -1231,7 +1237,17 @@
                           <label id="pytorrentAnimationsField"
                             class="browser-speed-pref form-check form-switch{% if not prefs or prefs.ui_framework != 'pytorrent' %} d-none{% endif %}"><input
                               id="pytorrentAnimationsEnabled" class="form-check-input" type="checkbox" {% if not prefs or prefs.pytorrent_animations_enabled %}checked{% endif %}><span
-                              class="form-check-label">Interface animations</span><small>PyTorrent only. Uses short, lightweight motion for modals, menus, tabs and controls. Disable it for instant transitions.</small></label></div>
+                              class="form-check-label">Interface animations</span><small>PyTorrent only. Uses short, lightweight motion for modals, menus, tabs and controls. Disable it for instant transitions.</small></label>
+                          <!-- Note: Rich effects are available only for native PyTorrent themes and remain opt-in independently from the base motion preference. -->
+                          <label id="pytorrentThemeEffectsField"
+                            class="browser-speed-pref form-check form-switch{% if not prefs or prefs.ui_framework != 'pytorrent' or normalized_pytorrent_theme.startswith('bootstrap:') %} d-none{% endif %}"><input
+                              id="pytorrentThemeEffectsEnabled" class="form-check-input" type="checkbox" {% if prefs and prefs.pytorrent_theme_effects_enabled %}checked{% endif %}><span
+                              class="form-check-label">Theme visual effects</span><small>Native PyTorrent themes only. Adds theme-specific ambient layers, progress effects and interaction feedback. Animated parts respect Interface animations and reduced-motion settings.</small></label>
+                          <!-- Note: Immersive effects are a separate, stronger second visual level and require the base native-theme effects. -->
+                          <label id="pytorrentImmersiveEffectsField"
+                            class="browser-speed-pref form-check form-switch{% if not prefs or prefs.ui_framework != 'pytorrent' or normalized_pytorrent_theme.startswith('bootstrap:') %} d-none{% endif %}"><input
+                              id="pytorrentImmersiveEffectsEnabled" class="form-check-input" type="checkbox" {% if prefs and prefs.pytorrent_immersive_effects_enabled %}checked{% endif %} {% if not prefs or not prefs.pytorrent_theme_effects_enabled %}disabled{% endif %}><span
+                              class="form-check-label">Immersive theme effects</span><small>Second visual level. Adds full-interface scenes, cursor trails, stronger panel/row effects, animated branding and themed modal entrances. Requires Theme visual effects.</small></label></div>
                       </div>
                     </div>
                     <div id="prefPane-browser" class="tab-pane fade " role="tabpanel">
@@ -2531,6 +2547,10 @@
   <script src="{{ static_url('js/actionFeedback.js') }}"></script>
   <!-- Note: Server bootstrap preferences must be initialized before app.js starts. -->
   <script>window.PYTORRENT = {{ bootstrap_config | tojson }};</script>
+  {% if active_ui_framework == 'pytorrent' %}
+  <!-- Note: The shared visual-effect lifecycle manager exists only in PyTorrent UI; native theme modules are loaded lazily when enabled. -->
+  <script src="{{ static_url('libs/pytorrent-ui/effects/pytorrentThemeEffects.js') }}"></script>
+  {% endif %}
   <script type="module" src="{{ static_url('js/app.js') }}"></script>
 </body>
 

@@ -227,8 +227,12 @@ def required_offline_paths() -> list[Path]:
     paths.extend([
         LIBS_DIR.parent / "pytorrent.css",
         LIBS_DIR / "pytorrent-ui/pytorrentUi.js",
+        LIBS_DIR / "pytorrent-ui/effects/pytorrentThemeEffects.js",
+        LIBS_DIR / "pytorrent-ui/effects/pytorrentThemeEffects.css",
         LIBS_DIR / "pytorrent-ui/themes/default.css",
+        LIBS_DIR / "pytorrent-ui/effects/themes/default.js",
         *(LIBS_DIR / f"pytorrent-ui/themes/{theme}.css" for theme in PYTORRENT_FRAMEWORK_EXTRA_THEMES),
+        *(LIBS_DIR / f"pytorrent-ui/effects/themes/{theme}.js" for theme in PYTORRENT_FRAMEWORK_EXTRA_THEMES),
         LIBS_DIR / "pytorrent-themes/modern-foundation.css",
         LIBS_DIR / "pytorrent-themes/classic-foundation.css",
     ])

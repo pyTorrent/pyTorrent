@@ -1532,6 +1532,14 @@
             "description": "Enable lightweight PyTorrent UI motion for modals, menus, tabs and controls.",
             "type": "boolean"
           },
+          "pytorrent_theme_effects_enabled": {
+            "description": "Enable opt-in visual effects defined by the active native PyTorrent UI theme.",
+            "type": "boolean"
+          },
+          "pytorrent_immersive_effects_enabled": {
+            "description": "Enable the optional second-level immersive effects for the active native PyTorrent UI theme. Requires base theme visual effects at runtime.",
+            "type": "boolean"
+          },
           "default_download_path": {
             "description": "User-level default download path. Empty value falls back to the active rTorrent profile default.",
             "type": "string"

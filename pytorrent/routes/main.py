@@ -68,6 +68,14 @@ def _pytorrent_theme_urls() -> dict[str, str]:
     return urls
 
 
+def _pytorrent_theme_effect_urls() -> dict[str, str]:
+    # Note: Only native PyTorrent themes receive executable visual-effect modules; compatible Bootstrap skins intentionally have no module.
+    return {
+        key: _bootstrap_static_url(f"libs/pytorrent-ui/effects/themes/{key}.js")
+        for key in PYTORRENT_THEMES.keys()
+    }
+
+
 def _frontend_bootstrap_config(prefs: dict, profile: dict | None, current_user: dict | None) -> dict:
     # Note: Build one typed Python payload and serialize it once in Jinja instead of concatenating executable JavaScript fragments.
     def flag(key: str, default: bool = False) -> int:
@@ -124,6 +132,8 @@ def _frontend_bootstrap_config(prefs: dict, profile: dict | None, current_user: 
         "bootstrapTheme": str(prefs.get("bootstrap_theme") or "default"),
         "pytorrentTheme": str(prefs.get("pytorrent_theme") or "default"),
         "pytorrentAnimationsEnabled": flag("pytorrent_animations_enabled", True),
+        "pytorrentThemeEffectsEnabled": flag("pytorrent_theme_effects_enabled"),
+        "pytorrentImmersiveEffectsEnabled": flag("pytorrent_immersive_effects_enabled"),
         "themeStatusAccentsEnabled": flag("theme_status_accents_enabled"),
         "uiFramework": str(prefs.get("ui_framework") or "pytorrent"),
         "fontFamily": str(prefs.get("font_family") or "default"),
@@ -136,6 +146,7 @@ def _frontend_bootstrap_config(prefs: dict, profile: dict | None, current_user: 
         "pytorrentThemes": PYTORRENT_THEMES,
         "bootstrapThemeUrls": _bootstrap_theme_urls(),
         "pytorrentThemeUrls": _pytorrent_theme_urls(),
+        "pytorrentThemeEffectUrls": _pytorrent_theme_effect_urls(),
         "pytorrentFrameworkCssUrl": _bootstrap_static_url("pytorrent.css"),
         "fontFamilies": FONT_FAMILIES,
         "staticHash": static_hash(Path(current_app.static_folder or "")),

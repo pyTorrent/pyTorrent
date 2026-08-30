@@ -1,0 +1,994 @@
+/* PyTorrent UI theme visual effects.
+ * Note: Effect primitives are shared, opt-in and strictly scoped to the native PyTorrent runtime.
+ */
+html[data-ui-framework="pytorrent"] {
+  --ptfx-color-1: var(--pt-primary);
+  --ptfx-color-2: var(--pt-info);
+  --ptfx-color-3: var(--pt-success);
+  --ptfx-color-4: var(--pt-danger);
+  --ptfx-duration: 8s;
+  --ptfx-duration-fast: 3.4s;
+  --ptfx-duration-slow: 14s;
+  --ptfx-intensity: .65;
+  --ptfx-layer-opacity: .28;
+  --ptfx-particle-size: 10px;
+  --ptfx-grid-size: 32px;
+  --ptfx-blur: 32px;
+  --ptfx-immersive-intensity: .85;
+  --ptfx-trail-size: 12px;
+  --ptfx-pointer-x: 50%;
+  --ptfx-pointer-y: 50%;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .app-shell {
+  position: relative;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effects-layer {
+  border-radius: inherit;
+  inset: 0;
+  opacity: var(--ptfx-layer-opacity);
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+  z-index: 8;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effect-particle,
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effect-burst {
+  display: block;
+  pointer-events: none;
+  position: absolute;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effect-particle {
+  height: var(--ptfx-particle-size);
+  opacity: .7;
+  width: var(--ptfx-particle-size);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effect-particle:nth-child(4n+1) { color: var(--ptfx-color-1); }
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effect-particle:nth-child(4n+2) { color: var(--ptfx-color-2); }
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effect-particle:nth-child(4n+3) { color: var(--ptfx-color-3); }
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effect-particle:nth-child(4n) { color: var(--ptfx-color-4); }
+
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effect-particle:nth-child(1) { --ptfx-index: 1; }
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effect-particle:nth-child(2) { --ptfx-index: 2; }
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effect-particle:nth-child(3) { --ptfx-index: 3; }
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effect-particle:nth-child(4) { --ptfx-index: 4; }
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effect-particle:nth-child(5) { --ptfx-index: 5; }
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effect-particle:nth-child(6) { --ptfx-index: 6; }
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effect-particle:nth-child(7) { --ptfx-index: 7; }
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effect-particle:nth-child(8) { --ptfx-index: 8; }
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effect-particle:nth-child(9) { --ptfx-index: 9; }
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effect-particle:nth-child(10) { --ptfx-index: 10; }
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effect-particle:nth-child(11) { --ptfx-index: 11; }
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effect-particle:nth-child(12) { --ptfx-index: 12; }
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effect-particle:nth-child(13) { --ptfx-index: 13; }
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effect-particle:nth-child(14) { --ptfx-index: 14; }
+
+/* Ambient profiles */
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="aurora"] .pytorrent-theme-effects-layer,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="blobs"] .pytorrent-theme-effects-layer,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="clouds"] .pytorrent-theme-effects-layer {
+  background:
+    radial-gradient(circle at 12% 18%, color-mix(in srgb, var(--ptfx-color-1) 28%, transparent), transparent 34%),
+    radial-gradient(circle at 82% 22%, color-mix(in srgb, var(--ptfx-color-2) 24%, transparent), transparent 30%),
+    radial-gradient(circle at 64% 84%, color-mix(in srgb, var(--ptfx-color-3) 22%, transparent), transparent 34%);
+  filter: blur(calc(var(--ptfx-blur) * .2));
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="aurora"][data-pytorrent-motion="on"] .pytorrent-theme-effects-layer,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="blobs"][data-pytorrent-motion="on"] .pytorrent-theme-effects-layer,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="clouds"][data-pytorrent-motion="on"] .pytorrent-theme-effects-layer {
+  animation: ptfx-ambient-drift var(--ptfx-duration-slow) ease-in-out infinite alternate;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="blobs"] .pytorrent-theme-effect-particle,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="clouds"] .pytorrent-theme-effect-particle,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="bubbles"] .pytorrent-theme-effect-particle {
+  background: currentColor;
+  border-radius: 999px;
+  filter: blur(1px);
+  left: calc((var(--ptfx-particle-size) * 7) + (var(--ptfx-particle-size) * var(--ptfx-seed, 1)));
+  opacity: .18;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="bubbles"] .pytorrent-theme-effect-particle:nth-child(1), html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="blobs"] .pytorrent-theme-effect-particle:nth-child(1), html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="clouds"] .pytorrent-theme-effect-particle:nth-child(1) { --ptfx-x: 6%; --ptfx-y: 78%; --ptfx-seed: 1; }
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="bubbles"] .pytorrent-theme-effect-particle:nth-child(2), html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="blobs"] .pytorrent-theme-effect-particle:nth-child(2), html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="clouds"] .pytorrent-theme-effect-particle:nth-child(2) { --ptfx-x: 14%; --ptfx-y: 46%; --ptfx-seed: 2; }
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="bubbles"] .pytorrent-theme-effect-particle:nth-child(3), html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="blobs"] .pytorrent-theme-effect-particle:nth-child(3), html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="clouds"] .pytorrent-theme-effect-particle:nth-child(3) { --ptfx-x: 24%; --ptfx-y: 88%; --ptfx-seed: 3; }
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="bubbles"] .pytorrent-theme-effect-particle:nth-child(4), html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="blobs"] .pytorrent-theme-effect-particle:nth-child(4), html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="clouds"] .pytorrent-theme-effect-particle:nth-child(4) { --ptfx-x: 34%; --ptfx-y: 58%; --ptfx-seed: 4; }
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="bubbles"] .pytorrent-theme-effect-particle:nth-child(5), html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="blobs"] .pytorrent-theme-effect-particle:nth-child(5), html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="clouds"] .pytorrent-theme-effect-particle:nth-child(5) { --ptfx-x: 45%; --ptfx-y: 82%; --ptfx-seed: 5; }
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="bubbles"] .pytorrent-theme-effect-particle:nth-child(6), html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="blobs"] .pytorrent-theme-effect-particle:nth-child(6), html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="clouds"] .pytorrent-theme-effect-particle:nth-child(6) { --ptfx-x: 54%; --ptfx-y: 38%; --ptfx-seed: 6; }
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="bubbles"] .pytorrent-theme-effect-particle:nth-child(7), html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="blobs"] .pytorrent-theme-effect-particle:nth-child(7), html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="clouds"] .pytorrent-theme-effect-particle:nth-child(7) { --ptfx-x: 64%; --ptfx-y: 90%; --ptfx-seed: 7; }
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="bubbles"] .pytorrent-theme-effect-particle:nth-child(8), html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="blobs"] .pytorrent-theme-effect-particle:nth-child(8), html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="clouds"] .pytorrent-theme-effect-particle:nth-child(8) { --ptfx-x: 72%; --ptfx-y: 62%; --ptfx-seed: 8; }
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="bubbles"] .pytorrent-theme-effect-particle:nth-child(9), html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="blobs"] .pytorrent-theme-effect-particle:nth-child(9), html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="clouds"] .pytorrent-theme-effect-particle:nth-child(9) { --ptfx-x: 81%; --ptfx-y: 84%; --ptfx-seed: 9; }
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="bubbles"] .pytorrent-theme-effect-particle:nth-child(10), html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="blobs"] .pytorrent-theme-effect-particle:nth-child(10), html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="clouds"] .pytorrent-theme-effect-particle:nth-child(10) { --ptfx-x: 90%; --ptfx-y: 42%; --ptfx-seed: 10; }
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="bubbles"] .pytorrent-theme-effect-particle:nth-child(11), html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="blobs"] .pytorrent-theme-effect-particle:nth-child(11), html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="clouds"] .pytorrent-theme-effect-particle:nth-child(11) { --ptfx-x: 95%; --ptfx-y: 72%; --ptfx-seed: 11; }
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="bubbles"] .pytorrent-theme-effect-particle:nth-child(12), html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="blobs"] .pytorrent-theme-effect-particle:nth-child(12), html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="clouds"] .pytorrent-theme-effect-particle:nth-child(12) { --ptfx-x: 40%; --ptfx-y: 28%; --ptfx-seed: 12; }
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="bubbles"] .pytorrent-theme-effect-particle:nth-child(13), html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="blobs"] .pytorrent-theme-effect-particle:nth-child(13), html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="clouds"] .pytorrent-theme-effect-particle:nth-child(13) { --ptfx-x: 58%; --ptfx-y: 72%; --ptfx-seed: 13; }
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="bubbles"] .pytorrent-theme-effect-particle:nth-child(14), html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="blobs"] .pytorrent-theme-effect-particle:nth-child(14), html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="clouds"] .pytorrent-theme-effect-particle:nth-child(14) { --ptfx-x: 18%; --ptfx-y: 22%; --ptfx-seed: 14; }
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="bubbles"] .pytorrent-theme-effect-particle,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="blobs"] .pytorrent-theme-effect-particle,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="clouds"] .pytorrent-theme-effect-particle {
+  height: calc(var(--ptfx-particle-size) * (.6 + var(--ptfx-seed) * .08));
+  left: var(--ptfx-x);
+  top: var(--ptfx-y);
+  width: calc(var(--ptfx-particle-size) * (.6 + var(--ptfx-seed) * .08));
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="bubbles"][data-pytorrent-motion="on"] .pytorrent-theme-effect-particle,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="blobs"][data-pytorrent-motion="on"] .pytorrent-theme-effect-particle,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="clouds"][data-pytorrent-motion="on"] .pytorrent-theme-effect-particle {
+  animation: ptfx-bubble-rise calc(var(--ptfx-duration) + var(--ptfx-seed) * .45s) ease-in-out infinite;
+  animation-delay: calc(var(--ptfx-seed) * -.38s);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="grid"] .pytorrent-theme-effects-layer,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="pixel"] .pytorrent-theme-effects-layer {
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--ptfx-color-1) 28%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--ptfx-color-2) 24%, transparent) 1px, transparent 1px);
+  background-size: var(--ptfx-grid-size) var(--ptfx-grid-size);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="grid"][data-pytorrent-motion="on"] .pytorrent-theme-effects-layer {
+  animation: ptfx-grid-drift var(--ptfx-duration-slow) linear infinite;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="scanlines"] .pytorrent-theme-effects-layer,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="matrix"] .pytorrent-theme-effects-layer {
+  background: repeating-linear-gradient(180deg, transparent 0 5px, color-mix(in srgb, var(--ptfx-color-1) 22%, transparent) 6px 7px);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="scanlines"] .pytorrent-theme-effects-layer::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="matrix"] .pytorrent-theme-effects-layer::after {
+  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--ptfx-color-2) 34%, transparent), transparent);
+  content: '';
+  height: 22%;
+  inset-inline: 0;
+  position: absolute;
+  top: -22%;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="scanlines"][data-pytorrent-motion="on"] .pytorrent-theme-effects-layer::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="matrix"][data-pytorrent-motion="on"] .pytorrent-theme-effects-layer::after {
+  animation: ptfx-scanline var(--ptfx-duration-fast) linear infinite;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="matrix"] .pytorrent-theme-effect-particle {
+  background: currentColor;
+  border-radius: 1px;
+  height: calc(var(--ptfx-particle-size) * 4);
+  opacity: .24;
+  top: -12%;
+  width: 2px;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="matrix"] .pytorrent-theme-effect-particle:nth-child(n) { left: calc(4% + (var(--ptfx-index, 1) * 6.5%)); }
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="matrix"] .pytorrent-theme-effect-particle:nth-child(1) { --ptfx-index: 1; }
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="matrix"] .pytorrent-theme-effect-particle:nth-child(2) { --ptfx-index: 2; }
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="matrix"] .pytorrent-theme-effect-particle:nth-child(3) { --ptfx-index: 3; }
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="matrix"] .pytorrent-theme-effect-particle:nth-child(4) { --ptfx-index: 4; }
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="matrix"] .pytorrent-theme-effect-particle:nth-child(5) { --ptfx-index: 5; }
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="matrix"] .pytorrent-theme-effect-particle:nth-child(6) { --ptfx-index: 6; }
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="matrix"] .pytorrent-theme-effect-particle:nth-child(7) { --ptfx-index: 7; }
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="matrix"] .pytorrent-theme-effect-particle:nth-child(8) { --ptfx-index: 8; }
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="matrix"] .pytorrent-theme-effect-particle:nth-child(9) { --ptfx-index: 9; }
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="matrix"] .pytorrent-theme-effect-particle:nth-child(10) { --ptfx-index: 10; }
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="matrix"] .pytorrent-theme-effect-particle:nth-child(11) { --ptfx-index: 11; }
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="matrix"] .pytorrent-theme-effect-particle:nth-child(12) { --ptfx-index: 12; }
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="matrix"] .pytorrent-theme-effect-particle:nth-child(13) { --ptfx-index: 13; }
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="matrix"] .pytorrent-theme-effect-particle:nth-child(14) { --ptfx-index: 14; }
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="matrix"][data-pytorrent-motion="on"] .pytorrent-theme-effect-particle {
+  animation: ptfx-matrix-fall calc(var(--ptfx-duration-fast) * 1.4) linear infinite;
+  animation-delay: calc(var(--ptfx-index) * -.31s);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="stars"] .pytorrent-theme-effect-particle,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="casino"] .pytorrent-theme-effect-particle,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="confetti"] .pytorrent-theme-effect-particle,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="snow"] .pytorrent-theme-effect-particle,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="petals"] .pytorrent-theme-effect-particle,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="embers"] .pytorrent-theme-effect-particle {
+  background: currentColor;
+  left: calc(3% + (var(--ptfx-index, 1) * 6.7%));
+  opacity: .45;
+  top: calc(8% + (var(--ptfx-index, 1) * 5.3%));
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="stars"] .pytorrent-theme-effect-particle,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="casino"] .pytorrent-theme-effect-particle { border-radius: 50%; box-shadow: 0 0 10px currentColor; }
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="confetti"] .pytorrent-theme-effect-particle { border-radius: 2px; transform: rotate(34deg); }
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="snow"] .pytorrent-theme-effect-particle { border-radius: 50%; filter: blur(.3px); }
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="petals"] .pytorrent-theme-effect-particle { border-radius: 100% 0 100% 0; transform: rotate(32deg); }
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="embers"] .pytorrent-theme-effect-particle { border-radius: 50%; box-shadow: 0 0 12px currentColor; height: calc(var(--ptfx-particle-size) * .52); width: calc(var(--ptfx-particle-size) * .52); }
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="stars"][data-pytorrent-motion="on"] .pytorrent-theme-effect-particle,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="casino"][data-pytorrent-motion="on"] .pytorrent-theme-effect-particle {
+  animation: ptfx-twinkle calc(var(--ptfx-duration-fast) + var(--ptfx-index) * .17s) ease-in-out infinite alternate;
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="confetti"][data-pytorrent-motion="on"] .pytorrent-theme-effect-particle,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="petals"][data-pytorrent-motion="on"] .pytorrent-theme-effect-particle,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="snow"][data-pytorrent-motion="on"] .pytorrent-theme-effect-particle {
+  animation: ptfx-fall calc(var(--ptfx-duration) + var(--ptfx-index) * .2s) linear infinite;
+  animation-delay: calc(var(--ptfx-index) * -.42s);
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="embers"][data-pytorrent-motion="on"] .pytorrent-theme-effect-particle {
+  animation: ptfx-ember-rise calc(var(--ptfx-duration) + var(--ptfx-index) * .16s) ease-in infinite;
+  animation-delay: calc(var(--ptfx-index) * -.37s);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="rays"] .pytorrent-theme-effects-layer,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="orbit"] .pytorrent-theme-effects-layer {
+  background: conic-gradient(from 0deg at 50% 50%, transparent 0 11%, color-mix(in srgb, var(--ptfx-color-1) 18%, transparent) 13%, transparent 17% 31%, color-mix(in srgb, var(--ptfx-color-2) 15%, transparent) 34%, transparent 39% 58%, color-mix(in srgb, var(--ptfx-color-4) 16%, transparent) 61%, transparent 66%);
+  scale: 1.5;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="rays"][data-pytorrent-motion="on"] .pytorrent-theme-effects-layer,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="orbit"][data-pytorrent-motion="on"] .pytorrent-theme-effects-layer {
+  animation: ptfx-spin var(--ptfx-duration-slow) linear infinite;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="waves"] .pytorrent-theme-effects-layer {
+  background:
+    repeating-radial-gradient(ellipse at 10% 110%, transparent 0 30px, color-mix(in srgb, var(--ptfx-color-1) 20%, transparent) 31px 33px, transparent 34px 52px),
+    repeating-radial-gradient(ellipse at 92% -10%, transparent 0 42px, color-mix(in srgb, var(--ptfx-color-2) 16%, transparent) 43px 45px, transparent 46px 68px);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="waves"][data-pytorrent-motion="on"] .pytorrent-theme-effects-layer {
+  animation: ptfx-wave-shift var(--ptfx-duration-slow) ease-in-out infinite alternate;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="paper"] .pytorrent-theme-effects-layer {
+  background-image:
+    repeating-linear-gradient(0deg, transparent 0 7px, color-mix(in srgb, var(--ptfx-color-1) 7%, transparent) 8px),
+    repeating-linear-gradient(90deg, transparent 0 11px, color-mix(in srgb, var(--ptfx-color-2) 5%, transparent) 12px);
+  opacity: calc(var(--ptfx-layer-opacity) * .6);
+}
+
+/* Surface profiles */
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"][data-pytorrent-effect-surface="soft"] :is(.topbar, .statusbar, .details, .surface-section, .mobile-card, .modal-content),
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"][data-pytorrent-effect-surface="mica"] :is(.topbar, .statusbar, .details, .surface-section, .mobile-card, .modal-content) {
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--ptfx-color-1) 18%, transparent), 0 0 22px color-mix(in srgb, var(--ptfx-color-2) 8%, transparent);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"][data-pytorrent-effect-surface="glow"] :is(.topbar, .statusbar, .details, .surface-section, .mobile-card, .modal-content),
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"][data-pytorrent-effect-surface="neon"] :is(.topbar, .statusbar, .details, .surface-section, .mobile-card, .modal-content),
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"][data-pytorrent-effect-surface="rgb"] :is(.topbar, .statusbar, .details, .surface-section, .mobile-card, .modal-content) {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ptfx-color-1) 34%, transparent), 0 0 22px color-mix(in srgb, var(--ptfx-color-2) 13%, transparent);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"][data-pytorrent-effect-surface="edge"] :is(.topbar, .statusbar, .details, .surface-section, .mobile-card),
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"][data-pytorrent-effect-surface="crisp"] :is(.topbar, .statusbar, .details, .surface-section, .mobile-card),
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"][data-pytorrent-effect-surface="blueprint"] :is(.topbar, .statusbar, .details, .surface-section, .mobile-card) {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ptfx-color-1) 24%, transparent);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"][data-pytorrent-effect-surface="terminal"] :is(.topbar, .statusbar, .details, .surface-section, .modal-content) {
+  background-image: repeating-linear-gradient(180deg, transparent 0 5px, color-mix(in srgb, var(--ptfx-color-1) 5%, transparent) 6px);
+  box-shadow: inset 0 0 24px color-mix(in srgb, var(--ptfx-color-1) 8%, transparent);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"][data-pytorrent-effect-surface="grid"] :is(.surface-section, .details, .mobile-card),
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"][data-pytorrent-effect-surface="blueprint"] :is(.surface-section, .details, .mobile-card) {
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--ptfx-color-1) 8%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--ptfx-color-1) 7%, transparent) 1px, transparent 1px);
+  background-size: calc(var(--ptfx-grid-size) * .7) calc(var(--ptfx-grid-size) * .7);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"][data-pytorrent-effect-surface="glass"] :is(.topbar, .statusbar, .details, .surface-section, .mobile-card, .modal-content) {
+  backdrop-filter: blur(10px) saturate(1.12);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--ptfx-color-1) 24%, transparent), 0 12px 30px color-mix(in srgb, var(--ptfx-color-2) 7%, transparent);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"][data-pytorrent-effect-surface="brutal"] :is(.surface-section, .mobile-card, .modal-content) {
+  box-shadow: 4px 4px 0 color-mix(in srgb, var(--ptfx-color-1) 50%, var(--bs-body-color));
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"][data-pytorrent-effect-surface="pixel"] :is(.topbar, .statusbar, .surface-section, .mobile-card) {
+  background-image: repeating-linear-gradient(90deg, transparent 0 7px, color-mix(in srgb, var(--ptfx-color-2) 8%, transparent) 8px 9px);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ptfx-color-1) 32%, transparent);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"][data-pytorrent-effect-surface="comic"] :is(.surface-section, .mobile-card, .modal-content) {
+  background-image: radial-gradient(circle, color-mix(in srgb, var(--ptfx-color-1) 12%, transparent) 1px, transparent 1.5px);
+  background-size: 7px 7px;
+  box-shadow: 3px 3px 0 color-mix(in srgb, var(--ptfx-color-2) 36%, var(--bs-body-color));
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"][data-pytorrent-effect-surface="slime"] :is(.topbar, .statusbar, .surface-section, .mobile-card) {
+  box-shadow: inset 0 -4px 14px color-mix(in srgb, var(--ptfx-color-3) 14%, transparent), 0 0 22px color-mix(in srgb, var(--ptfx-color-2) 9%, transparent);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"][data-pytorrent-effect-surface="frost"] :is(.topbar, .statusbar, .details, .surface-section, .mobile-card) {
+  backdrop-filter: blur(8px) saturate(.92);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--ptfx-color-2) 34%, transparent), inset 0 -1px 0 color-mix(in srgb, var(--ptfx-color-1) 18%, transparent);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"][data-pytorrent-effect-surface="chrome"] :is(.topbar, .statusbar, .surface-section, .mobile-card) {
+  background-image: linear-gradient(110deg, transparent 0 35%, color-mix(in srgb, var(--ptfx-color-1) 9%, transparent) 44%, transparent 54% 100%);
+  background-size: 240% 100%;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--bs-body-color) 20%, transparent);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-surface="chrome"][data-pytorrent-motion="on"] :is(.topbar, .statusbar, .surface-section, .mobile-card) {
+  animation: ptfx-surface-sheen var(--ptfx-duration-slow) linear infinite;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"][data-pytorrent-effect-surface="sparkle"] :is(.surface-section, .mobile-card, .modal-content),
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"][data-pytorrent-effect-surface="gold"] :is(.surface-section, .mobile-card, .modal-content) {
+  background-image:
+    radial-gradient(circle at 12% 18%, color-mix(in srgb, var(--ptfx-color-1) 18%, transparent) 0 1px, transparent 2px),
+    radial-gradient(circle at 78% 62%, color-mix(in srgb, var(--ptfx-color-2) 16%, transparent) 0 1px, transparent 2px),
+    radial-gradient(circle at 44% 82%, color-mix(in srgb, var(--ptfx-color-3) 15%, transparent) 0 1px, transparent 2px);
+}
+
+/* Progress profiles use overlays so existing inline progress colors remain the source of truth. */
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span) {
+  overflow: hidden;
+  position: relative;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span)::after {
+  content: '';
+  inset: 0;
+  opacity: calc(.18 + var(--ptfx-intensity) * .32);
+  pointer-events: none;
+  position: absolute;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-progress="sweep"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span)::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-progress="sheen"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span)::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-progress="shimmer"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span)::after {
+  background: linear-gradient(100deg, transparent 0 34%, color-mix(in srgb, var(--ptfx-color-2) 58%, transparent) 48%, transparent 62% 100%);
+  transform: translateX(-130%);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-progress="sweep"][data-pytorrent-motion="on"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span)::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-progress="sheen"][data-pytorrent-motion="on"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span)::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-progress="shimmer"][data-pytorrent-motion="on"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span)::after {
+  animation: ptfx-progress-sweep var(--ptfx-duration-fast) ease-in-out infinite;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-progress="scan"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span)::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-progress="pixel"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span)::after {
+  background: repeating-linear-gradient(90deg, transparent 0 6px, color-mix(in srgb, var(--ptfx-color-1) 44%, transparent) 7px 9px, transparent 10px 15px);
+  background-size: 24px 100%;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-progress="scan"][data-pytorrent-motion="on"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span)::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-progress="pixel"][data-pytorrent-motion="on"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span)::after {
+  animation: ptfx-progress-slide var(--ptfx-duration-fast) linear infinite;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-progress="rgb"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span)::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-progress="prism"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span)::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-progress="disco"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span)::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-progress="candy"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span)::after {
+  background: linear-gradient(90deg, var(--ptfx-color-1), var(--ptfx-color-2), var(--ptfx-color-3), var(--ptfx-color-4), var(--ptfx-color-1));
+  background-size: 260% 100%;
+  mix-blend-mode: screen;
+  opacity: calc(.2 + var(--ptfx-intensity) * .42);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-progress="rgb"][data-pytorrent-motion="on"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span)::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-progress="prism"][data-pytorrent-motion="on"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span)::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-progress="disco"][data-pytorrent-motion="on"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span)::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-progress="candy"][data-pytorrent-motion="on"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span)::after {
+  animation: ptfx-progress-rgb var(--ptfx-duration-fast) linear infinite;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-progress="liquid"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span)::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-progress="glow"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span)::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-progress="pulse"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span)::after {
+  background: radial-gradient(ellipse at 50% 100%, color-mix(in srgb, var(--ptfx-color-2) 52%, transparent), transparent 65%);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-progress="liquid"][data-pytorrent-motion="on"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span)::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-progress="glow"][data-pytorrent-motion="on"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span)::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-progress="pulse"][data-pytorrent-motion="on"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span)::after {
+  animation: ptfx-progress-pulse var(--ptfx-duration-fast) ease-in-out infinite alternate;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-progress="sparkle"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span)::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-progress="laser"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span)::after {
+  background: radial-gradient(circle at 12% 50%, var(--ptfx-color-1) 0 2px, transparent 3px), radial-gradient(circle at 62% 50%, var(--ptfx-color-2) 0 2px, transparent 3px), linear-gradient(90deg, transparent, color-mix(in srgb, var(--ptfx-color-3) 46%, transparent), transparent);
+  background-size: 54px 100%, 76px 100%, 100% 100%;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-progress="sparkle"][data-pytorrent-motion="on"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span)::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-progress="laser"][data-pytorrent-motion="on"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span)::after {
+  animation: ptfx-progress-slide var(--ptfx-duration-fast) linear infinite;
+}
+
+/* Control profiles */
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"][data-pytorrent-effect-controls="lift"] :is(.btn, .nav-link, .sidebar-filter),
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"][data-pytorrent-effect-controls="float"] :is(.btn, .nav-link, .sidebar-filter),
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"][data-pytorrent-effect-controls="quick"] :is(.btn, .nav-link, .sidebar-filter) {
+  will-change: transform, box-shadow;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-controls="lift"][data-pytorrent-motion="on"] :is(.btn, .nav-link, .sidebar-filter):hover,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-controls="float"][data-pytorrent-motion="on"] :is(.btn, .nav-link, .sidebar-filter):hover {
+  transform: translateY(-1px);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-controls="bounce"][data-pytorrent-motion="on"] :is(.btn, .nav-link, .sidebar-filter):hover {
+  animation: ptfx-control-bounce .55s cubic-bezier(.18,.82,.32,1.32) both;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-controls="press"] :is(.btn, .nav-link, .sidebar-filter):hover,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-controls="terminal"] :is(.btn, .nav-link, .sidebar-filter):hover {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ptfx-color-1) 38%, transparent), 0 0 12px color-mix(in srgb, var(--ptfx-color-1) 12%, transparent);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-controls="terminal"] :is(.btn, .nav-link.active, .sidebar-filter.active) {
+  text-shadow: 0 0 8px color-mix(in srgb, var(--ptfx-color-1) 55%, transparent);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-controls="pulse"][data-pytorrent-motion="on"] :is(.nav-link.active, .sidebar-filter.active, .btn-primary) {
+  animation: ptfx-control-glow var(--ptfx-duration-fast) ease-in-out infinite alternate;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-controls="wobble"][data-pytorrent-motion="on"] :is(.btn, .sidebar-filter):hover {
+  animation: ptfx-control-wobble .48s ease-in-out both;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-controls="ripple"] :is(.btn, .nav-link.active, .sidebar-filter.active) {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ptfx-color-1) 24%, transparent), 0 0 18px color-mix(in srgb, var(--ptfx-color-2) 9%, transparent);
+}
+
+/* Click burst profiles */
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effect-burst {
+  border: 2px solid var(--ptfx-color-1);
+  border-radius: 50%;
+  height: 12px;
+  margin-left: -6px;
+  margin-top: -6px;
+  opacity: .9;
+  width: 12px;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-burst="spark"] .pytorrent-theme-effect-burst,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-burst="star"] .pytorrent-theme-effect-burst {
+  background: conic-gradient(from 0deg, var(--ptfx-color-1), transparent 12%, var(--ptfx-color-2) 18%, transparent 30%, var(--ptfx-color-3) 38%, transparent 52%, var(--ptfx-color-4) 62%, transparent 74%, var(--ptfx-color-1));
+  border: 0;
+  border-radius: 2px;
+  height: 20px;
+  margin-left: -10px;
+  margin-top: -10px;
+  width: 20px;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-burst="pixel"] .pytorrent-theme-effect-burst {
+  border-radius: 0;
+  box-shadow: -10px 0 0 color-mix(in srgb, var(--ptfx-color-2) 72%, transparent), 10px 0 0 color-mix(in srgb, var(--ptfx-color-3) 72%, transparent), 0 -10px 0 color-mix(in srgb, var(--ptfx-color-4) 72%, transparent);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-burst="bubble"] .pytorrent-theme-effect-burst {
+  background: color-mix(in srgb, var(--ptfx-color-2) 12%, transparent);
+  box-shadow: inset 0 0 10px color-mix(in srgb, var(--ptfx-color-2) 30%, transparent), 0 0 12px color-mix(in srgb, var(--ptfx-color-1) 20%, transparent);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-burst="ink"] .pytorrent-theme-effect-burst {
+  background: color-mix(in srgb, var(--ptfx-color-1) 24%, transparent);
+  border-radius: 44% 56% 62% 38%;
+  filter: blur(.4px);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-effect-burst="ring"] .pytorrent-theme-effect-burst,
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-effect-burst="bubble"] .pytorrent-theme-effect-burst,
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-effect-burst="ink"] .pytorrent-theme-effect-burst {
+  animation: ptfx-burst-ring .9s ease-out forwards;
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-effect-burst="spark"] .pytorrent-theme-effect-burst,
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-effect-burst="star"] .pytorrent-theme-effect-burst,
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-effect-burst="pixel"] .pytorrent-theme-effect-burst {
+  animation: ptfx-burst-spin .85s ease-out forwards;
+}
+
+
+/* Immersive second-level profiles.
+ * Note: These primitives require both native theme effects and the separate immersive preference, so Bootstrap and the default/off path remain untouched.
+ */
+html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"][data-pytorrent-immersive-effects="on"] .pytorrent-theme-effects-layer {
+  opacity: calc(var(--ptfx-layer-opacity) + var(--ptfx-immersive-intensity) * .12);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-effects="on"] .pytorrent-theme-effects-layer::before,
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-effects="on"] .pytorrent-theme-effects-layer::after {
+  content: '';
+  inset: -18%;
+  opacity: calc(.18 + var(--ptfx-immersive-intensity) * .16);
+  pointer-events: none;
+  position: absolute;
+}
+
+/* Full-interface immersive scenes. */
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="mesh"] .pytorrent-theme-effects-layer::before {
+  background:
+    radial-gradient(circle at var(--ptfx-pointer-x) var(--ptfx-pointer-y), color-mix(in srgb, var(--ptfx-color-1) 38%, transparent), transparent 20%),
+    radial-gradient(circle at 12% 12%, color-mix(in srgb, var(--ptfx-color-2) 28%, transparent), transparent 30%),
+    radial-gradient(circle at 88% 84%, color-mix(in srgb, var(--ptfx-color-3) 24%, transparent), transparent 34%);
+  filter: blur(calc(var(--ptfx-blur) * .55));
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="mesh"] .pytorrent-theme-effects-layer::after {
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--ptfx-color-1) 10%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--ptfx-color-2) 9%, transparent) 1px, transparent 1px);
+  background-size: calc(var(--ptfx-grid-size) * 1.5) calc(var(--ptfx-grid-size) * 1.5);
+  mask-image: radial-gradient(circle at var(--ptfx-pointer-x) var(--ptfx-pointer-y), #000 0 16%, transparent 42%);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="grid"] .pytorrent-theme-effects-layer::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="blueprint"] .pytorrent-theme-effects-layer::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="horizon"] .pytorrent-theme-effects-layer::after {
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--ptfx-color-1) 18%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--ptfx-color-2) 16%, transparent) 1px, transparent 1px);
+  background-size: var(--ptfx-grid-size) var(--ptfx-grid-size);
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="blueprint"] .pytorrent-theme-effects-layer::before {
+  background: radial-gradient(circle at var(--ptfx-pointer-x) var(--ptfx-pointer-y), color-mix(in srgb, var(--ptfx-color-1) 28%, transparent), transparent 18%);
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="horizon"] .pytorrent-theme-effects-layer::after {
+  inset: 38% -28% -44%;
+  opacity: .72;
+  transform: perspective(420px) rotateX(58deg);
+  transform-origin: center bottom;
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="horizon"] .pytorrent-theme-effects-layer::before {
+  background: linear-gradient(180deg, transparent 34%, color-mix(in srgb, var(--ptfx-color-2) 24%, transparent) 52%, transparent 70%);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="caustics"] .pytorrent-theme-effects-layer::before {
+  background:
+    radial-gradient(ellipse at 20% 30%, transparent 0 12%, color-mix(in srgb, var(--ptfx-color-2) 25%, transparent) 15%, transparent 23%),
+    radial-gradient(ellipse at 70% 65%, transparent 0 10%, color-mix(in srgb, var(--ptfx-color-1) 24%, transparent) 14%, transparent 22%),
+    radial-gradient(circle at var(--ptfx-pointer-x) var(--ptfx-pointer-y), color-mix(in srgb, var(--ptfx-color-3) 26%, transparent), transparent 18%);
+  background-size: 240px 180px, 280px 220px, 100% 100%;
+  filter: blur(7px) saturate(1.25);
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="caustics"] .pytorrent-theme-effects-layer::after {
+  background: repeating-radial-gradient(ellipse at 60% 40%, transparent 0 18px, color-mix(in srgb, var(--ptfx-color-2) 12%, transparent) 21px, transparent 27px);
+  filter: blur(3px);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="bubbles"] .pytorrent-theme-effects-layer::before,
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="blobs"] .pytorrent-theme-effects-layer::before,
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="fog"] .pytorrent-theme-effects-layer::before,
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="slime"] .pytorrent-theme-effects-layer::before {
+  background:
+    radial-gradient(circle at 16% 24%, color-mix(in srgb, var(--ptfx-color-1) 38%, transparent), transparent 22%),
+    radial-gradient(circle at 78% 20%, color-mix(in srgb, var(--ptfx-color-2) 32%, transparent), transparent 24%),
+    radial-gradient(circle at 64% 82%, color-mix(in srgb, var(--ptfx-color-3) 32%, transparent), transparent 26%),
+    radial-gradient(circle at var(--ptfx-pointer-x) var(--ptfx-pointer-y), color-mix(in srgb, var(--ptfx-color-4) 26%, transparent), transparent 16%);
+  filter: blur(calc(var(--ptfx-blur) * .65));
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="bubbles"] .pytorrent-theme-effects-layer::after {
+  background-image:
+    radial-gradient(circle, transparent 0 7px, color-mix(in srgb, var(--ptfx-color-2) 30%, transparent) 8px 9px, transparent 10px),
+    radial-gradient(circle, transparent 0 4px, color-mix(in srgb, var(--ptfx-color-1) 24%, transparent) 5px 6px, transparent 7px);
+  background-position: 0 0, 34px 52px;
+  background-size: 88px 88px, 72px 72px;
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="fog"] .pytorrent-theme-effects-layer::before { filter: blur(calc(var(--ptfx-blur) * 1.05)); opacity: .46; }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="slime"] .pytorrent-theme-effects-layer::after {
+  background: repeating-linear-gradient(90deg, transparent 0 8%, color-mix(in srgb, var(--ptfx-color-3) 16%, transparent) 9% 11%, transparent 12% 20%);
+  border-radius: 44% 56% 38% 62%;
+  filter: blur(10px);
+  transform: translateY(-52%);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="scan"] .pytorrent-theme-effects-layer::before,
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="matrix"] .pytorrent-theme-effects-layer::before {
+  background:
+    radial-gradient(circle at var(--ptfx-pointer-x) var(--ptfx-pointer-y), color-mix(in srgb, var(--ptfx-color-1) 34%, transparent), transparent 17%),
+    repeating-linear-gradient(180deg, transparent 0 5px, color-mix(in srgb, var(--ptfx-color-1) 10%, transparent) 6px, transparent 7px 10px);
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="scan"] .pytorrent-theme-effects-layer::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="matrix"] .pytorrent-theme-effects-layer::after {
+  background: linear-gradient(180deg, transparent 0 44%, color-mix(in srgb, var(--ptfx-color-1) 42%, transparent) 49%, transparent 54% 100%);
+  height: 26%;
+  inset: -26% -18% auto;
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="matrix"] .pytorrent-theme-effects-layer::before {
+  background-image:
+    linear-gradient(90deg, color-mix(in srgb, var(--ptfx-color-1) 12%, transparent) 1px, transparent 1px),
+    repeating-linear-gradient(180deg, transparent 0 8px, color-mix(in srgb, var(--ptfx-color-1) 10%, transparent) 9px, transparent 10px 14px),
+    radial-gradient(circle at var(--ptfx-pointer-x) var(--ptfx-pointer-y), color-mix(in srgb, var(--ptfx-color-1) 34%, transparent), transparent 18%);
+  background-size: 19px 100%, 100% 14px, 100% 100%;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="vortex"] .pytorrent-theme-effects-layer::before,
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="prism"] .pytorrent-theme-effects-layer::before,
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="orbit"] .pytorrent-theme-effects-layer::before {
+  background: conic-gradient(from 0deg at 50% 50%, transparent 0 7%, color-mix(in srgb, var(--ptfx-color-1) 35%, transparent) 10%, transparent 16% 27%, color-mix(in srgb, var(--ptfx-color-2) 30%, transparent) 32%, transparent 39% 51%, color-mix(in srgb, var(--ptfx-color-3) 28%, transparent) 57%, transparent 64% 77%, color-mix(in srgb, var(--ptfx-color-4) 30%, transparent) 82%, transparent 89% 100%);
+  border-radius: 50%;
+  filter: blur(7px) saturate(1.25);
+  inset: -55%;
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="prism"] .pytorrent-theme-effects-layer::after {
+  background: linear-gradient(115deg, transparent 0 34%, color-mix(in srgb, var(--ptfx-color-1) 26%, transparent) 39%, color-mix(in srgb, var(--ptfx-color-2) 20%, transparent) 45%, color-mix(in srgb, var(--ptfx-color-3) 20%, transparent) 51%, transparent 58% 100%);
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="orbit"] .pytorrent-theme-effects-layer::after {
+  border: 1px solid color-mix(in srgb, var(--ptfx-color-2) 28%, transparent);
+  border-radius: 50%;
+  box-shadow: inset 0 0 28px color-mix(in srgb, var(--ptfx-color-1) 18%, transparent), 0 0 34px color-mix(in srgb, var(--ptfx-color-3) 10%, transparent);
+  inset: 16% 24%;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="stars"] .pytorrent-theme-effects-layer::before {
+  background-image:
+    radial-gradient(circle, var(--ptfx-color-1) 0 1px, transparent 1.8px),
+    radial-gradient(circle, var(--ptfx-color-2) 0 1px, transparent 1.7px),
+    radial-gradient(circle at var(--ptfx-pointer-x) var(--ptfx-pointer-y), color-mix(in srgb, var(--ptfx-color-3) 26%, transparent), transparent 18%);
+  background-position: 0 0, 34px 44px, 0 0;
+  background-size: 82px 82px, 118px 118px, 100% 100%;
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="frost"] .pytorrent-theme-effects-layer::before {
+  background:
+    linear-gradient(125deg, transparent 0 36%, color-mix(in srgb, var(--ptfx-color-2) 26%, transparent) 44%, transparent 53% 100%),
+    radial-gradient(circle at var(--ptfx-pointer-x) var(--ptfx-pointer-y), color-mix(in srgb, var(--ptfx-color-1) 28%, transparent), transparent 18%);
+  filter: blur(4px);
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="frost"] .pytorrent-theme-effects-layer::after {
+  background-image:
+    linear-gradient(60deg, transparent 49%, color-mix(in srgb, var(--ptfx-color-2) 14%, transparent) 50% 51%, transparent 52%),
+    linear-gradient(-60deg, transparent 49%, color-mix(in srgb, var(--ptfx-color-1) 12%, transparent) 50% 51%, transparent 52%);
+  background-size: 46px 46px;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="laser"] .pytorrent-theme-effects-layer::before {
+  background:
+    linear-gradient(90deg, transparent calc(var(--ptfx-pointer-x) - 1px), color-mix(in srgb, var(--ptfx-color-1) 62%, transparent) var(--ptfx-pointer-x), transparent calc(var(--ptfx-pointer-x) + 2px)),
+    linear-gradient(180deg, transparent calc(var(--ptfx-pointer-y) - 1px), color-mix(in srgb, var(--ptfx-color-2) 54%, transparent) var(--ptfx-pointer-y), transparent calc(var(--ptfx-pointer-y) + 2px));
+  filter: drop-shadow(0 0 9px var(--ptfx-color-1));
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="laser"] .pytorrent-theme-effects-layer::after {
+  background: repeating-linear-gradient(120deg, transparent 0 11%, color-mix(in srgb, var(--ptfx-color-3) 14%, transparent) 12%, transparent 13% 24%);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="paper"] .pytorrent-theme-effects-layer::before {
+  background-image:
+    repeating-linear-gradient(8deg, transparent 0 12px, color-mix(in srgb, var(--ptfx-color-1) 8%, transparent) 13px, transparent 14px 27px),
+    repeating-linear-gradient(92deg, transparent 0 20px, color-mix(in srgb, var(--ptfx-color-2) 6%, transparent) 21px, transparent 22px 43px);
+  filter: blur(.3px);
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="paper"] .pytorrent-theme-effects-layer::after {
+  background: radial-gradient(circle at var(--ptfx-pointer-x) var(--ptfx-pointer-y), color-mix(in srgb, var(--ptfx-color-1) 14%, transparent), transparent 18%);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="pixel"] .pytorrent-theme-effects-layer::before {
+  background-image:
+    linear-gradient(45deg, color-mix(in srgb, var(--ptfx-color-1) 15%, transparent) 25%, transparent 25% 75%, color-mix(in srgb, var(--ptfx-color-2) 14%, transparent) 75%),
+    linear-gradient(45deg, color-mix(in srgb, var(--ptfx-color-3) 12%, transparent) 25%, transparent 25% 75%, color-mix(in srgb, var(--ptfx-color-4) 12%, transparent) 75%);
+  background-position: 0 0, 12px 12px;
+  background-size: 24px 24px;
+  image-rendering: pixelated;
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="marquee"] .pytorrent-theme-effects-layer::before {
+  background:
+    radial-gradient(circle at 8% 8%, color-mix(in srgb, var(--ptfx-color-1) 38%, transparent) 0 2px, transparent 3px),
+    radial-gradient(circle at 92% 12%, color-mix(in srgb, var(--ptfx-color-2) 38%, transparent) 0 2px, transparent 3px),
+    radial-gradient(circle at 16% 88%, color-mix(in srgb, var(--ptfx-color-3) 34%, transparent) 0 2px, transparent 3px),
+    radial-gradient(circle at 84% 84%, color-mix(in srgb, var(--ptfx-color-4) 34%, transparent) 0 2px, transparent 3px);
+  background-size: 34px 34px;
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="embers"] .pytorrent-theme-effects-layer::before {
+  background:
+    radial-gradient(circle at 50% 115%, color-mix(in srgb, var(--ptfx-color-1) 42%, transparent), transparent 42%),
+    radial-gradient(circle at var(--ptfx-pointer-x) var(--ptfx-pointer-y), color-mix(in srgb, var(--ptfx-color-2) 30%, transparent), transparent 16%);
+  filter: blur(8px);
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="petals"] .pytorrent-theme-effects-layer::before,
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="confetti"] .pytorrent-theme-effects-layer::before,
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="comic"] .pytorrent-theme-effects-layer::before {
+  background: radial-gradient(circle at var(--ptfx-pointer-x) var(--ptfx-pointer-y), color-mix(in srgb, var(--ptfx-color-1) 30%, transparent), transparent 17%);
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-scene="comic"] .pytorrent-theme-effects-layer::after {
+  background-image: radial-gradient(circle, color-mix(in srgb, var(--ptfx-color-1) 20%, transparent) 0 2px, transparent 2.5px);
+  background-size: 13px 13px;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-effects="on"][data-pytorrent-immersive-scene="mesh"] .pytorrent-theme-effects-layer::before,
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-effects="on"][data-pytorrent-immersive-scene="caustics"] .pytorrent-theme-effects-layer::before,
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-effects="on"][data-pytorrent-immersive-scene="blobs"] .pytorrent-theme-effects-layer::before,
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-effects="on"][data-pytorrent-immersive-scene="fog"] .pytorrent-theme-effects-layer::before,
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-effects="on"][data-pytorrent-immersive-scene="slime"] .pytorrent-theme-effects-layer::before {
+  animation: ptfx-immersive-drift var(--ptfx-duration-slow) ease-in-out infinite alternate;
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-effects="on"][data-pytorrent-immersive-scene="grid"] .pytorrent-theme-effects-layer::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-effects="on"][data-pytorrent-immersive-scene="blueprint"] .pytorrent-theme-effects-layer::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-effects="on"][data-pytorrent-immersive-scene="horizon"] .pytorrent-theme-effects-layer::after {
+  animation: ptfx-immersive-grid var(--ptfx-duration) linear infinite;
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-effects="on"][data-pytorrent-immersive-scene="scan"] .pytorrent-theme-effects-layer::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-effects="on"][data-pytorrent-immersive-scene="matrix"] .pytorrent-theme-effects-layer::after {
+  animation: ptfx-immersive-scan calc(var(--ptfx-duration-fast) * .75) linear infinite;
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-effects="on"][data-pytorrent-immersive-scene="vortex"] .pytorrent-theme-effects-layer::before,
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-effects="on"][data-pytorrent-immersive-scene="prism"] .pytorrent-theme-effects-layer::before,
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-effects="on"][data-pytorrent-immersive-scene="orbit"] .pytorrent-theme-effects-layer::before {
+  animation: ptfx-immersive-spin var(--ptfx-duration-slow) linear infinite;
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-effects="on"][data-pytorrent-immersive-scene="stars"] .pytorrent-theme-effects-layer::before,
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-effects="on"][data-pytorrent-immersive-scene="frost"] .pytorrent-theme-effects-layer::before,
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-effects="on"][data-pytorrent-immersive-scene="laser"] .pytorrent-theme-effects-layer::before,
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-effects="on"][data-pytorrent-immersive-scene="marquee"] .pytorrent-theme-effects-layer::before,
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-effects="on"][data-pytorrent-immersive-scene="embers"] .pytorrent-theme-effects-layer::before {
+  animation: ptfx-immersive-pulse var(--ptfx-duration-fast) ease-in-out infinite alternate;
+}
+
+/* Immersive viewport frames. */
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-effects="on"] .pytorrent-theme-immersive-frame {
+  border: 1px solid color-mix(in srgb, var(--ptfx-color-1) 38%, transparent);
+  border-radius: inherit;
+  box-shadow: inset 0 0 20px color-mix(in srgb, var(--ptfx-color-1) 12%, transparent);
+  inset: 5px;
+  opacity: calc(.44 + var(--ptfx-immersive-intensity) * .18);
+  pointer-events: none;
+  position: absolute;
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-frame="rgb"] .pytorrent-theme-immersive-frame,
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-frame="prism"] .pytorrent-theme-immersive-frame {
+  border-color: var(--ptfx-color-1);
+  box-shadow: inset 0 0 18px var(--ptfx-color-1), inset 0 0 34px var(--ptfx-color-2), 0 0 12px var(--ptfx-color-3);
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-frame="neon"] .pytorrent-theme-immersive-frame {
+  box-shadow: inset 0 0 24px color-mix(in srgb, var(--ptfx-color-1) 36%, transparent), 0 0 18px color-mix(in srgb, var(--ptfx-color-2) 24%, transparent);
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-frame="terminal"] .pytorrent-theme-immersive-frame,
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-frame="blueprint"] .pytorrent-theme-immersive-frame {
+  border-style: dashed;
+  box-shadow: inset 0 0 28px color-mix(in srgb, var(--ptfx-color-1) 20%, transparent);
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-frame="gold"] .pytorrent-theme-immersive-frame {
+  border-color: color-mix(in srgb, var(--ptfx-color-1) 72%, var(--ptfx-color-2));
+  box-shadow: inset 0 0 24px color-mix(in srgb, var(--ptfx-color-1) 26%, transparent), 0 0 12px color-mix(in srgb, var(--ptfx-color-2) 20%, transparent);
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-frame="paper"] .pytorrent-theme-immersive-frame { border-style: double; opacity: .4; }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-frame="frost"] .pytorrent-theme-immersive-frame,
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-frame="aqua"] .pytorrent-theme-immersive-frame,
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-frame="glass"] .pytorrent-theme-immersive-frame {
+  box-shadow: inset 0 0 26px color-mix(in srgb, var(--ptfx-color-2) 28%, transparent), inset 0 0 52px color-mix(in srgb, var(--ptfx-color-1) 14%, transparent);
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-frame="brutal"] .pytorrent-theme-immersive-frame { border-width: 3px; box-shadow: inset 6px 6px 0 color-mix(in srgb, var(--ptfx-color-2) 25%, transparent); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-frame="chrome"] .pytorrent-theme-immersive-frame { border-color: color-mix(in srgb, var(--bs-body-color) 45%, var(--ptfx-color-1)); box-shadow: inset 0 1px 0 color-mix(in srgb, white 34%, transparent), inset 0 -1px 0 color-mix(in srgb, black 28%, transparent); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-frame="pixel"] .pytorrent-theme-immersive-frame { border-radius: 0; border-style: dotted; border-width: 2px; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-frame="rgb"] .pytorrent-theme-immersive-frame,
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-frame="prism"] .pytorrent-theme-immersive-frame { animation: ptfx-frame-rgb var(--ptfx-duration-fast) linear infinite; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-frame="marquee"] .pytorrent-theme-immersive-frame { animation: ptfx-immersive-pulse var(--ptfx-duration-fast) ease-in-out infinite alternate; }
+
+/* Theme-specific cursor trails. */
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-effects="on"] .pytorrent-theme-effect-trail {
+  background: var(--ptfx-color-1);
+  border-radius: 50%;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--ptfx-color-1) 70%, transparent), 0 0 22px color-mix(in srgb, var(--ptfx-color-2) 34%, transparent);
+  height: var(--ptfx-trail-size);
+  margin-left: calc(var(--ptfx-trail-size) * -.5);
+  margin-top: calc(var(--ptfx-trail-size) * -.5);
+  opacity: .82;
+  pointer-events: none;
+  position: absolute;
+  width: var(--ptfx-trail-size);
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-cursor="pixel"] .pytorrent-theme-effect-trail { border-radius: 0; box-shadow: calc(var(--ptfx-trail-size) * .8) 0 0 color-mix(in srgb, var(--ptfx-color-2) 62%, transparent); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-cursor="bubble"] .pytorrent-theme-effect-trail { background: color-mix(in srgb, var(--ptfx-color-2) 18%, transparent); border: 1px solid color-mix(in srgb, var(--ptfx-color-1) 62%, transparent); box-shadow: inset 0 0 7px color-mix(in srgb, var(--ptfx-color-2) 38%, transparent), 0 0 12px color-mix(in srgb, var(--ptfx-color-1) 26%, transparent); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-cursor="spark"] .pytorrent-theme-effect-trail { border-radius: 1px; height: calc(var(--ptfx-trail-size) * .22); transform: rotate(-28deg); width: calc(var(--ptfx-trail-size) * 1.8); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-cursor="comet"] .pytorrent-theme-effect-trail { background: linear-gradient(90deg, transparent, var(--ptfx-color-2) 38%, var(--ptfx-color-1)); border-radius: 999px; height: calc(var(--ptfx-trail-size) * .32); margin-left: calc(var(--ptfx-trail-size) * -1.5); transform: rotate(-12deg); width: calc(var(--ptfx-trail-size) * 3); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-cursor="star"] .pytorrent-theme-effect-trail { background: linear-gradient(135deg, var(--ptfx-color-1), var(--ptfx-color-2)); clip-path: polygon(50% 0,61% 35%,100% 50%,61% 64%,50% 100%,39% 64%,0 50%,39% 35%); border-radius: 0; }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-cursor="petal"] .pytorrent-theme-effect-trail { background: linear-gradient(135deg, var(--ptfx-color-1), var(--ptfx-color-2)); border-radius: 80% 12% 75% 18%; transform: rotate(32deg); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-cursor="ember"] .pytorrent-theme-effect-trail { background: radial-gradient(circle, var(--ptfx-color-1), var(--ptfx-color-2) 48%, transparent 72%); box-shadow: 0 0 16px var(--ptfx-color-1); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-cursor="ink"] .pytorrent-theme-effect-trail { background: color-mix(in srgb, var(--ptfx-color-1) 62%, transparent); border-radius: 38% 62% 44% 56%; box-shadow: none; filter: blur(.6px); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-cursor="prism"] .pytorrent-theme-effect-trail { background: conic-gradient(var(--ptfx-color-1), var(--ptfx-color-2), var(--ptfx-color-3), var(--ptfx-color-4), var(--ptfx-color-1)); box-shadow: 0 0 14px var(--ptfx-color-1); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-cursor="ring"] .pytorrent-theme-effect-trail { background: transparent; border: 1px solid var(--ptfx-color-1); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-cursor="snow"] .pytorrent-theme-effect-trail { background: color-mix(in srgb, white 72%, var(--ptfx-color-2)); box-shadow: 0 0 10px color-mix(in srgb, white 62%, transparent); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-cursor="slime"] .pytorrent-theme-effect-trail { border-radius: 58% 42% 68% 32%; box-shadow: 0 0 12px var(--ptfx-color-1), 0 5px 9px color-mix(in srgb, var(--ptfx-color-3) 45%, transparent); }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-effects="on"] .pytorrent-theme-effect-trail { animation: ptfx-trail-fade .78s ease-out forwards; }
+
+/* Stronger surface treatment for the immersive level. */
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-effects="on"] :is(.surface-section, .details, .mobile-card, .modal-content) {
+  background-blend-mode: screen, normal;
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-panels="hologram"] :is(.surface-section, .details, .mobile-card, .modal-content) {
+  background-image: linear-gradient(115deg, transparent 0 33%, color-mix(in srgb, var(--ptfx-color-1) 13%, transparent) 40%, color-mix(in srgb, var(--ptfx-color-2) 10%, transparent) 48%, transparent 56% 100%);
+  background-size: 240% 100%;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ptfx-color-1) 30%, transparent), 0 0 22px color-mix(in srgb, var(--ptfx-color-2) 12%, transparent);
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-panels="neon"] :is(.surface-section, .details, .mobile-card, .modal-content),
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-panels="glow"] :is(.surface-section, .details, .mobile-card, .modal-content) {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ptfx-color-1) 26%, transparent), 0 0 24px color-mix(in srgb, var(--ptfx-color-1) 14%, transparent), 0 0 46px color-mix(in srgb, var(--ptfx-color-2) 8%, transparent);
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-panels="liquid"] :is(.surface-section, .details, .mobile-card, .modal-content) {
+  background-image: radial-gradient(circle at 12% 0, color-mix(in srgb, var(--ptfx-color-1) 14%, transparent), transparent 32%), radial-gradient(circle at 88% 100%, color-mix(in srgb, var(--ptfx-color-2) 12%, transparent), transparent 34%);
+  box-shadow: inset 0 -10px 22px color-mix(in srgb, var(--ptfx-color-3) 8%, transparent);
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-panels="glass"] :is(.surface-section, .details, .mobile-card, .modal-content),
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-panels="mica"] :is(.surface-section, .details, .mobile-card, .modal-content) {
+  backdrop-filter: blur(14px) saturate(1.22);
+  background-image: linear-gradient(125deg, color-mix(in srgb, var(--ptfx-color-1) 9%, transparent), transparent 35% 65%, color-mix(in srgb, var(--ptfx-color-2) 8%, transparent));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 18%, transparent), 0 16px 38px color-mix(in srgb, var(--ptfx-color-1) 8%, transparent);
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-panels="terminal"] :is(.surface-section, .details, .mobile-card, .modal-content) {
+  background-image: repeating-linear-gradient(180deg, transparent 0 4px, color-mix(in srgb, var(--ptfx-color-1) 7%, transparent) 5px, transparent 6px 9px);
+  box-shadow: inset 0 0 24px color-mix(in srgb, var(--ptfx-color-1) 13%, transparent);
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-panels="grid"] :is(.surface-section, .details, .mobile-card),
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-panels="blueprint"] :is(.surface-section, .details, .mobile-card) {
+  background-image: linear-gradient(color-mix(in srgb, var(--ptfx-color-1) 9%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--ptfx-color-1) 8%, transparent) 1px, transparent 1px);
+  background-size: calc(var(--ptfx-grid-size) * .6) calc(var(--ptfx-grid-size) * .6);
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-panels="sparkle"] :is(.surface-section, .details, .mobile-card, .modal-content) {
+  background-image: radial-gradient(circle at 12% 20%, color-mix(in srgb, var(--ptfx-color-1) 28%, transparent) 0 1px, transparent 2px), radial-gradient(circle at 78% 62%, color-mix(in srgb, var(--ptfx-color-2) 24%, transparent) 0 1px, transparent 2px), radial-gradient(circle at 44% 82%, color-mix(in srgb, var(--ptfx-color-3) 22%, transparent) 0 1px, transparent 2px);
+}
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-panels="comic"] :is(.surface-section, .mobile-card, .modal-content) { background-image: radial-gradient(circle, color-mix(in srgb, var(--ptfx-color-1) 18%, transparent) 1.5px, transparent 2px); background-size: 8px 8px; }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-panels="brutal"] :is(.surface-section, .mobile-card, .modal-content) { box-shadow: 7px 7px 0 color-mix(in srgb, var(--ptfx-color-1) 48%, var(--bs-body-color)); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-panels="pixel"] :is(.surface-section, .mobile-card, .modal-content) { background-image: repeating-linear-gradient(90deg, transparent 0 7px, color-mix(in srgb, var(--ptfx-color-2) 11%, transparent) 8px 9px); image-rendering: pixelated; }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-panels="chrome"] :is(.surface-section, .details, .mobile-card, .modal-content) { background-image: linear-gradient(110deg, transparent 0 32%, color-mix(in srgb, white 16%, transparent) 42%, transparent 52% 100%); background-size: 240% 100%; }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-panels="gold"] :is(.surface-section, .details, .mobile-card, .modal-content) { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ptfx-color-1) 40%, transparent), 0 0 22px color-mix(in srgb, var(--ptfx-color-1) 14%, transparent); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-panels="frost"] :is(.surface-section, .details, .mobile-card, .modal-content) { backdrop-filter: blur(10px) saturate(.92); box-shadow: inset 0 1px 0 color-mix(in srgb, white 26%, transparent), inset 0 0 26px color-mix(in srgb, var(--ptfx-color-2) 12%, transparent); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-panels="slime"] :is(.surface-section, .details, .mobile-card, .modal-content) { box-shadow: inset 0 -8px 20px color-mix(in srgb, var(--ptfx-color-3) 18%, transparent), 0 0 20px color-mix(in srgb, var(--ptfx-color-1) 10%, transparent); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-panels="paper"] :is(.surface-section, .details, .mobile-card, .modal-content) { background-image: repeating-linear-gradient(8deg, transparent 0 14px, color-mix(in srgb, var(--ptfx-color-1) 5%, transparent) 15px, transparent 16px 28px); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-panels="edge"] :is(.surface-section, .details, .mobile-card, .modal-content) { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ptfx-color-1) 30%, transparent), 0 10px 26px color-mix(in srgb, var(--bs-body-color) 8%, transparent); }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-panels="hologram"] :is(.surface-section, .details, .mobile-card, .modal-content),
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-panels="chrome"] :is(.surface-section, .details, .mobile-card, .modal-content) { animation: ptfx-immersive-sheen var(--ptfx-duration-slow) linear infinite; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-effects="on"] :is(.surface-section, .mobile-card) { transition: box-shadow .22s ease, transform .22s ease; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-effects="on"] :is(.surface-section, .mobile-card):hover { transform: translateY(-1px); }
+
+/* Brand behavior is themed independently from the base color palette. */
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-effects="on"] .brand { position: relative; }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-logo="rgb"] .brand { text-shadow: 2px 0 10px var(--ptfx-color-1), -2px 0 10px var(--ptfx-color-2), 0 2px 10px var(--ptfx-color-3); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-logo="glitch"] .brand { text-shadow: 1px 0 var(--ptfx-color-1), -1px 0 var(--ptfx-color-2); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-logo="terminal"] .brand { text-shadow: 0 0 10px color-mix(in srgb, var(--ptfx-color-1) 70%, transparent); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-logo="neon"] .brand,
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-logo="pulse"] .brand { text-shadow: 0 0 14px color-mix(in srgb, var(--ptfx-color-1) 46%, transparent), 0 0 24px color-mix(in srgb, var(--ptfx-color-2) 22%, transparent); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-logo="sparkle"] .brand { text-shadow: 0 0 9px var(--ptfx-color-1), 7px -3px 12px var(--ptfx-color-2); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-logo="paper"] .brand { text-shadow: 1px 1px 0 color-mix(in srgb, var(--bs-body-color) 18%, transparent); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-logo="chrome"] .brand { text-shadow: 0 1px 0 color-mix(in srgb, white 34%, transparent), 0 -1px 0 color-mix(in srgb, black 26%, transparent); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-logo="gold"] .brand { text-shadow: 0 0 10px color-mix(in srgb, var(--ptfx-color-1) 58%, transparent); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-logo="brutal"] .brand { text-shadow: 2px 2px 0 var(--ptfx-color-2); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-logo="pixel"] .brand { text-shadow: 2px 0 0 var(--ptfx-color-2), 0 2px 0 var(--ptfx-color-3); }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-logo="rgb"] .brand { animation: ptfx-logo-rgb var(--ptfx-duration-fast) linear infinite; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-logo="glitch"] .brand { animation: ptfx-logo-glitch 2.6s steps(1,end) infinite; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-logo="orbit"] .brand i { animation: ptfx-logo-orbit var(--ptfx-duration) ease-in-out infinite; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-logo="float"] .brand i,
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-logo="wave"] .brand i { animation: ptfx-logo-float var(--ptfx-duration-fast) ease-in-out infinite alternate; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-logo="pulse"] .brand,
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-logo="sparkle"] .brand,
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-logo="shimmer"] .brand { animation: ptfx-logo-pulse var(--ptfx-duration-fast) ease-in-out infinite alternate; }
+
+/* Modal entrances stay on the PyTorrent runtime contract; Bootstrap mode never sees these selectors. */
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-effects="on"] .modal.show .modal-dialog { transform-origin: center; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="warp"] .modal.show .modal-dialog { animation: ptfx-modal-warp .42s cubic-bezier(.16,.84,.31,1.18) both; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="scan"] .modal.show .modal-dialog,
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="terminal"] .modal.show .modal-dialog { animation: ptfx-modal-scan .34s steps(7,end) both; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="glitch"] .modal.show .modal-dialog { animation: ptfx-modal-glitch .38s steps(5,end) both; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="liquid"] .modal.show .modal-dialog { animation: ptfx-modal-liquid .46s cubic-bezier(.19,.86,.32,1.14) both; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="pop"] .modal.show .modal-dialog,
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="comic"] .modal.show .modal-dialog,
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="brutal"] .modal.show .modal-dialog { animation: ptfx-modal-pop .36s cubic-bezier(.16,.9,.34,1.28) both; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="hologram"] .modal.show .modal-dialog { animation: ptfx-modal-hologram .42s ease-out both; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="paper"] .modal.show .modal-dialog { animation: ptfx-modal-paper .38s ease-out both; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="pixel"] .modal.show .modal-dialog { animation: ptfx-modal-pixel .34s steps(5,end) both; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="casino"] .modal.show .modal-dialog { animation: ptfx-modal-casino .48s cubic-bezier(.18,.82,.26,1.2) both; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="float"] .modal.show .modal-dialog,
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="soft"] .modal.show .modal-dialog { animation: ptfx-modal-float .34s ease-out both; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="frost"] .modal.show .modal-dialog { animation: ptfx-modal-frost .42s ease-out both; }
+
+/* Torrent rows/cards receive themed hover energy without changing row structure or business events. */
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-effects="on"] .torrent-table tbody tr > td { background-repeat: no-repeat; }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-rows="laser"] .torrent-table tbody tr:hover > td { background-image: linear-gradient(90deg, transparent 0 28%, color-mix(in srgb, var(--ptfx-color-1) 17%, transparent) 48%, transparent 68% 100%); background-size: 220% 100%; }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-rows="scan"] .torrent-table tbody tr:hover > td,
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-rows="terminal"] .torrent-table tbody tr:hover > td { background-image: repeating-linear-gradient(180deg, transparent 0 4px, color-mix(in srgb, var(--ptfx-color-1) 8%, transparent) 5px, transparent 6px 9px); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-rows="grid"] .torrent-table tbody tr:hover > td { background-image: linear-gradient(90deg, color-mix(in srgb, var(--ptfx-color-1) 8%, transparent) 1px, transparent 1px); background-size: 16px 100%; }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-rows="wave"] .torrent-table tbody tr:hover > td,
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-rows="bubble"] .torrent-table tbody tr:hover > td { background-image: radial-gradient(ellipse at 30% 50%, color-mix(in srgb, var(--ptfx-color-2) 14%, transparent), transparent 34%); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-rows="prism"] .torrent-table tbody tr:hover > td,
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-rows="candy"] .torrent-table tbody tr:hover > td { background-image: linear-gradient(90deg, color-mix(in srgb, var(--ptfx-color-1) 8%, transparent), color-mix(in srgb, var(--ptfx-color-2) 12%, transparent), color-mix(in srgb, var(--ptfx-color-3) 8%, transparent)); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-rows="pixel"] .torrent-table tbody tr:hover > td { background-image: repeating-linear-gradient(90deg, transparent 0 7px, color-mix(in srgb, var(--ptfx-color-1) 12%, transparent) 8px 9px); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-rows="paper"] .torrent-table tbody tr:hover > td { background-image: repeating-linear-gradient(8deg, transparent 0 12px, color-mix(in srgb, var(--ptfx-color-1) 5%, transparent) 13px, transparent 14px 24px); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-rows="brutal"] .torrent-table tbody tr:hover > td { box-shadow: inset 0 -2px 0 var(--ptfx-color-1), inset 0 2px 0 var(--ptfx-color-2); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-rows="chrome"] .torrent-table tbody tr:hover > td { background-image: linear-gradient(110deg, transparent 0 36%, color-mix(in srgb, white 12%, transparent) 46%, transparent 56% 100%); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-rows="gold"] .torrent-table tbody tr:hover > td { box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--ptfx-color-1) 52%, transparent), inset 0 1px 0 color-mix(in srgb, var(--ptfx-color-2) 26%, transparent); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-rows="neon"] .torrent-table tbody tr:hover > td,
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-rows="glow"] .torrent-table tbody tr:hover > td { box-shadow: inset 0 0 14px color-mix(in srgb, var(--ptfx-color-1) 10%, transparent); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-rows="frost"] .torrent-table tbody tr:hover > td { background-image: linear-gradient(110deg, transparent, color-mix(in srgb, var(--ptfx-color-2) 11%, transparent), transparent); }
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-rows="slime"] .torrent-table tbody tr:hover > td { box-shadow: inset 0 -4px 9px color-mix(in srgb, var(--ptfx-color-3) 13%, transparent); }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-rows="laser"] .torrent-table tbody tr:hover > td,
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-rows="chrome"] .torrent-table tbody tr:hover > td { animation: ptfx-row-scan var(--ptfx-duration-fast) linear infinite; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-effects="on"] .mobile-card { transition: transform .2s ease, box-shadow .2s ease; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-effects="on"] .mobile-card:hover { transform: translateY(-2px) scale(1.003); }
+
+@keyframes ptfx-immersive-drift { from { background-position: 0 0, 0 0, 0 0, 0 0; transform: scale(1); } to { background-position: 6% -4%, -5% 7%, 4% -5%, 0 0; transform: scale(1.05); } }
+@keyframes ptfx-immersive-grid { to { background-position: var(--ptfx-grid-size) var(--ptfx-grid-size), var(--ptfx-grid-size) var(--ptfx-grid-size); } }
+@keyframes ptfx-immersive-scan { from { transform: translateY(0); } to { transform: translateY(520%); } }
+@keyframes ptfx-immersive-spin { to { transform: rotate(360deg); } }
+@keyframes ptfx-immersive-pulse { from { opacity: .18; filter: brightness(.9); } to { opacity: .52; filter: brightness(1.25); } }
+@keyframes ptfx-frame-rgb { 0% { filter: hue-rotate(0deg); } 100% { filter: hue-rotate(360deg); } }
+@keyframes ptfx-trail-fade { from { opacity: .88; transform: translate3d(0,0,0) scale(1); } to { opacity: 0; transform: translate3d(0,14px,0) scale(.18) rotate(24deg); } }
+@keyframes ptfx-immersive-sheen { to { background-position: -240% 0; } }
+@keyframes ptfx-logo-rgb { to { filter: hue-rotate(360deg); } }
+@keyframes ptfx-logo-glitch { 0%,88%,100% { transform: translate(0); } 90% { transform: translate(1px,-1px) skewX(-2deg); } 92% { transform: translate(-2px,1px) skewX(2deg); } 94% { transform: translate(2px,0); } }
+@keyframes ptfx-logo-orbit { 0%,100% { transform: rotate(-7deg) translateY(0); } 50% { transform: rotate(7deg) translateY(-2px); } }
+@keyframes ptfx-logo-float { from { transform: translateY(0) rotate(-2deg); } to { transform: translateY(-2px) rotate(2deg); } }
+@keyframes ptfx-logo-pulse { from { filter: brightness(.95); } to { filter: brightness(1.22); } }
+@keyframes ptfx-modal-warp { from { opacity: 0; transform: perspective(700px) translateY(18px) rotateX(7deg) scale(.92); filter: blur(5px); } to { opacity: 1; transform: none; filter: blur(0); } }
+@keyframes ptfx-modal-scan { from { opacity: 0; transform: translateY(-7px) scaleY(.94); filter: contrast(1.4); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes ptfx-modal-glitch { 0% { opacity: 0; transform: translateX(-7px) skewX(2deg); } 35% { opacity: .7; transform: translateX(6px) skewX(-2deg); } 65% { transform: translateX(-3px); } 100% { opacity: 1; transform: none; } }
+@keyframes ptfx-modal-liquid { from { opacity: 0; transform: translateY(20px) scale(.94,.88); filter: blur(4px); } to { opacity: 1; transform: none; filter: blur(0); } }
+@keyframes ptfx-modal-pop { from { opacity: 0; transform: scale(.86) rotate(-.8deg); } 70% { transform: scale(1.018) rotate(.2deg); } to { opacity: 1; transform: none; } }
+@keyframes ptfx-modal-hologram { from { opacity: 0; transform: scaleY(.08); filter: brightness(1.7) blur(2px); } 48% { opacity: .7; transform: scaleY(1.04); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes ptfx-modal-paper { from { opacity: 0; transform: translateY(-10px) rotate(-.5deg); } to { opacity: 1; transform: none; } }
+@keyframes ptfx-modal-pixel { from { opacity: 0; transform: scale(.94); filter: contrast(1.8); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes ptfx-modal-casino { from { opacity: 0; transform: scale(.9) rotateY(8deg); filter: brightness(1.45); } 70% { transform: scale(1.015) rotateY(-1deg); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes ptfx-modal-float { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes ptfx-modal-frost { from { opacity: 0; transform: scale(.96); filter: blur(8px) brightness(1.2); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes ptfx-row-scan { from { background-position: -130% 0; } to { background-position: 130% 0; } }
+
+@keyframes ptfx-ambient-drift { from { background-position: 0 0, 0 0, 0 0; transform: scale(1); } to { background-position: 8% 4%, -6% 8%, 4% -8%; transform: scale(1.04); } }
+@keyframes ptfx-bubble-rise { 0% { opacity: 0; transform: translate3d(0, 30px, 0) scale(.65); } 25% { opacity: .55; } 75% { opacity: .35; } 100% { opacity: 0; transform: translate3d(12px, -180px, 0) scale(1.35); } }
+@keyframes ptfx-grid-drift { to { background-position: var(--ptfx-grid-size) var(--ptfx-grid-size), var(--ptfx-grid-size) var(--ptfx-grid-size); } }
+@keyframes ptfx-scanline { from { transform: translateY(0); } to { transform: translateY(560%); } }
+@keyframes ptfx-matrix-fall { from { opacity: 0; transform: translateY(-20%); } 20% { opacity: .5; } to { opacity: 0; transform: translateY(900%); } }
+@keyframes ptfx-twinkle { from { opacity: .15; scale: .55; } to { opacity: .85; scale: 1.35; } }
+@keyframes ptfx-fall { from { opacity: 0; transform: translate3d(-8px, -140px, 0) rotate(0deg); } 15% { opacity: .58; } to { opacity: 0; transform: translate3d(28px, 520px, 0) rotate(320deg); } }
+@keyframes ptfx-ember-rise { from { opacity: 0; transform: translateY(420px) scale(.6); } 20% { opacity: .7; } to { opacity: 0; transform: translateY(-120px) scale(1.2); } }
+@keyframes ptfx-spin { to { transform: rotate(360deg); } }
+@keyframes ptfx-wave-shift { from { background-position: 0 0, 0 0; } to { background-position: 38px -16px, -30px 22px; } }
+@keyframes ptfx-surface-sheen { to { background-position: -240% 0; } }
+@keyframes ptfx-progress-sweep { 0%, 18% { transform: translateX(-130%); } 70%, 100% { transform: translateX(130%); } }
+@keyframes ptfx-progress-slide { to { background-position: 48px 0, 76px 0, 100% 0; } }
+@keyframes ptfx-progress-rgb { to { background-position: 260% 0; } }
+@keyframes ptfx-progress-pulse { from { opacity: .16; transform: scaleX(.94); } to { opacity: .62; transform: scaleX(1.06); } }
+@keyframes ptfx-control-bounce { 0% { transform: translateY(0) scale(1); } 55% { transform: translateY(-2px) scale(1.025); } 100% { transform: translateY(-1px) scale(1); } }
+@keyframes ptfx-control-glow { from { box-shadow: 0 0 0 color-mix(in srgb, var(--ptfx-color-1) 0%, transparent); } to { box-shadow: 0 0 18px color-mix(in srgb, var(--ptfx-color-1) 26%, transparent); } }
+@keyframes ptfx-control-wobble { 0%, 100% { transform: rotate(0); } 30% { transform: rotate(-.7deg) translateY(-1px); } 70% { transform: rotate(.7deg) translateY(-1px); } }
+@keyframes ptfx-burst-ring { from { opacity: .9; transform: scale(.45); } to { opacity: 0; transform: scale(5.5); } }
+@keyframes ptfx-burst-spin { from { opacity: .95; transform: scale(.55) rotate(0deg); } to { opacity: 0; transform: scale(4.2) rotate(200deg); } }
+
+@media (max-width: 700px) {
+  html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effects-layer {
+    --ptfx-layer-opacity: .2;
+  }
+
+  html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="matrix"] .pytorrent-theme-effect-particle:nth-child(n+9),
+  html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="stars"] .pytorrent-theme-effect-particle:nth-child(n+9),
+  html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="confetti"] .pytorrent-theme-effect-particle:nth-child(n+9),
+  html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="snow"] .pytorrent-theme-effect-particle:nth-child(n+9),
+  html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="petals"] .pytorrent-theme-effect-particle:nth-child(n+9),
+  html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="embers"] .pytorrent-theme-effect-particle:nth-child(n+9) {
+    display: none;
+  }
+
+  html[data-ui-framework="pytorrent"][data-pytorrent-immersive-effects="on"] .pytorrent-theme-effects-layer::before,
+  html[data-ui-framework="pytorrent"][data-pytorrent-immersive-effects="on"] .pytorrent-theme-effects-layer::after {
+    opacity: .18;
+  }
+
+  html[data-ui-framework="pytorrent"][data-pytorrent-immersive-effects="on"] .pytorrent-theme-immersive-frame {
+    inset: 3px;
+    opacity: .42;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effects-layer,
+  html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effect-particle,
+  html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effect-burst,
+  html[data-ui-framework="pytorrent"][data-pytorrent-immersive-effects="on"] .pytorrent-theme-effect-trail,
+  html[data-ui-framework="pytorrent"][data-pytorrent-immersive-effects="on"] .pytorrent-theme-immersive-frame,
+  html[data-ui-framework="pytorrent"][data-pytorrent-immersive-effects="on"] .pytorrent-theme-effects-layer::before,
+  html[data-ui-framework="pytorrent"][data-pytorrent-immersive-effects="on"] .pytorrent-theme-effects-layer::after,
+  html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span)::after,
+  html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] :is(.btn, .nav-link, .sidebar-filter),
+  html[data-ui-framework="pytorrent"][data-pytorrent-immersive-effects="on"] :is(.surface-section, .details, .mobile-card, .modal-content, .brand, .brand i, .modal-dialog),
+  html[data-ui-framework="pytorrent"][data-pytorrent-immersive-effects="on"] .torrent-table tbody tr:hover > td {
+    animation: none;
+    transform: none;
+  }
+}
