@@ -72,6 +72,14 @@ html[data-ui-framework="pytorrent"] {
   --pt-control-radius-sm: 0.34rem;
   --pt-progress-radius: var(--pt-compact-radius);
   --pt-control-border-width: var(--pt-border-width);
+  /* Note: Switch state tokens keep off/on tracks distinguishable even in themes with very soft regular borders. */
+  --pt-switch-off-bg: var(--pt-text-subtle);
+  --pt-switch-off-border: var(--pt-text-muted);
+  --pt-switch-on-bg: var(--pt-primary);
+  --pt-switch-on-border: var(--pt-primary-strong);
+  --pt-switch-thumb-bg: var(--pt-surface-raised);
+  --pt-switch-thumb-border: var(--pt-border-strong);
+  --pt-switch-on-thumb-bg: var(--pt-primary-contrast);
   --pt-control-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
   --pt-menu-radius: var(--pt-radius);
   --pt-menu-item-radius: 0.42rem;
@@ -753,33 +761,38 @@ html[data-ui-framework="pytorrent"] .form-switch .form-check-input {
   width: var(--pt-switch-width);
   height: var(--pt-switch-height);
   margin: 0;
-  border-color: transparent;
+  border: 1px solid var(--pt-switch-off-border);
   border-radius: 999px;
-  background: var(--pt-border-strong);
+  background: var(--pt-switch-off-bg);
   box-shadow: none;
 }
 
 html[data-ui-framework="pytorrent"] .form-switch .form-check-input::after {
-  /* Note: Track-relative positioning keeps the thumb inset symmetric when interface zoom introduces subpixel rounding. */
+  /* Note: Track-relative positioning and an explicit thumb edge keep both switch states readable across native themes. */
   content: "";
   position: absolute;
   top: 50%;
   left: var(--pt-switch-thumb-offset);
   width: var(--pt-switch-thumb-size);
   height: var(--pt-switch-thumb-size);
+  box-sizing: border-box;
+  border: 1px solid var(--pt-switch-thumb-border);
   border-radius: 50%;
-  background: var(--pt-surface-raised);
+  background: var(--pt-switch-thumb-bg);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
   transform: translateY(-50%);
-  transition: left var(--pt-motion-base) ease;
+  transition: left var(--pt-motion-base) ease, background-color var(--pt-motion-base) ease, border-color var(--pt-motion-base) ease;
 }
 
 html[data-ui-framework="pytorrent"] .form-switch .form-check-input:checked {
-  background: var(--pt-primary);
+  border-color: var(--pt-switch-on-border);
+  background: var(--pt-switch-on-bg);
 }
 
 html[data-ui-framework="pytorrent"] .form-switch .form-check-input:checked::after {
   left: calc(100% - var(--pt-switch-thumb-size) - var(--pt-switch-thumb-offset));
+  border-color: var(--pt-switch-on-border);
+  background: var(--pt-switch-on-thumb-bg);
 }
 
 /* Note: Rule activation is a header state control, so the PyTorrent runtime shows it without a surrounding field frame. */

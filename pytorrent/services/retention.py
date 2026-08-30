@@ -17,14 +17,21 @@ def _table_exists(conn, table: str) -> bool:
 
 
 def cleanup(force: bool = False) -> dict[str, int]:
+    # Note: The existing hourly retention pass also compacts traffic samples before deleting data beyond the configured retention window.
     global _LAST_CLEANUP
-    now_ts = datetime.now(timezone.utc).timestamp()
+    now = datetime.now(timezone.utc)
+    now_ts = now.timestamp()
     if not force and now_ts - _LAST_CLEANUP < CLEANUP_EVERY_SECONDS:
         return {}
     _LAST_CLEANUP = now_ts
 
     deleted: dict[str, int] = {}
     with connect() as conn:
+        traffic_compacted = 0
+        if _table_exists(conn, "traffic_history"):
+            from . import traffic_history
+
+            traffic_compacted = int(traffic_history.compact_for_charts(conn, now=now).get("deleted") or 0)
         targets = {
             "traffic_history": ("created_at", TRAFFIC_HISTORY_RETENTION_DAYS),
             "smart_queue_history": ("created_at", SMART_QUEUE_HISTORY_RETENTION_DAYS),
@@ -43,5 +50,6 @@ def cleanup(force: bool = False) -> dict[str, int]:
                 )
             else:
                 cur = conn.execute(f"DELETE FROM {table} WHERE {column} < ?", (_cutoff(days),))
-            deleted[table] = int(cur.rowcount or 0)
+            removed = int(cur.rowcount or 0)
+            deleted[table] = removed + (traffic_compacted if table == "traffic_history" else 0)
     return deleted

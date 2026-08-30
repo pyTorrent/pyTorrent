@@ -406,6 +406,9 @@ CREATE TABLE IF NOT EXISTS traffic_history (
   up_rate INTEGER DEFAULT 0,
   total_down INTEGER DEFAULT 0,
   total_up INTEGER DEFAULT 0,
+  downloaded INTEGER,
+  uploaded INTEGER,
+  sample_count INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL
 );
 
