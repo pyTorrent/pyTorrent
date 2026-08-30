@@ -10,7 +10,7 @@ from .torrent_cache import torrent_cache
 
 STARTUP_DELAY_SECONDS = 60
 DEFAULT_TRACKER_INTERVAL_SECONDS = 15 * 60
-DEFAULT_PORT_INTERVAL_SECONDS = port_check.PORT_CHECK_CACHE_SECONDS
+DEFAULT_PORT_INTERVAL_SECONDS = port_check.PORT_CHECK_FAILURE_CACHE_SECONDS
 FAVICON_BATCH_SIZE = 20
 
 _started = False
@@ -132,7 +132,7 @@ def _warm_tracker_profile(profile: dict[str, Any]) -> None:
 
 def _check_port_profile(profile: dict[str, Any]) -> None:
     """Refresh incoming-port status when the profile preference enables it."""
-    # Note: force=False respects the existing six-hour cache and avoids unnecessary external checks.
+    # Note: Poll the lightweight database cache on the short retry interval, while definitive open/closed results still keep their six-hour network-check cache.
     profile_id = int(profile.get("id") or 0)
     if not profile_id:
         return
@@ -141,7 +141,12 @@ def _check_port_profile(profile: dict[str, Any]) -> None:
     if not bool((prefs or {}).get("port_check_enabled")):
         _remember("port_check", profile_id, {"ok": True, "enabled": False, "skipped": True, "reason": "disabled"})
         return
-    result = port_check.port_check_status(profile=profile, force=False, user_id=owner_id)
+
+    cached = port_check.cached_port_check_status(profile=profile, user_id=owner_id)
+    if bool(cached.get("cache_ready")) and not bool(cached.get("stale")):
+        result = cached
+    else:
+        result = port_check.port_check_status(profile=profile, force=False, user_id=owner_id)
     _remember(
         "port_check",
         profile_id,

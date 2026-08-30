@@ -4511,6 +4511,18 @@ body.sorting-preference-cards * {
   text-align: center;
 }
 
+#statCpu,
+#statRam {
+  /* Note: CPU/RAM values are clamped to 0-100; a fixed numeric field prevents live percentage changes from shifting the footer. */
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  inline-size: 4ch;
+  min-inline-size: 4ch;
+  max-inline-size: 4ch;
+  text-align: right;
+}
+
 /* Torrent stats: keep metadata and refresh controls aligned without nested statistic tabs. */
 .torrent-stats-header {
   display: flex;
