@@ -75,6 +75,8 @@
       this._backdrop = null;
       this._shown = element.classList.contains('show');
       this._trigger = null;
+      this._transitionToken = 0;
+      this._enterCleanupTimer = 0;
       this._onModalClick = (event) => {
         if (event.target !== this._element) return;
         if (this._options.backdrop === true) this.hide();
@@ -92,25 +94,42 @@
       return Modal.getInstance(element) || new Modal(element, options);
     }
 
+    // Note: The transient marker lets CSS run exactly one entrance animation per successful show cycle.
+    _markEntering() {
+      window.clearTimeout(this._enterCleanupTimer);
+      this._element.classList.add('pytorrent-modal-entering');
+      this._enterCleanupTimer = window.setTimeout(() => {
+        this._element.classList.remove('pytorrent-modal-entering');
+        this._enterCleanupTimer = 0;
+      }, Math.max(transitionMs(), 520));
+    }
+
     show(relatedTarget = null) {
       if (this._shown) return;
       const showEvent = emit(this._element, 'show.bs.modal', relatedTarget, true);
       if (showEvent.defaultPrevented) return;
 
+      // Note: A generation token prevents an older hide callback from closing a modal that has already been reopened.
+      const transitionToken = ++this._transitionToken;
       this._shown = true;
       this._trigger = relatedTarget instanceof Element ? relatedTarget : document.activeElement;
-      openModals.push(this);
+      if (!openModals.includes(this)) openModals.push(this);
       document.body.classList.add('modal-open');
 
+      this._backdrop?.remove();
+      this._backdrop = null;
       if (this._options.backdrop) {
         const backdrop = document.createElement('div');
         backdrop.className = 'modal-backdrop fade';
         backdrop.setAttribute('aria-hidden', 'true');
         this._backdrop = backdrop;
         this._element.insertAdjacentElement('afterend', backdrop);
-        requestAnimationFrame(() => backdrop.classList.add('show'));
+        requestAnimationFrame(() => {
+          if (transitionToken === this._transitionToken && this._shown) backdrop.classList.add('show');
+        });
       }
 
+      this._markEntering();
       this._element.style.display = 'block';
       this._element.removeAttribute('aria-hidden');
       this._element.setAttribute('aria-modal', 'true');
@@ -120,7 +139,7 @@
       this._element.classList.add('show');
 
       window.setTimeout(() => {
-        if (!this._shown) return;
+        if (!this._shown || transitionToken !== this._transitionToken) return;
         if (this._options.focus) {
           const focusTarget = this._element.querySelector('[autofocus]') || this._element;
           if (!this._element.hasAttribute('tabindex')) this._element.tabIndex = -1;
@@ -135,11 +154,17 @@
       const hideEvent = emit(this._element, 'hide.bs.modal', null, true);
       if (hideEvent.defaultPrevented) return;
 
+      // Note: Invalidating pending show/hide callbacks makes rapid modal toggles deterministic instead of producing a second flash.
+      const transitionToken = ++this._transitionToken;
       this._shown = false;
+      window.clearTimeout(this._enterCleanupTimer);
+      this._enterCleanupTimer = 0;
+      this._element.classList.remove('pytorrent-modal-entering');
       this._element.classList.remove('show');
       this._backdrop?.classList.remove('show');
 
       window.setTimeout(() => {
+        if (transitionToken !== this._transitionToken || this._shown) return;
         this._element.style.display = 'none';
         this._element.setAttribute('aria-hidden', 'true');
         this._element.removeAttribute('aria-modal');
@@ -163,6 +188,9 @@
 
     dispose() {
       if (this._shown) this.hide();
+      window.clearTimeout(this._enterCleanupTimer);
+      this._enterCleanupTimer = 0;
+      this._element.classList.remove('pytorrent-modal-entering');
       this._element.removeEventListener('mousedown', this._onModalClick);
       modalInstances.delete(this._element);
     }

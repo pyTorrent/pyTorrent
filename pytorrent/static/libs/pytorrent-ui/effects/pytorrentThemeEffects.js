@@ -17,6 +17,9 @@
     'pytorrentImmersiveModal',
     'pytorrentImmersiveRows',
     'pytorrentImmersiveFrame',
+    'pytorrentEffectQuality',
+    'pytorrentEffectsPaused',
+    'pytorrentEffectsScrolling',
   ];
   const MANAGED_STYLE_PROPERTIES = [
     '--ptfx-color-1',
@@ -43,6 +46,15 @@
   let pointerMoveHandlerAttached = false;
   let lastTrailAt = 0;
   let trailIntervalMs = 52;
+  let scrollPauseTimer = 0;
+  let lastScrollAt = 0;
+  let performanceListenersAttached = false;
+  let pointerFrame = 0;
+  let pendingPointerPosition = null;
+  let cachedLayerBounds = null;
+  let cachedLayerBoundsAt = 0;
+  let activeTheme = '';
+  let activeImmersiveEnabled = false;
 
   // Note: Only server-registered native theme effect URLs are considered supported, preventing arbitrary script paths from being loaded.
   function effectUrls() {
@@ -109,6 +121,69 @@
     return !!key && Object.prototype.hasOwnProperty.call(effectUrls(), key);
   }
 
+  // Note: Touch-first devices and modest CPUs keep the same effect language with a reduced continuous-animation budget.
+  function effectQuality() {
+    const coarsePointer = window.matchMedia?.('(pointer: coarse)').matches === true
+      || window.matchMedia?.('(hover: none)').matches === true;
+    const cores = Number(navigator.hardwareConcurrency || 0);
+    const memory = Number(navigator.deviceMemory || 0);
+    const constrainedCpu = cores > 0 && cores <= 4;
+    const constrainedMemory = memory > 0 && memory <= 4;
+    return coarsePointer || constrainedCpu || constrainedMemory ? 'balanced' : 'full';
+  }
+
+  // Note: Effect animations are paused while the page is hidden and during active scrolling, reducing work exactly when motion cannot be appreciated.
+  function syncPerformanceState() {
+    root.dataset.pytorrentEffectQuality = effectQuality();
+    root.dataset.pytorrentEffectsPaused = document.hidden ? 'on' : 'off';
+    if (!root.dataset.pytorrentEffectsScrolling) root.dataset.pytorrentEffectsScrolling = 'off';
+  }
+
+  // Note: Scroll activity invalidates cached geometry and briefly freezes only decorative continuous effects, not application motion.
+  function handleEffectScroll() {
+    cachedLayerBounds = null;
+    cachedLayerBoundsAt = 0;
+    if (root.dataset.pytorrentThemeEffects !== 'on') return;
+    lastScrollAt = performance.now();
+    if (root.dataset.pytorrentEffectsScrolling !== 'on') root.dataset.pytorrentEffectsScrolling = 'on';
+    if (scrollPauseTimer) return;
+    const releaseScrollPause = () => {
+      const remaining = 160 - (performance.now() - lastScrollAt);
+      if (remaining > 0) {
+        scrollPauseTimer = window.setTimeout(releaseScrollPause, remaining);
+        return;
+      }
+      if (root.dataset.pytorrentThemeEffects === 'on') root.dataset.pytorrentEffectsScrolling = 'off';
+      scrollPauseTimer = 0;
+    };
+    scrollPauseTimer = window.setTimeout(releaseScrollPause, 160);
+  }
+
+  // Note: Visibility and resize listeners are attached only while theme effects are active.
+  function attachPerformanceListeners() {
+    if (performanceListenersAttached) return;
+    document.addEventListener('visibilitychange', syncPerformanceState);
+    document.addEventListener('scroll', handleEffectScroll, { passive: true, capture: true });
+    window.addEventListener('resize', handleEffectScroll, { passive: true });
+    performanceListenersAttached = true;
+    syncPerformanceState();
+  }
+
+  // Note: Listener cleanup keeps repeated theme switches from retaining scroll/visibility work after effects are disabled.
+  function detachPerformanceListeners() {
+    if (performanceListenersAttached) {
+      document.removeEventListener('visibilitychange', syncPerformanceState);
+      document.removeEventListener('scroll', handleEffectScroll, true);
+      window.removeEventListener('resize', handleEffectScroll);
+    }
+    performanceListenersAttached = false;
+    window.clearTimeout(scrollPauseTimer);
+    scrollPauseTimer = 0;
+    lastScrollAt = 0;
+    cachedLayerBounds = null;
+    cachedLayerBoundsAt = 0;
+  }
+
   // Note: The visual layer is created lazily only while effects are active, keeping the default/off path DOM-neutral.
   function ensureLayer() {
     if (layer?.isConnected) return layer;
@@ -123,6 +198,13 @@
       particle.className = 'pytorrent-theme-effect-particle';
       particle.dataset.ptfxParticle = String(index + 1);
       layer.appendChild(particle);
+    }
+    // Note: Two transform-only ambient orbs add depth without multiplying per-row or per-control animations.
+    for (let index = 0; index < 2; index += 1) {
+      const orb = document.createElement('span');
+      orb.className = 'pytorrent-theme-effect-orb';
+      orb.dataset.ptfxOrb = String(index + 1);
+      layer.appendChild(orb);
     }
     shell.appendChild(layer);
     return layer;
@@ -139,9 +221,10 @@
     return immersiveFrame;
   }
 
-  // Note: Per-theme tuning is expressed through temporary root variables so no inline styling leaks onto application components.
+  // Note: Per-theme tuning scales duration and blur for balanced devices while preserving each theme's colors and effect profile.
   function applyProfileVariables(profile) {
-    const duration = 8 / profile.speed;
+    const balanced = root.dataset.pytorrentEffectQuality === 'balanced';
+    const duration = (8 / profile.speed) * (balanced ? 1.3 : 1);
     root.style.setProperty('--ptfx-color-1', profile.colors[0]);
     root.style.setProperty('--ptfx-color-2', profile.colors[1]);
     root.style.setProperty('--ptfx-color-3', profile.colors[2]);
@@ -153,7 +236,7 @@
     root.style.setProperty('--ptfx-layer-opacity', String(Math.min(0.54, 0.13 + profile.intensity * 0.24)));
     root.style.setProperty('--ptfx-particle-size', `${Math.round(5 + profile.density * 5)}px`);
     root.style.setProperty('--ptfx-grid-size', `${Math.round(24 + (1.6 - profile.density) * 16)}px`);
-    root.style.setProperty('--ptfx-blur', `${Math.round(18 + profile.intensity * 22)}px`);
+    root.style.setProperty('--ptfx-blur', `${Math.round((balanced ? 11 : 18) + profile.intensity * (balanced ? 12 : 22))}px`);
     root.style.setProperty('--ptfx-immersive-intensity', String(profile.immersive.strength));
     root.style.setProperty('--ptfx-trail-size', `${Math.round(7 + profile.density * 5 + profile.immersive.strength * 2)}px`);
     root.style.setProperty('--ptfx-pointer-x', '50%');
@@ -189,13 +272,39 @@
     return promise;
   }
 
-  // Note: Click bursts reuse the single overlay layer and self-remove, avoiding listeners or nodes attached to individual controls and torrent rows.
+  // Note: Geometry reads are cached across high-frequency pointer events and invalidated by scrolling/resizing.
+  function layerBounds() {
+    const shell = layer?.parentElement;
+    if (!shell) return null;
+    const now = performance.now();
+    if (!cachedLayerBounds || now - cachedLayerBoundsAt > 220) {
+      cachedLayerBounds = shell.getBoundingClientRect();
+      cachedLayerBoundsAt = now;
+    }
+    return cachedLayerBounds;
+  }
+
+  // Note: Pointer CSS variables are written at most once per animation frame instead of once per raw pointer event.
+  function schedulePointerPosition(x, y) {
+    pendingPointerPosition = { x, y };
+    if (pointerFrame) return;
+    pointerFrame = requestAnimationFrame(() => {
+      pointerFrame = 0;
+      const point = pendingPointerPosition;
+      pendingPointerPosition = null;
+      if (!point || root.dataset.pytorrentImmersiveEffects !== 'on') return;
+      root.style.setProperty('--ptfx-pointer-x', `${point.x}px`);
+      root.style.setProperty('--ptfx-pointer-y', `${point.y}px`);
+    });
+  }
+
+  // Note: Click bursts reuse the single overlay layer and stay capped more aggressively on balanced devices.
   function createBurst(event) {
     if (!layer?.isConnected || root.dataset.pytorrentMotion !== 'on') return;
+    if (root.dataset.pytorrentEffectsPaused === 'on' || root.dataset.pytorrentEffectsScrolling === 'on') return;
     if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
-    const shell = layer.parentElement;
-    if (!shell) return;
-    const rect = shell.getBoundingClientRect();
+    const rect = layerBounds();
+    if (!rect) return;
     if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) return;
     const burst = document.createElement('i');
     burst.className = 'pytorrent-theme-effect-burst';
@@ -204,23 +313,24 @@
     layer.appendChild(burst);
     window.setTimeout(() => burst.remove(), 1100);
     const bursts = layer.querySelectorAll('.pytorrent-theme-effect-burst');
-    if (bursts.length > 18) bursts[0].remove();
+    const burstLimit = root.dataset.pytorrentEffectQuality === 'balanced' ? 8 : 16;
+    if (bursts.length > burstLimit) bursts[0].remove();
   }
 
-  // Note: Immersive pointer movement updates one shared spotlight and emits throttled, self-removing theme-specific trail particles only for fine pointers.
+  // Note: Immersive pointer movement uses one frame-coalesced spotlight and throttled self-removing trail particles only on full-quality fine pointers.
   function createTrail(event) {
     if (root.dataset.pytorrentImmersiveEffects !== 'on' || root.dataset.pytorrentMotion !== 'on') return;
+    if (root.dataset.pytorrentEffectQuality !== 'full') return;
+    if (root.dataset.pytorrentEffectsPaused === 'on' || root.dataset.pytorrentEffectsScrolling === 'on') return;
     if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
     if (window.matchMedia?.('(pointer: fine)').matches === false) return;
     if (!layer?.isConnected) return;
-    const shell = layer.parentElement;
-    if (!shell) return;
-    const rect = shell.getBoundingClientRect();
+    const rect = layerBounds();
+    if (!rect) return;
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
     if (x < 0 || y < 0 || x > rect.width || y > rect.height) return;
-    root.style.setProperty('--ptfx-pointer-x', `${x}px`);
-    root.style.setProperty('--ptfx-pointer-y', `${y}px`);
+    schedulePointerPosition(x, y);
     const now = performance.now();
     if (now - lastTrailAt < trailIntervalMs) return;
     lastTrailAt = now;
@@ -231,7 +341,7 @@
     layer.appendChild(trail);
     window.setTimeout(() => trail.remove(), 900);
     const trails = layer.querySelectorAll('.pytorrent-theme-effect-trail');
-    if (trails.length > 28) trails[0].remove();
+    if (trails.length > 18) trails[0].remove();
   }
 
   // Note: Base clicks always use one delegated listener, while the higher-frequency pointer-move listener exists only when immersive mode is active.
@@ -240,7 +350,7 @@
       document.addEventListener('pointerdown', createBurst, { passive: true });
       pointerDownHandlerAttached = true;
     }
-    if (immersiveEnabled && !pointerMoveHandlerAttached) {
+    if (immersiveEnabled && root.dataset.pytorrentEffectQuality === 'full' && !pointerMoveHandlerAttached) {
       document.addEventListener('pointermove', createTrail, { passive: true });
       pointerMoveHandlerAttached = true;
     }
@@ -253,12 +363,19 @@
     pointerDownHandlerAttached = false;
     pointerMoveHandlerAttached = false;
     lastTrailAt = 0;
+    pendingPointerPosition = null;
+    if (pointerFrame) cancelAnimationFrame(pointerFrame);
+    pointerFrame = 0;
   }
 
   // Note: Immersive data attributes are applied only after the base profile is active, keeping the second level strictly dependent on level one.
   function applyImmersiveProfile(profile, enabled) {
     root.dataset.pytorrentImmersiveEffects = enabled ? 'on' : 'off';
-    if (!enabled) return;
+    if (!enabled) {
+      immersiveFrame?.remove();
+      immersiveFrame = null;
+      return;
+    }
     const immersive = profile.immersive;
     root.dataset.pytorrentImmersiveScene = immersive.scene;
     root.dataset.pytorrentImmersiveCursor = immersive.cursor;
@@ -277,9 +394,33 @@
     MANAGED_DATA_ATTRIBUTES.forEach((name) => { delete root.dataset[name]; });
     MANAGED_STYLE_PROPERTIES.forEach((name) => root.style.removeProperty(name));
     detachPointerEffects();
+    detachPerformanceListeners();
     layer?.remove();
     layer = null;
     immersiveFrame = null;
+    activeTheme = '';
+    activeImmersiveEnabled = false;
+  }
+
+  // Note: An already-loaded effect profile is replaced in one task while reusing the shared layer, avoiding visual teardown/rebuild flashes.
+  function applyResolvedProfile(theme, profile, immersiveEnabled) {
+    MANAGED_DATA_ATTRIBUTES.forEach((name) => { delete root.dataset[name]; });
+    MANAGED_STYLE_PROPERTIES.forEach((name) => root.style.removeProperty(name));
+    detachPointerEffects();
+    root.dataset.pytorrentThemeEffects = 'on';
+    syncPerformanceState();
+    root.dataset.pytorrentEffectAmbient = profile.ambient;
+    root.dataset.pytorrentEffectProgress = profile.progress;
+    root.dataset.pytorrentEffectSurface = profile.surface;
+    root.dataset.pytorrentEffectControls = profile.controls;
+    root.dataset.pytorrentEffectBurst = profile.burst;
+    applyProfileVariables(profile);
+    ensureLayer();
+    applyImmersiveProfile(profile, immersiveEnabled);
+    attachPointerEffects(immersiveEnabled);
+    attachPerformanceListeners();
+    activeTheme = theme;
+    activeImmersiveEnabled = immersiveEnabled;
   }
 
   // Note: Clear every DOM node, listener, data attribute and CSS variable owned by theme effects while cancelling pending activations.
@@ -288,7 +429,7 @@
     resetVisualState('off');
   }
 
-  // Note: Activate both visual levels atomically after lazy loading, while stale asynchronous loads are ignored after later switches.
+  // Note: Lazy-loaded profiles are applied atomically; repeated identical calls no longer restart animations or recreate the effect layer.
   async function apply(options) {
     const requested = options && typeof options === 'object' ? options : {};
     const theme = String(requested.theme || root.dataset.pytorrentTheme || '').trim();
@@ -299,21 +440,16 @@
       clear();
       return false;
     }
-    resetVisualState('loading');
+    if (activeTheme === theme && activeImmersiveEnabled === immersiveEnabled && root.dataset.pytorrentThemeEffects === 'on') {
+      syncPerformanceState();
+      attachPerformanceListeners();
+      return true;
+    }
     try {
       const profile = await loadTheme(theme);
       if (token !== activationToken) return false;
       if (root.dataset.uiFramework !== 'pytorrent' || root.dataset.pytorrentTheme !== theme) return false;
-      root.dataset.pytorrentThemeEffects = 'on';
-      root.dataset.pytorrentEffectAmbient = profile.ambient;
-      root.dataset.pytorrentEffectProgress = profile.progress;
-      root.dataset.pytorrentEffectSurface = profile.surface;
-      root.dataset.pytorrentEffectControls = profile.controls;
-      root.dataset.pytorrentEffectBurst = profile.burst;
-      applyProfileVariables(profile);
-      ensureLayer();
-      applyImmersiveProfile(profile, immersiveEnabled);
-      attachPointerEffects(immersiveEnabled);
+      applyResolvedProfile(theme, profile, immersiveEnabled);
       return true;
     } catch (error) {
       if (token === activationToken) clear();

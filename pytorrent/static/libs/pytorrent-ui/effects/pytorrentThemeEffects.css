@@ -67,6 +67,41 @@ html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorren
 html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effect-particle:nth-child(13) { --ptfx-index: 13; }
 html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effect-particle:nth-child(14) { --ptfx-index: 14; }
 
+/* Note: Immersive depth orbs use transform-only motion, adding visible movement without per-component repaint loops. */
+html[data-ui-framework="pytorrent"] .pytorrent-theme-effect-orb {
+  aspect-ratio: 1;
+  border-radius: 50%;
+  display: none;
+  opacity: calc(.08 + var(--ptfx-immersive-intensity) * .05);
+  pointer-events: none;
+  position: absolute;
+  width: clamp(150px, 20vmax, 340px);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-effects="on"] .pytorrent-theme-effect-orb {
+  display: block;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-effects="on"] .pytorrent-theme-effect-orb[data-ptfx-orb="1"] {
+  background: radial-gradient(circle, color-mix(in srgb, var(--ptfx-color-1) 66%, transparent), transparent 68%);
+  left: -7%;
+  top: 8%;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-effects="on"] .pytorrent-theme-effect-orb[data-ptfx-orb="2"] {
+  background: radial-gradient(circle, color-mix(in srgb, var(--ptfx-color-2) 58%, transparent), transparent 70%);
+  bottom: 4%;
+  right: -9%;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-effects="on"] .pytorrent-theme-effect-orb[data-ptfx-orb="1"] {
+  animation: ptfx-orb-float-a calc(var(--ptfx-duration-slow) * 1.35) ease-in-out infinite alternate;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-effects="on"] .pytorrent-theme-effect-orb[data-ptfx-orb="2"] {
+  animation: ptfx-orb-float-b calc(var(--ptfx-duration-slow) * 1.55) ease-in-out infinite alternate;
+}
+
 /* Ambient profiles */
 html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="aurora"] .pytorrent-theme-effects-layer,
 html[data-ui-framework="pytorrent"][data-pytorrent-effect-ambient="blobs"] .pytorrent-theme-effects-layer,
@@ -406,12 +441,6 @@ html[data-ui-framework="pytorrent"][data-pytorrent-effect-progress="laser"][data
 }
 
 /* Control profiles */
-html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"][data-pytorrent-effect-controls="lift"] :is(.btn, .nav-link, .sidebar-filter),
-html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"][data-pytorrent-effect-controls="float"] :is(.btn, .nav-link, .sidebar-filter),
-html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"][data-pytorrent-effect-controls="quick"] :is(.btn, .nav-link, .sidebar-filter) {
-  will-change: transform, box-shadow;
-}
-
 html[data-ui-framework="pytorrent"][data-pytorrent-effect-controls="lift"][data-pytorrent-motion="on"] :is(.btn, .nav-link, .sidebar-filter):hover,
 html[data-ui-framework="pytorrent"][data-pytorrent-effect-controls="float"][data-pytorrent-motion="on"] :is(.btn, .nav-link, .sidebar-filter):hover {
   transform: translateY(-1px);
@@ -863,22 +892,22 @@ html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-i
 html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-logo="shimmer"] .brand { animation: ptfx-logo-pulse var(--ptfx-duration-fast) ease-in-out infinite alternate; }
 
 /* Modal entrances stay on the PyTorrent runtime contract; Bootstrap mode never sees these selectors. */
-html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-effects="on"] .modal.show .modal-dialog { transform-origin: center; }
-html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="warp"] .modal.show .modal-dialog { animation: ptfx-modal-warp .42s cubic-bezier(.16,.84,.31,1.18) both; }
-html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="scan"] .modal.show .modal-dialog,
-html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="terminal"] .modal.show .modal-dialog { animation: ptfx-modal-scan .34s steps(7,end) both; }
-html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="glitch"] .modal.show .modal-dialog { animation: ptfx-modal-glitch .38s steps(5,end) both; }
-html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="liquid"] .modal.show .modal-dialog { animation: ptfx-modal-liquid .46s cubic-bezier(.19,.86,.32,1.14) both; }
-html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="pop"] .modal.show .modal-dialog,
-html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="comic"] .modal.show .modal-dialog,
-html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="brutal"] .modal.show .modal-dialog { animation: ptfx-modal-pop .36s cubic-bezier(.16,.9,.34,1.28) both; }
-html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="hologram"] .modal.show .modal-dialog { animation: ptfx-modal-hologram .42s ease-out both; }
-html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="paper"] .modal.show .modal-dialog { animation: ptfx-modal-paper .38s ease-out both; }
-html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="pixel"] .modal.show .modal-dialog { animation: ptfx-modal-pixel .34s steps(5,end) both; }
-html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="casino"] .modal.show .modal-dialog { animation: ptfx-modal-casino .48s cubic-bezier(.18,.82,.26,1.2) both; }
-html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="float"] .modal.show .modal-dialog,
-html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="soft"] .modal.show .modal-dialog { animation: ptfx-modal-float .34s ease-out both; }
-html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="frost"] .modal.show .modal-dialog { animation: ptfx-modal-frost .42s ease-out both; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-effects="on"] .modal.pytorrent-modal-entering.show .modal-dialog { transform-origin: center; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="warp"] .modal.pytorrent-modal-entering.show .modal-dialog { animation: ptfx-modal-warp .42s cubic-bezier(.16,.84,.31,1.18) both; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="scan"] .modal.pytorrent-modal-entering.show .modal-dialog,
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="terminal"] .modal.pytorrent-modal-entering.show .modal-dialog { animation: ptfx-modal-scan .34s steps(7,end) both; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="glitch"] .modal.pytorrent-modal-entering.show .modal-dialog { animation: ptfx-modal-glitch .38s steps(5,end) both; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="liquid"] .modal.pytorrent-modal-entering.show .modal-dialog { animation: ptfx-modal-liquid .46s cubic-bezier(.19,.86,.32,1.14) both; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="pop"] .modal.pytorrent-modal-entering.show .modal-dialog,
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="comic"] .modal.pytorrent-modal-entering.show .modal-dialog,
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="brutal"] .modal.pytorrent-modal-entering.show .modal-dialog { animation: ptfx-modal-pop .36s cubic-bezier(.16,.9,.34,1.28) both; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="hologram"] .modal.pytorrent-modal-entering.show .modal-dialog { animation: ptfx-modal-hologram .42s ease-out both; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="paper"] .modal.pytorrent-modal-entering.show .modal-dialog { animation: ptfx-modal-paper .38s ease-out both; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="pixel"] .modal.pytorrent-modal-entering.show .modal-dialog { animation: ptfx-modal-pixel .34s steps(5,end) both; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="casino"] .modal.pytorrent-modal-entering.show .modal-dialog { animation: ptfx-modal-casino .48s cubic-bezier(.18,.82,.26,1.2) both; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="float"] .modal.pytorrent-modal-entering.show .modal-dialog,
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="soft"] .modal.pytorrent-modal-entering.show .modal-dialog { animation: ptfx-modal-float .34s ease-out both; }
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-modal="frost"] .modal.pytorrent-modal-entering.show .modal-dialog { animation: ptfx-modal-frost .42s ease-out both; }
 
 /* Torrent rows/cards receive themed hover energy without changing row structure or business events. */
 html[data-ui-framework="pytorrent"][data-pytorrent-immersive-effects="on"] .torrent-table tbody tr > td { background-repeat: no-repeat; }
@@ -904,6 +933,8 @@ html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-i
 html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-effects="on"] .mobile-card { transition: transform .2s ease, box-shadow .2s ease; }
 html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-immersive-effects="on"] .mobile-card:hover { transform: translateY(-2px) scale(1.003); }
 
+@keyframes ptfx-orb-float-a { from { transform: translate3d(0, 0, 0) scale(.94); } to { transform: translate3d(44px, 28px, 0) scale(1.06); } }
+@keyframes ptfx-orb-float-b { from { transform: translate3d(0, 0, 0) scale(1.04); } to { transform: translate3d(-36px, -24px, 0) scale(.92); } }
 @keyframes ptfx-immersive-drift { from { background-position: 0 0, 0 0, 0 0, 0 0; transform: scale(1); } to { background-position: 6% -4%, -5% 7%, 4% -5%, 0 0; transform: scale(1.05); } }
 @keyframes ptfx-immersive-grid { to { background-position: var(--ptfx-grid-size) var(--ptfx-grid-size), var(--ptfx-grid-size) var(--ptfx-grid-size); } }
 @keyframes ptfx-immersive-scan { from { transform: translateY(0); } to { transform: translateY(520%); } }
@@ -951,6 +982,72 @@ html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-i
 @keyframes ptfx-burst-ring { from { opacity: .9; transform: scale(.45); } to { opacity: 0; transform: scale(5.5); } }
 @keyframes ptfx-burst-spin { from { opacity: .95; transform: scale(.55) rotate(0deg); } to { opacity: 0; transform: scale(4.2) rotate(200deg); } }
 
+/* Note: Pausing only decorative animations during scrolling/hidden-page periods protects interaction smoothness without touching app spinners or modal motion. */
+html[data-ui-framework="pytorrent"][data-pytorrent-effects-paused="on"] :is(.pytorrent-theme-effects-layer, .pytorrent-theme-effect-particle, .pytorrent-theme-effect-orb, .pytorrent-theme-immersive-frame, .pytorrent-theme-effect-trail, .surface-section, .details, .mobile-card, .modal-content, .brand, .brand i),
+html[data-ui-framework="pytorrent"][data-pytorrent-effects-scrolling="on"] :is(.pytorrent-theme-effects-layer, .pytorrent-theme-effect-particle, .pytorrent-theme-effect-orb, .pytorrent-theme-immersive-frame, .pytorrent-theme-effect-trail, .surface-section, .details, .mobile-card, .modal-content, .brand, .brand i),
+html[data-ui-framework="pytorrent"][data-pytorrent-effects-paused="on"] .pytorrent-theme-effects-layer::before,
+html[data-ui-framework="pytorrent"][data-pytorrent-effects-paused="on"] .pytorrent-theme-effects-layer::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-effects-scrolling="on"] .pytorrent-theme-effects-layer::before,
+html[data-ui-framework="pytorrent"][data-pytorrent-effects-scrolling="on"] .pytorrent-theme-effects-layer::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-effects-paused="on"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span)::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-effects-scrolling="on"] :is(.torrent-progress .progress-bar, .detail-summary-progress > span)::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-effects-paused="on"] .torrent-table tbody tr:hover > td,
+html[data-ui-framework="pytorrent"][data-pytorrent-effects-scrolling="on"] .torrent-table tbody tr:hover > td {
+  animation-play-state: paused;
+}
+
+/* Note: Balanced quality keeps static styling and shared ambient motion while removing the largest groups of simultaneous repaint-heavy animations. */
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-quality="balanced"] .pytorrent-theme-effect-particle:nth-child(n+9),
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-quality="balanced"] .pytorrent-theme-effect-orb[data-ptfx-orb="2"] {
+  display: none;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-quality="balanced"] .torrent-progress .progress-bar::after {
+  animation: none;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-quality="balanced"][data-pytorrent-effect-progress="sweep"] .torrent-progress .progress-bar::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-quality="balanced"][data-pytorrent-effect-progress="sheen"] .torrent-progress .progress-bar::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-quality="balanced"][data-pytorrent-effect-progress="shimmer"] .torrent-progress .progress-bar::after {
+  transform: none;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-quality="balanced"][data-pytorrent-effect-surface="chrome"] :is(.topbar, .statusbar, .surface-section, .mobile-card),
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-quality="balanced"][data-pytorrent-immersive-panels="hologram"] :is(.surface-section, .details, .mobile-card, .modal-content),
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-quality="balanced"][data-pytorrent-immersive-panels="chrome"] :is(.surface-section, .details, .mobile-card, .modal-content),
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-quality="balanced"][data-pytorrent-immersive-frame="rgb"] .pytorrent-theme-immersive-frame,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-quality="balanced"][data-pytorrent-immersive-frame="prism"] .pytorrent-theme-immersive-frame,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-quality="balanced"][data-pytorrent-immersive-logo="rgb"] .brand,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-quality="balanced"][data-pytorrent-immersive-logo="pulse"] .brand,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-quality="balanced"][data-pytorrent-immersive-logo="sparkle"] .brand,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-quality="balanced"][data-pytorrent-immersive-logo="shimmer"] .brand {
+  animation: none;
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-quality="balanced"][data-pytorrent-effect-ambient="aurora"] .pytorrent-theme-effects-layer,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-quality="balanced"][data-pytorrent-effect-ambient="blobs"] .pytorrent-theme-effects-layer,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-quality="balanced"][data-pytorrent-effect-ambient="clouds"] .pytorrent-theme-effects-layer,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-quality="balanced"][data-pytorrent-effect-ambient="grid"] .pytorrent-theme-effects-layer,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-quality="balanced"][data-pytorrent-effect-ambient="waves"] .pytorrent-theme-effects-layer,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-quality="balanced"][data-pytorrent-immersive-scene="mesh"] .pytorrent-theme-effects-layer::before,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-quality="balanced"][data-pytorrent-immersive-scene="caustics"] .pytorrent-theme-effects-layer::before,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-quality="balanced"][data-pytorrent-immersive-scene="blobs"] .pytorrent-theme-effects-layer::before,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-quality="balanced"][data-pytorrent-immersive-scene="fog"] .pytorrent-theme-effects-layer::before,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-quality="balanced"][data-pytorrent-immersive-scene="slime"] .pytorrent-theme-effects-layer::before,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-quality="balanced"][data-pytorrent-immersive-scene="grid"] .pytorrent-theme-effects-layer::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-quality="balanced"][data-pytorrent-immersive-scene="blueprint"] .pytorrent-theme-effects-layer::after,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-quality="balanced"][data-pytorrent-immersive-scene="horizon"] .pytorrent-theme-effects-layer::after {
+  animation-timing-function: steps(32, end);
+}
+
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-quality="balanced"][data-pytorrent-effect-surface="glass"] .mobile-card,
+html[data-ui-framework="pytorrent"][data-pytorrent-effect-quality="balanced"][data-pytorrent-effect-surface="frost"] .mobile-card,
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-effects="on"][data-pytorrent-effect-quality="balanced"][data-pytorrent-immersive-panels="glass"] .mobile-card,
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-effects="on"][data-pytorrent-effect-quality="balanced"][data-pytorrent-immersive-panels="mica"] .mobile-card,
+html[data-ui-framework="pytorrent"][data-pytorrent-immersive-effects="on"][data-pytorrent-effect-quality="balanced"][data-pytorrent-immersive-panels="frost"] .mobile-card {
+  backdrop-filter: none;
+}
+
 @media (max-width: 700px) {
   html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effects-layer {
     --ptfx-layer-opacity: .2;
@@ -979,6 +1076,7 @@ html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"][data-pytorrent-i
 @media (prefers-reduced-motion: reduce) {
   html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effects-layer,
   html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effect-particle,
+  html[data-ui-framework="pytorrent"][data-pytorrent-immersive-effects="on"] .pytorrent-theme-effect-orb,
   html[data-ui-framework="pytorrent"][data-pytorrent-theme-effects="on"] .pytorrent-theme-effect-burst,
   html[data-ui-framework="pytorrent"][data-pytorrent-immersive-effects="on"] .pytorrent-theme-effect-trail,
   html[data-ui-framework="pytorrent"][data-pytorrent-immersive-effects="on"] .pytorrent-theme-immersive-frame,

@@ -1136,8 +1136,10 @@ html[data-ui-framework="pytorrent"] .modal.show .modal-dialog {
   transform: none;
 }
 
-html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"] .modal.show .modal-dialog {
+/* Note: Entrance motion is tied to the runtime's short-lived entering state so theme changes cannot replay it while a modal is already open. */
+html[data-ui-framework="pytorrent"][data-pytorrent-motion="on"] .modal.pytorrent-modal-entering.show .modal-dialog {
   animation: pytorrent-modal-in var(--pt-motion-base) cubic-bezier(.16, 1, .3, 1) both;
+  transition: none;
 }
 
 @keyframes pytorrent-modal-in {
