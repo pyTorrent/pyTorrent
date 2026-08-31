@@ -4,6 +4,8 @@ import json
 import sqlite3
 from typing import Iterable
 
+from ..db import utcnow
+
 
 class DeletionError(RuntimeError):
     """Raised when a destructive operation cannot be completed safely."""
@@ -350,8 +352,9 @@ def purge_profile(conn: sqlite3.Connection, profile_id: int) -> dict[str, object
         ) from exc
 
 
-def purge_user(conn: sqlite3.Connection, user_id: int) -> dict[str, object]:
-    """Delete a user, owned profiles, tokens and all user-scoped rows in one transaction."""
+def purge_user(conn: sqlite3.Connection, user_id: int, reassign_profile_owner_to: int | None = None) -> dict[str, object]:
+    """Delete a user while explicitly reassigning or cascading any profiles they own."""
+    # Note: Account deletion no longer implies profile deletion; callers must provide a replacement owner or explicitly opt into the legacy cascade.
     uid = int(user_id or 0)
     row = conn.execute("SELECT id,username FROM users WHERE id=?", (uid,)).fetchone()
     if not row:
@@ -362,10 +365,18 @@ def purge_user(conn: sqlite3.Connection, user_id: int) -> dict[str, object]:
         profile_rows = conn.execute("SELECT id FROM rtorrent_profiles WHERE user_id=? ORDER BY id", (uid,)).fetchall()
         deleted_profiles: list[int] = []
         profile_results: list[dict[str, object]] = []
-        for profile_row in profile_rows:
-            pid = int(profile_row["id"])
-            profile_results.append(purge_profile(conn, pid))
-            deleted_profiles.append(pid)
+        reassigned_profiles: list[int] = []
+        replacement_id = int(reassign_profile_owner_to or 0)
+        if profile_rows and replacement_id:
+            replacement = conn.execute("SELECT id FROM users WHERE id=? AND is_active=1", (replacement_id,)).fetchone()
+            if not replacement:
+                raise DeletionError("Replacement profile owner does not exist or is inactive")
+            for profile_row in profile_rows:
+                pid = int(profile_row["id"])
+                conn.execute("UPDATE rtorrent_profiles SET user_id=?, is_default=0, updated_at=? WHERE id=?", (replacement_id, utcnow(), pid))
+                reassigned_profiles.append(pid)
+        elif profile_rows:
+            raise DeletionError("User owns rTorrent profiles; reassign them before deleting the account")
 
         audit_references_cleared = _clear_user_audit_references(conn, uid)
         deleted = _delete_rows_by_column(conn, "user_id", uid, exclude={"users", "rtorrent_profiles"})
@@ -381,6 +392,7 @@ def purge_user(conn: sqlite3.Connection, user_id: int) -> dict[str, object]:
             "user_id": uid,
             "username": row.get("username") or "",
             "deleted_profiles": deleted_profiles,
+            "reassigned_profiles": reassigned_profiles,
             "profile_results": profile_results,
             "deleted_rows": deleted,
             "audit_references_cleared": audit_references_cleared,

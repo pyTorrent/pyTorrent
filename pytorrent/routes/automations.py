@@ -22,7 +22,7 @@ def automations_get():
             'can_write': auth.can_write_profile(int(profile['id']), user_id),
         })
     except Exception as exc:
-        return jsonify({'ok': False, 'error': str(exc), 'rules': [], 'history': []}), 500
+        return jsonify({'ok': False, 'error': str(exc), 'rules': [], 'history': []}), (403 if isinstance(exc, PermissionError) else 500)
 
 
 @bp.get('/automations/export')
@@ -35,7 +35,7 @@ def automations_export():
         data = automation_rules.export_rules(profile['id'], user_id=_automation_user_id())
         return ok({'export': data, 'count': len(data.get('rules') or [])})
     except Exception as exc:
-        return jsonify({'ok': False, 'error': str(exc)}), 400
+        return jsonify({'ok': False, 'error': str(exc)}), (403 if isinstance(exc, PermissionError) else 400)
 
 
 @bp.post('/automations/import')
@@ -51,7 +51,7 @@ def automations_import():
         imported = automation_rules.import_rules(profile['id'], payload, user_id=user_id, replace=replace)
         return ok({'imported': len(imported), 'rules': automation_rules.list_rules(profile['id'], user_id=user_id)})
     except Exception as exc:
-        return jsonify({'ok': False, 'error': str(exc)}), 400
+        return jsonify({'ok': False, 'error': str(exc)}), (403 if isinstance(exc, PermissionError) else 400)
 
 
 @bp.post('/automations')
@@ -65,7 +65,7 @@ def automations_save():
         rule = automation_rules.save_rule(profile['id'], request.get_json(silent=True) or {}, user_id=user_id)
         return ok({'rule': rule, 'rules': automation_rules.list_rules(profile['id'], user_id=user_id)})
     except Exception as exc:
-        return jsonify({'ok': False, 'error': str(exc)}), 400
+        return jsonify({'ok': False, 'error': str(exc)}), (403 if isinstance(exc, PermissionError) else 400)
 
 
 @bp.delete('/automations/<int:rule_id>')
@@ -79,7 +79,7 @@ def automations_delete(rule_id: int):
         automation_rules.delete_rule(rule_id, profile['id'], user_id=user_id)
         return ok({'rules': automation_rules.list_rules(profile['id'], user_id=user_id)})
     except Exception as exc:
-        return jsonify({'ok': False, 'error': str(exc)}), 400
+        return jsonify({'ok': False, 'error': str(exc)}), (403 if isinstance(exc, PermissionError) else 400)
 
 
 @bp.post('/automations/<int:rule_id>/run')
@@ -96,7 +96,7 @@ def automations_run_rule(rule_id: int):
             'history': automation_rules.list_history(profile['id'], user_id=user_id),
         })
     except Exception as exc:
-        return jsonify({'ok': False, 'error': str(exc)}), 500
+        return jsonify({'ok': False, 'error': str(exc)}), (403 if isinstance(exc, PermissionError) else 500)
 
 
 @bp.post('/automations/check')
@@ -113,7 +113,7 @@ def automations_check():
             'history': automation_rules.list_history(profile['id'], user_id=user_id),
         })
     except Exception as exc:
-        return jsonify({'ok': False, 'error': str(exc)}), 500
+        return jsonify({'ok': False, 'error': str(exc)}), (403 if isinstance(exc, PermissionError) else 500)
 
 
 @bp.delete('/automations/history')
@@ -127,4 +127,4 @@ def automations_history_clear():
         deleted = automation_rules.clear_history(profile['id'], user_id=user_id)
         return ok({'deleted': deleted, 'history': automation_rules.list_history(profile['id'], user_id=user_id), 'cleanup': cleanup_summary()})
     except Exception as exc:
-        return jsonify({'ok': False, 'error': str(exc)}), 500
+        return jsonify({'ok': False, 'error': str(exc)}), (403 if isinstance(exc, PermissionError) else 500)

@@ -13,6 +13,7 @@ from .torrent_summary import cached_summary
 
 LIGHT_ACTIONS = {"start", "stop", "pause", "resume", "unpause", "set_label", "set_ratio_group", "reannounce", "set_limits"}
 PRIORITY_ACTIONS = {"add_torrent_raw"}
+HASH_REQUIRED_ACTIONS = {"start", "stop", "pause", "resume", "unpause", "recheck", "recreate_files", "reannounce", "remove", "move", "profile_transfer", "set_label", "set_ratio_group"}
 WATCHDOG_INTERVAL_SECONDS = 30
 
 _heavy_executor = ThreadPoolExecutor(max_workers=WORKERS, thread_name_prefix="pytorrent-heavy-job")
@@ -68,6 +69,12 @@ def _record_worker_event(*args, **kwargs) -> None:
         operation_logs.record_worker_event(*args, **kwargs)
     except Exception:
         return
+
+
+def _job_actor_type(job: dict) -> str:
+    """Return the durable execution identity for audit output."""
+    # Note: system_managed is stored outside user payloads and is the only source of system execution trust.
+    return "system" if bool(int((job or {}).get("system_managed") or 0)) else "user"
 
 
 def _bounded_int(value, default: int, minimum: int = 1) -> int:
@@ -128,7 +135,11 @@ def _profile_for_job(job: dict, profile_id: int | None = None):
         return None
     if bool(int(job.get("system_managed") or 0)):
         return get_profile_for_system(resolved_profile_id)
-    return get_profile(resolved_profile_id, int(job.get("user_id") or 0))
+    user_id = int(job.get("user_id") or 0)
+    # Note: User mutations are reauthorized at execution time so a queued job cannot outlive revoked RW permission.
+    if not auth.can_write_profile(resolved_profile_id, user_id):
+        return None
+    return get_profile(resolved_profile_id, user_id)
 
 
 def _job_payload(row) -> dict:
@@ -346,6 +357,9 @@ def prepare_jobs(specs: list[dict]) -> list[dict]:
         max_attempts = max(1, int(spec.get("max_attempts") or 2))
         force = bool(spec.get("force"))
         payload = _prepare_enqueue_payload(action_name, profile_id, dict(spec.get("payload") or {}), force)
+        # Note: Hash-based mutations are invalid without at least one torrent, independent of frontend selection guards.
+        if action_name in HASH_REQUIRED_ACTIONS and not [h for h in (payload.get("hashes") or []) if str(h or "").strip()]:
+            raise ValueError("At least one torrent hash is required")
         now = utcnow()
         prepared.append({
             "job_id": uuid.uuid4().hex,
@@ -380,6 +394,7 @@ def dispatch_prepared_jobs(prepared: list[dict]) -> None:
         _record_job_event(
             job["profile_id"], job["action_name"], "queued", job["payload"],
             job_id=job["job_id"], user_id=job["user_id"],
+            actor_type="system" if int(job.get("system_managed") or 0) else "user",
         )
         try:
             _emit("job_update", {
@@ -544,9 +559,13 @@ def _execute(profile: dict, action_name: str, payload: dict, user_id: int | None
     if action_name == "profile_transfer":
         # Note: User jobs recheck the original user's target access; trusted scheduler jobs use the validated persisted rule scope.
         target_id = int(payload.get("target_profile_id") or 0)
-        target_profile = get_profile_for_system(target_id) if system_managed else get_profile(target_id, user_id or default_user_id())
+        if system_managed:
+            target_profile = get_profile_for_system(target_id)
+        else:
+            actor_id = int(user_id or default_user_id())
+            target_profile = get_profile(target_id, actor_id) if auth.can_write_profile(target_id, actor_id) else None
         if not target_profile:
-            raise ValueError("Target profile does not exist or is not accessible")
+            raise PermissionError("Write access to target profile is required")
         return rtorrent.transfer_profile(profile, target_profile, payload.get("hashes") or [], payload, checkpoint=checkpoint, resume_state=payload.get("__resume_state") or {})
     if action_name == "set_limits":
         return rtorrent.set_limits(profile, payload.get("down"), payload.get("up"))
@@ -615,17 +634,22 @@ def _schedule_delayed_torrent_refresh(profile: dict, action_name: str) -> None:
 
 
 def _fail_missing_profile(job_id: str, job: dict) -> None:
-    _set_job(job_id, "failed", "rTorrent profile does not exist", finished=True)
+    error = "rTorrent profile is unavailable or write access was revoked"
+    _set_job(job_id, "failed", error, finished=True)
+    # Note: Feature state machines must observe this terminal failure just like an rTorrent execution failure.
+    payload = _job_payload(job)
+    _notify_feature_terminal(job_id, job, payload, False, error=error)
     _record_worker_event(
         int(job.get("profile_id") or 0),
         str(job.get("action") or ""),
         "failed",
-        "Job failed: rTorrent profile does not exist",
+        "Job failed: rTorrent profile is unavailable or write access was revoked",
         job_id=job_id,
         user_id=int(job.get("user_id") or 0),
-        error="profile not found",
+        error="profile unavailable or access revoked",
+        actor_type=_job_actor_type(job),
     )
-    _emit("job_update", {"id": job_id, "profile_id": job.get("profile_id"), "status": "failed", "error": "profile not found"})
+    _emit("job_update", {"id": job_id, "profile_id": job.get("profile_id"), "status": "failed", "error": "profile unavailable or access revoked"})
 
 
 def _acquire_ordered_slots(job_id: str, job: dict) -> list[threading.Semaphore] | None:
@@ -649,7 +673,7 @@ def _load_running_payload(job_id: str, job: dict) -> dict:
 
 
 def _emit_job_started(job_id: str, profile: dict, job: dict, payload: dict, attempts: int, event_meta: dict) -> None:
-    _record_job_event(profile["id"], job["action"], "started", payload, job_id=job_id, user_id=int(job.get("user_id") or 0))
+    _record_job_event(profile["id"], job["action"], "started", payload, job_id=job_id, user_id=int(job.get("user_id") or 0), actor_type=_job_actor_type(job))
     _emit("operation_started", {
         "job_id": job_id,
         "action": job["action"],
@@ -692,9 +716,28 @@ def _defer_profile_transfer_bulk_refresh(job: dict, action_name: str, payload: d
     return parts > 1 and 0 < part < parts
 
 
+def _notify_feature_terminal(job_id: str, job: dict, payload: dict, success: bool, result: dict | None = None, error: str = "") -> None:
+    """Notify feature-specific durable state after a job reaches a real terminal status."""
+    # Note: Centralizing terminal callbacks keeps automation, Ratio Rules and RSS consistent across success, failure, revocation and user cancellation.
+    from . import automation_rules, ratio_rules, rss
+    callbacks = (
+        (lambda: automation_rules.record_job_success(job, payload)) if success else (lambda: automation_rules.record_job_failure(job, payload)),
+        lambda: ratio_rules.record_job_result(job_id, job, payload, success, result=result or {}, error=error),
+        lambda: rss.record_job_result(job_id, job, payload, success, result=result or {}, error=error),
+    )
+    for callback in callbacks:
+        try:
+            callback()
+        except Exception:
+            pass
+
+
 def _finish_running_job(job_id: str, profile: dict, job: dict, payload: dict, result: dict | None, event_meta: dict) -> None:
+    """Commit a successful job and notify feature state machines only after the mutation succeeds."""
+    # Note: Automation, Ratio Rules and RSS advance durable state from worker success rather than from enqueue time.
     _set_job(job_id, "done", result=result, finished=True)
-    _record_job_event(profile["id"], job["action"], "done", payload, result=result or {}, job_id=job_id, user_id=int(job.get("user_id") or 0))
+    _notify_feature_terminal(job_id, job, payload, True, result=result or {})
+    _record_job_event(profile["id"], job["action"], "done", payload, result=result or {}, job_id=job_id, user_id=int(job.get("user_id") or 0), actor_type=_job_actor_type(job))
     _emit("operation_finished", {
         "job_id": job_id,
         "action": job["action"],
@@ -725,6 +768,7 @@ def _handle_job_exception(job_id: str, job: dict, payload: dict, exc: Exception)
     status = "pending" if attempts < max_attempts else "failed"
     _set_job(job_id, status, str(exc), finished=(status == "failed"))
     if status == "failed":
+        _notify_feature_terminal(job_id, job, payload, False, error=str(exc))
         if str(job.get("action") or "") == "set_limits":
             try:
                 from . import profile_speed_limits
@@ -744,10 +788,10 @@ def _handle_job_exception(job_id: str, job: dict, payload: dict, exc: Exception)
                 _emit_destination_profile_refresh(job, payload, "profile_transfer")
             except Exception:
                 pass
-        _record_job_event(int(job.get("profile_id") or 0), job.get("action"), "failed", payload, error=str(exc), job_id=job_id, user_id=int(job.get("user_id") or 0))
+        _record_job_event(int(job.get("profile_id") or 0), job.get("action"), "failed", payload, error=str(exc), job_id=job_id, user_id=int(job.get("user_id") or 0), actor_type=_job_actor_type(job))
     else:
         # Note: Retried attempts are logged explicitly so transient failures are not lost between final states.
-        _record_job_event(int(job.get("profile_id") or 0), job.get("action"), "retry", payload, error=str(exc), job_id=job_id, user_id=int(job.get("user_id") or 0))
+        _record_job_event(int(job.get("profile_id") or 0), job.get("action"), "retry", payload, error=str(exc), job_id=job_id, user_id=int(job.get("user_id") or 0), actor_type=_job_actor_type(job))
     # Note: Frontend lifecycle Toasts distinguish a scheduled retry from a terminal job failure.
     _emit("operation_failed", {"job_id": job_id, "action": job.get("action"), "profile_id": job.get("profile_id"), "hashes": payload.get("hashes") or [], "error": str(exc), "status": status, "retrying": status == "pending", **_job_event_meta(payload)})
     _emit("job_update", {"id": job_id, "profile_id": job.get("profile_id"), "status": status, "error": str(exc), "attempts": attempts})
@@ -836,7 +880,7 @@ def _timeout_running_jobs() -> None:
     # Note: Watchdog timeout limits are resolved with each job's persisted user-or-system scope.
     now_ts = time.time()
     with connect() as conn:
-        rows = conn.execute("SELECT id,user_id,profile_id,system_managed,action,started_at FROM jobs WHERE status='running'").fetchall()
+        rows = conn.execute("SELECT * FROM jobs WHERE status='running'").fetchall()
     for row in rows:
         profile = _profile_for_job(row)
         if not profile:
@@ -845,9 +889,19 @@ def _timeout_running_jobs() -> None:
         if started_ts is None or now_ts - started_ts < _job_timeout_seconds(profile, row):
             continue
         message = f"Watchdog timeout after {_job_timeout_seconds(profile, row)} seconds"
-        _set_job(row["id"], "failed", message, finished=True)
-        _record_worker_event(int(row.get("profile_id") or 0), str(row.get("action") or ""), "timeout", message, job_id=row["id"], user_id=int(row.get("user_id") or 0), error=message)
-        _emit("operation_failed", {"job_id": row["id"], "action": row.get("action"), "profile_id": row.get("profile_id"), "hashes": [], "error": message, "source": "watchdog"})
+        now = utcnow()
+        # Note: Timeout wins only while the persisted job is still running, so a concurrently completed job cannot be overwritten as failed.
+        with connect() as conn:
+            cur = conn.execute(
+                "UPDATE jobs SET status='failed', error=?, finished_at=?, updated_at=? WHERE id=? AND status='running'",
+                (message, now, now, row["id"]),
+            )
+        if int(cur.rowcount or 0) != 1:
+            continue
+        payload = _job_payload(row)
+        _notify_feature_terminal(row["id"], row, payload, False, error=message)
+        _record_worker_event(int(row.get("profile_id") or 0), str(row.get("action") or ""), "timeout", message, job_id=row["id"], user_id=int(row.get("user_id") or 0), error=message, actor_type=_job_actor_type(row))
+        _emit("operation_failed", {"job_id": row["id"], "action": row.get("action"), "profile_id": row.get("profile_id"), "hashes": payload.get("hashes") or [], "error": message, "source": "watchdog"})
         _emit("job_update", {"id": row["id"], "profile_id": row.get("profile_id"), "status": "failed", "error": message})
 
 
@@ -874,7 +928,7 @@ def _resubmit_interrupted_running_jobs() -> None:
                 ("Resuming interrupted job from last checkpoint", utcnow(), row["id"]),
             )
         if int(cur.rowcount or 0):
-            _record_worker_event(int(row.get("profile_id") or 0), str(row.get("action") or ""), "resubmitted", "Interrupted job resubmitted from checkpoint", job_id=row["id"], user_id=int(row.get("user_id") or 0))
+            _record_worker_event(int(row.get("profile_id") or 0), str(row.get("action") or ""), "resubmitted", "Interrupted job resubmitted from checkpoint", job_id=row["id"], user_id=int(row.get("user_id") or 0), actor_type=_job_actor_type(row))
             _emit("job_update", {"id": row["id"], "profile_id": row.get("profile_id"), "status": "pending", "resumed": True})
             _submit_job(row["id"], row.get("action"))
 
@@ -897,7 +951,7 @@ def _resubmit_stale_pending_jobs() -> None:
             continue
         with connect() as conn:
             conn.execute("UPDATE jobs SET error=?, updated_at=? WHERE id=? AND status='pending'", ("Watchdog resubmitted stale pending job", utcnow(), row["id"]))
-        _record_worker_event(int(row.get("profile_id") or 0), str(row.get("action") or ""), "resubmitted", "Stale pending job resubmitted by watchdog", job_id=row["id"], user_id=int(row.get("user_id") or 0))
+        _record_worker_event(int(row.get("profile_id") or 0), str(row.get("action") or ""), "resubmitted", "Stale pending job resubmitted by watchdog", job_id=row["id"], user_id=int(row.get("user_id") or 0), actor_type=_job_actor_type(row))
         _emit("job_update", {"id": row["id"], "profile_id": row.get("profile_id"), "status": "pending", "watchdog": True})
         _submit_job(row["id"], row.get("action"))
 
@@ -960,15 +1014,64 @@ def _job_summary(row: dict, payload: dict, result: dict) -> str:
     return "; ".join(parts)
 
 
+_TRANSFER_TARGET_PRIVATE_KEYS = {
+    "target_profile_id",
+    "target_path",
+    "target_allowed_roots",
+    "moved_to",
+    "load_directory",
+}
+
+
+def _scrub_transfer_target_details(value):
+    """Remove destination-only profile identifiers and paths from nested transfer output."""
+    # Note: Transfer results and resume state can contain target paths below the top-level payload, so redaction must be recursive.
+    if isinstance(value, dict):
+        return {
+            key: _scrub_transfer_target_details(item)
+            for key, item in value.items()
+            if key not in _TRANSFER_TARGET_PRIVATE_KEYS
+        }
+    if isinstance(value, list):
+        return [_scrub_transfer_target_details(item) for item in value]
+    return value
+
+
 def _public_job(row) -> dict:
     d = dict(row)
     payload = _safe_json(d.get("payload_json"), {})
     result = _safe_json(d.get("result_json"), {})
-    ctx = payload.get("job_context") or {}
-    d["payload"] = payload
     state = _safe_json(d.get("state_json"), {})
+    ctx = payload.get("job_context") or {}
+    # Note: Source-profile readers cannot inspect destination identifiers or paths for a profile they cannot read.
+    if str(d.get("action") or "") == "profile_transfer":
+        try:
+            target_id = int(payload.get("target_profile_id") or ctx.get("target_profile_id") or 0)
+        except Exception:
+            target_id = 0
+        if target_id and not auth.can_access_profile(target_id):
+            for key in ("target_profile_id", "target_path", "path", "target_allowed_roots"):
+                payload.pop(key, None)
+            ctx = dict(ctx)
+            for key in ("target_profile_id", "target_path", "path", "target_allowed_roots"):
+                ctx.pop(key, None)
+            ctx["target_profile_hidden"] = True
+            payload["job_context"] = ctx
+            result = _scrub_transfer_target_details(result)
+            state = _scrub_transfer_target_details(state)
+    # Note: Keep legacy JSON fields compatible, but serialize only the same redacted objects exposed through parsed fields.
+    d["payload_json"] = json.dumps(payload)
+    d["result_json"] = json.dumps(result)
+    d["state_json"] = json.dumps(state)
+    d["payload"] = payload
     d["result"] = result
     d["state"] = state
+    if bool(int(d.get("system_managed") or 0)):
+        d["actor_type"] = "system"
+        d["executed_by_user_id"] = None
+    else:
+        d["actor_type"] = "user"
+        d["executed_by_user_id"] = int(d.get("user_id") or 0) or None
     d["progress_current"] = int(d.get("progress_current") or len(state.get("completed_hashes") or []))
     d["progress_total"] = int(d.get("progress_total") or len(payload.get("hashes") or []) or result.get("count") or 0)
     d["hash_count"] = int(ctx.get("hash_count") or len(payload.get("hashes") or []) or result.get("count") or 0)
@@ -1032,13 +1135,43 @@ def list_jobs(limit: int = 200, offset: int = 0, profile_id: int | None = None):
     }
 
 
-def cancel_job(job_id: str) -> bool:
-    row = _job_row(job_id)
-    if not row or row["status"] not in {"pending", "running"}:
-        return False
-    _set_job(job_id, "cancelled", finished=True)
+def _authorize_manual_job_control(row: dict, actor_user_id: int) -> None:
+    """Revalidate every profile touched before a user takes control of an existing job."""
+    # Note: Manually forced/retried system jobs become ordinary user jobs and cannot reuse scheduler trust.
+    actor_user_id = int(actor_user_id or 0)
+    profile_id = int((row or {}).get("profile_id") or 0)
+    if not profile_id or not auth.can_write_profile(profile_id, actor_user_id):
+        raise PermissionError("No write access to profile")
     payload = _job_payload(row)
-    _record_job_event(int(row.get("profile_id") or 0), row.get("action"), "cancelled", payload, error="Cancelled by user", job_id=job_id, user_id=int(row.get("user_id") or 0))
+    if str((row or {}).get("action") or "") == "profile_transfer":
+        target_id = int(payload.get("target_profile_id") or 0)
+        if not target_id or not auth.can_write_profile(target_id, actor_user_id):
+            raise PermissionError("Write access to target profile is required")
+
+
+def cancel_job(job_id: str, actor_user_id: int | None = None) -> bool:
+    """Cancel only jobs that have not started running."""
+    # Note: Running rTorrent operations are not interruptible, so their durable state must not pretend they were cancelled.
+    row = _job_row(job_id)
+    if not row or row["status"] != "pending":
+        return False
+    actor_id = int(actor_user_id or auth.current_user_id() or 0)
+    _authorize_manual_job_control(row, actor_id)
+    payload = _job_payload(row)
+    now = utcnow()
+    # Note: Conditional persistence closes the race where a worker could start between the initial read and cancellation.
+    with connect() as conn:
+        cur = conn.execute(
+            "UPDATE jobs SET status='cancelled', error='Cancelled by user', finished_at=COALESCE(finished_at, ?), updated_at=? WHERE id=? AND status='pending'",
+            (now, now, job_id),
+        )
+        if int(cur.rowcount or 0) != 1:
+            return False
+    terminal_job = dict(row)
+    terminal_job["user_id"] = actor_id
+    terminal_job["system_managed"] = 0
+    _notify_feature_terminal(job_id, terminal_job, payload, False, error="Cancelled by user")
+    _record_job_event(int(row.get("profile_id") or 0), row.get("action"), "cancelled", payload, error="Cancelled by user", job_id=job_id, user_id=actor_id, actor_type="user")
     _emit("job_update", {"id": job_id, "profile_id": row.get("profile_id"), "status": "cancelled"})
     return True
 
@@ -1053,41 +1186,93 @@ def clear_jobs(profile_id: int | None = None) -> int:
         return int(cur.rowcount or 0)
 
 
-def emergency_clear_jobs(profile_id: int | None = None) -> int:
-    now = utcnow()
+def emergency_clear_jobs(profile_id: int | None = None, actor_user_id: int | None = None) -> int:
+    """Cancel and remove pending jobs without falsifying the state of already running operations."""
+    # Note: Emergency cleanup terminalizes every pending feature job before deletion so RSS, Ratio Rules and Automation cannot keep stale queued state.
     where, params = _job_scope_sql(writable=True, profile_id=profile_id)
-    status_clause = "status IN ('pending', 'running')"
-    update_sql = f"UPDATE jobs SET status='cancelled', error='Emergency cancelled by user', finished_at=COALESCE(finished_at, ?), updated_at=?{where} AND {status_clause}" if where else "UPDATE jobs SET status='cancelled', error='Emergency cancelled by user', finished_at=COALESCE(finished_at, ?), updated_at=? WHERE status IN ('pending', 'running')"
+    pending_sql = f"SELECT * FROM jobs{where} AND status='pending'" if where else "SELECT * FROM jobs WHERE status='pending'"
+    actor_id = int(actor_user_id or auth.current_user_id() or 0)
+    cancelled: list[dict] = []
+    now = utcnow()
     with connect() as conn:
-        conn.execute(update_sql, (now, now, *params) if where else (now, now))
-        cur = conn.execute(f"DELETE FROM jobs{where}", params) if where else conn.execute("DELETE FROM jobs")
+        rows = [dict(row) for row in conn.execute(pending_sql, params).fetchall()]
+        for row in rows:
+            cur = conn.execute(
+                "UPDATE jobs SET status='cancelled', error='Emergency cancelled by user', finished_at=COALESCE(finished_at, ?), updated_at=? WHERE id=? AND status='pending'",
+                (now, now, row['id']),
+            )
+            if int(cur.rowcount or 0) == 1:
+                cancelled.append(row)
+
+    for row in cancelled:
+        payload = _job_payload(row)
+        terminal_job = dict(row)
+        terminal_job['user_id'] = actor_id
+        terminal_job['system_managed'] = 0
+        _notify_feature_terminal(row['id'], terminal_job, payload, False, error='Emergency cancelled by user')
+        _record_job_event(
+            int(row.get('profile_id') or 0),
+            row.get('action'),
+            'cancelled',
+            payload,
+            error='Emergency cancelled by user',
+            job_id=row['id'],
+            user_id=actor_id,
+            actor_type='user',
+        )
+
+    # Note: Callbacks run before terminal rows are removed because automation execution state may need sibling job statuses.
+    delete_sql = f"DELETE FROM jobs{where} AND status!='running'" if where else "DELETE FROM jobs WHERE status!='running'"
+    with connect() as conn:
+        cur = conn.execute(delete_sql, params)
         deleted = int(cur.rowcount or 0)
-    _emit("job_update", {"status": "cleared", "emergency": True})
+    _emit("job_update", {"status": "cleared", "emergency": True, "profile_id": profile_id})
     return deleted
 
 
-def force_job(job_id: str) -> bool:
+def force_job(job_id: str, actor_user_id: int | None = None) -> bool:
+    """Promote a pending job under the current user's authorization scope."""
+    # Note: A manually forced scheduler job loses system_managed trust before it is submitted.
     row = _job_row(job_id)
     if not row or row['status'] != 'pending':
         return False
+    actor_id = int(actor_user_id or auth.current_user_id() or 0)
+    _authorize_manual_job_control(row, actor_id)
     payload = _job_payload(row)
     payload['force_job'] = True
     payload['priority_job'] = True
     with connect() as conn:
-        conn.execute("UPDATE jobs SET payload_json=?, updated_at=? WHERE id=?", (json.dumps(payload), utcnow(), job_id))
-    _record_job_event(int(row.get('profile_id') or 0), row.get('action'), 'forced', payload, job_id=job_id, user_id=int(row.get('user_id') or 0))
+        # Note: Manual takeover succeeds only while the job is still pending, preventing a running system job from losing its execution identity mid-flight.
+        cur = conn.execute(
+            "UPDATE jobs SET payload_json=?, user_id=?, system_managed=0, updated_at=? WHERE id=? AND status='pending'",
+            (json.dumps(payload), actor_id, utcnow(), job_id),
+        )
+        if int(cur.rowcount or 0) != 1:
+            return False
+    _record_job_event(int(row.get('profile_id') or 0), row.get('action'), 'forced', payload, job_id=job_id, user_id=actor_id, actor_type='user')
     _emit('job_update', {'id': job_id, 'profile_id': row.get('profile_id'), 'status': 'pending', 'forced': True})
     _submit_job(job_id, row.get('action'))
     return True
 
-def retry_job(job_id: str) -> bool:
+
+def retry_job(job_id: str, actor_user_id: int | None = None) -> bool:
+    """Retry a terminal job as a fresh user-authorized mutation."""
+    # Note: Manual retry never inherits durable scheduler trust from the original job.
     row = _job_row(job_id)
     if not row or row["status"] not in {"failed", "cancelled"}:
         return False
+    actor_id = int(actor_user_id or auth.current_user_id() or 0)
+    _authorize_manual_job_control(row, actor_id)
     with connect() as conn:
-        conn.execute("UPDATE jobs SET status='pending', error='', finished_at=NULL, state_json=NULL, progress_current=0, heartbeat_at=NULL, updated_at=? WHERE id=?", (utcnow(), job_id))
+        # Note: Retry cannot revive a job whose terminal state changed concurrently, and it always clears scheduler trust.
+        cur = conn.execute(
+            "UPDATE jobs SET status='pending', user_id=?, system_managed=0, error='', finished_at=NULL, state_json=NULL, progress_current=0, heartbeat_at=NULL, updated_at=? WHERE id=? AND status IN ('failed','cancelled')",
+            (actor_id, utcnow(), job_id),
+        )
+        if int(cur.rowcount or 0) != 1:
+            return False
     payload = _job_payload(row)
-    _record_job_event(int(row.get("profile_id") or 0), row.get("action"), "retry", payload, job_id=job_id, user_id=int(row.get("user_id") or 0))
+    _record_job_event(int(row.get("profile_id") or 0), row.get("action"), "retry", payload, job_id=job_id, user_id=actor_id, actor_type="user")
     _emit("job_update", {"id": job_id, "profile_id": row.get("profile_id"), "status": "pending"})
     _submit_job(job_id, row.get("action"))
     return True

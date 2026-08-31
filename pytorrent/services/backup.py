@@ -174,9 +174,10 @@ def create_app_backup(name: str, user_id: int | None = None, automatic: bool = F
     return _store_backup(user_id, name, "app", None, payload)
 
 
-def create_profile_backup(name: str, profile_id: int, user_id: int | None = None, automatic: bool = False) -> dict:
+def create_profile_backup(name: str, profile_id: int, user_id: int | None = None, automatic: bool = False, system_execution: bool = False) -> dict:
     user_id = user_id or auth.current_user_id() or default_user_id()
-    if not auth.can_write_profile(profile_id, user_id):
+    # Note: Interactive backups require current RW permission; only the internal scheduler may use persisted profile authority.
+    if not system_execution and not auth.can_write_profile(profile_id, user_id):
         raise PermissionError("No write access to profile")
     payload = {"version": 2, "backup_type": "profile", "source_profile_id": int(profile_id), "created_at": utcnow(), "automatic": bool(automatic), "tables": {}}
     with connect() as conn:
@@ -399,12 +400,16 @@ def _dedupe_profile_named_rows(rows: list[dict]) -> list[dict]:
     return list(chosen.values())
 
 
-def _rewrite_profile_row(table: str, row: dict, user_id: int, target_profile_id: int) -> dict:
+def _rewrite_profile_row(table: str, row: dict, user_id: int, target_profile_id: int, target_profile: dict | None = None) -> dict:
+    """Rewrite portable profile rows without transferring profile identity/ownership."""
+    # Note: Restoring settings never changes who owns the destination profile or its default-profile identity.
     clean = dict(row)
     if table == "rtorrent_profiles":
         clean["id"] = target_profile_id
-        clean["user_id"] = user_id
-        clean["is_default"] = int(clean.get("is_default") or 0)
+        if target_profile:
+            clean["user_id"] = target_profile.get("user_id")
+            clean["is_default"] = int(target_profile.get("is_default") or 0)
+            clean["created_at"] = target_profile.get("created_at") or clean.get("created_at")
         return clean
     if "profile_id" in clean:
         clean["profile_id"] = target_profile_id
@@ -427,17 +432,41 @@ def _rewrite_profile_row(table: str, row: dict, user_id: int, target_profile_id:
 
 
 def restore_profile_backup(backup_id: int, target_profile_id: int, user_id: int | None = None) -> dict:
+    """Restore portable profile settings using source-read/target-write authorization."""
+    # Note: Non-admin restores cannot replace rTorrent connection/worker profile fields, and automation rules pass current target authorization before insert.
     user_id = user_id or auth.current_user_id() or default_user_id()
     if not auth.can_write_profile(target_profile_id, user_id):
         raise PermissionError("No write access to profile")
-    payload = payload_for_backup(backup_id, user_id, require_write=True)
+    payload = payload_for_backup(backup_id, user_id, require_write=False)
     if _backup_type(payload) != "profile":
         raise ValueError("This is not a profile backup")
     tables = payload.get("tables") or {}
-    restored = {}
+    from . import automation_rules
+    normalized_automations = automation_rules.normalize_rules_for_restore(int(target_profile_id), [dict(row) for row in (tables.get("automation_rules") or [])], int(user_id))
+    with connect() as conn:
+        target_profile = conn.execute("SELECT * FROM rtorrent_profiles WHERE id=?", (int(target_profile_id),)).fetchone()
+        actor = conn.execute("SELECT role,is_active FROM users WHERE id=?", (int(user_id),)).fetchone()
+    if not target_profile:
+        raise ValueError("Target profile does not exist")
+    actor_is_admin = (not auth.enabled()) or bool(actor and actor.get("role") == "admin" and int(actor.get("is_active") or 0))
+    restored: dict[str, int] = {}
     with connect() as conn:
         conn.execute("PRAGMA foreign_keys = OFF")
         for table in PROFILE_BACKUP_TABLES:
+            if table == "rtorrent_profiles" and not actor_is_admin:
+                restored[table] = 0
+                continue
+            if table == "automation_rules":
+                where = PROFILE_TABLE_FILTERS.get(table)
+                conn.execute(f"DELETE FROM {table} WHERE {where}", _profile_filter_params(table, user_id, int(target_profile_id)))
+                now = utcnow()
+                for rule in normalized_automations:
+                    conn.execute(
+                        "INSERT INTO automation_rules(created_by_user_id,updated_by_user_id,profile_id,name,enabled,conditions_json,effects_json,cooldown_minutes,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                        (int(user_id), int(user_id), int(target_profile_id), str(rule.get("name") or "Automation rule"), 1 if rule.get("enabled", True) else 0, json.dumps(rule.get("conditions") or []), json.dumps(rule.get("effects") or []), max(0, int(rule.get("cooldown_minutes") or 0)), now, now),
+                    )
+                restored[table] = len(normalized_automations)
+                continue
             rows = tables.get(table) or []
             if table in {"disk_monitor_preferences", "download_plan_settings", "operation_log_settings"}:
                 rows = _single_profile_row([dict(row) for row in rows])
@@ -451,7 +480,7 @@ def restore_profile_backup(backup_id: int, target_profile_id: int, user_id: int 
                 continue
             count = 0
             for row in rows:
-                clean = _rewrite_profile_row(table, dict(row), user_id, int(target_profile_id))
+                clean = _rewrite_profile_row(table, dict(row), user_id, int(target_profile_id), dict(target_profile))
                 available = _table_columns(conn, table)
                 columns = [col for col in clean.keys() if col in available]
                 if not columns:
@@ -462,11 +491,9 @@ def restore_profile_backup(backup_id: int, target_profile_id: int, user_id: int 
             restored[table] = count
         _assert_foreign_keys_valid(conn)
     if "poller_settings" in restored:
-        # Note: Profile restore bypasses save_settings(), so invalidate only the restored profile's in-memory poller settings.
         from . import poller_control
         poller_control.invalidate_settings_cache(int(target_profile_id))
-    if "rtorrent_profiles" in restored:
-        # Note: A profile backup can restore a different SCGI URL into the same id; clear old endpoint snapshots before the poller sees the restored row.
+    if actor_is_admin and restored.get("rtorrent_profiles"):
         from . import preferences
         from .websocket import invalidate_poller_profiles_cache
         preferences.clear_profile_connection_runtime(int(target_profile_id))
@@ -475,7 +502,8 @@ def restore_profile_backup(backup_id: int, target_profile_id: int, user_id: int 
 
 
 def restore_backup(backup_id: int, user_id: int | None = None, profile_id: int | None = None) -> dict:
-    payload = payload_for_backup(backup_id, user_id, require_write=True)
+    # Note: Backup contents are a readable source; only the selected destination requires write permission.
+    payload = payload_for_backup(backup_id, user_id, require_write=False)
     if _backup_type(payload) == "profile":
         target = profile_id or payload.get("source_profile_id")
         if not target:
@@ -533,14 +561,37 @@ def _preview_row(row: dict) -> dict:
     return output
 
 
+def _legacy_profile_auto_backup_row(conn, profile_id: int, user_id: int):
+    """Return the best legacy per-user schedule for a profile when no canonical profile schedule exists."""
+    # Note: Legacy schedules were keyed by the viewer; prefer the current profile owner so the system scheduler and UI resolve one stable policy.
+    profile_id = int(profile_id or 0)
+    owner_id = _profile_owner_for_backup(profile_id)
+    rows = conn.execute(
+        "SELECT key,value FROM app_settings WHERE key LIKE ?",
+        (f"{AUTO_BACKUP_SETTINGS_KEY}:profile:%:{profile_id}",),
+    ).fetchall()
+    ranked = []
+    for row in rows:
+        parts = str(row.get("key") or "").split(":")
+        try:
+            legacy_user_id = int(parts[-2])
+        except (TypeError, ValueError, IndexError):
+            continue
+        rank = 0 if legacy_user_id == owner_id else 1 if legacy_user_id == int(user_id or 0) else 2
+        ranked.append((rank, legacy_user_id, row))
+    ranked.sort(key=lambda item: (item[0], item[1]))
+    return ranked[0][2] if ranked else None
+
+
 def get_auto_backup_settings(user_id: int | None = None, backup_type: str = "app", profile_id: int | None = None) -> dict:
+    """Return automatic backup settings with profile schedules owned by the profile rather than the viewer."""
+    # Note: A canonical profile key is authoritative; legacy viewer-scoped keys are read only as a compatibility fallback.
     user_id = user_id or auth.current_user_id() or default_user_id()
     key = _settings_row_key(user_id, backup_type, profile_id)
     with connect() as conn:
         row = conn.execute("SELECT value FROM app_settings WHERE key=?", (key,)).fetchone()
         if not row and backup_type == "profile":
-            legacy_key = f"{AUTO_BACKUP_SETTINGS_KEY}:profile:{int(user_id)}:{int(profile_id or 0)}"
-            row = conn.execute("SELECT value FROM app_settings WHERE key=?", (legacy_key,)).fetchone()
+            row = _legacy_profile_auto_backup_row(conn, int(profile_id or 0), int(user_id))
     settings = {**DEFAULT_AUTO_BACKUP_SETTINGS, **_loads(row.get("value") if row else "{}")}
     settings["enabled"] = bool(settings.get("enabled"))
     settings["interval_hours"] = max(1, int(settings.get("interval_hours") or 24))
@@ -548,7 +599,9 @@ def get_auto_backup_settings(user_id: int | None = None, backup_type: str = "app
     settings["backup_type"] = "profile" if backup_type == "profile" else "app"
     if backup_type == "profile":
         settings["profile_id"] = int(profile_id or 0)
-    settings["owner_user_id"] = user_id or auth.current_user_id() or default_user_id()
+        settings["owner_user_id"] = _profile_owner_for_backup(int(profile_id or 0))
+    else:
+        settings["owner_user_id"] = user_id or auth.current_user_id() or default_user_id()
     with connect() as conn:
         settings["owner_name"] = _user_label(conn, settings["owner_user_id"])
     return settings
@@ -639,13 +692,23 @@ def _should_run(settings: dict, last_value: str | None) -> bool:
     return not last or now - last >= timedelta(hours=settings["interval_hours"])
 
 
+def _save_auto_backup_runtime(settings: dict, user_id: int, backup_type: str, profile_id: int | None) -> None:
+    # Note: Scheduler runtime timestamps update the existing schedule without impersonating a user or re-authorizing a configured system task.
+    key = _settings_row_key(user_id, backup_type, profile_id)
+    with connect() as conn:
+        conn.execute("INSERT OR REPLACE INTO app_settings(key,value) VALUES(?,?)", (key, json.dumps(settings)))
+
+
 def maybe_create_automatic_backup(user_id: int | None = None, backup_type: str = "app", profile_id: int | None = None) -> dict | None:
     user_id = user_id or default_user_id()
     backup_type = "profile" if backup_type == "profile" else "app"
     if backup_type == "app" and not _is_admin_user(user_id):
         return None
-    if backup_type == "profile" and (not profile_id or not auth.can_access_profile(int(profile_id), user_id)):
+    if backup_type == "profile" and not profile_id:
         return None
+    if backup_type == "profile":
+        # Note: Automatic profile backups run as the system using the current profile owner only as backup ownership metadata.
+        user_id = _profile_owner_for_backup(int(profile_id))
     settings = get_auto_backup_settings(user_id, backup_type, profile_id)
     if not settings.get("enabled"):
         return None
@@ -653,15 +716,15 @@ def maybe_create_automatic_backup(user_id: int | None = None, backup_type: str =
     if not _should_run(settings, last_value):
         if settings.get("last_run_at") != last_value:
             settings["last_run_at"] = last_value
-            save_auto_backup_settings(settings, user_id, backup_type, profile_id)
+            _save_auto_backup_runtime(settings, user_id, backup_type, profile_id)
         return None
     now = datetime.now(timezone.utc)
     if backup_type == "profile":
-        backup = create_profile_backup(f"Automatic profile backup {now.isoformat(timespec='seconds')}", int(profile_id or 0), user_id, automatic=True)
+        backup = create_profile_backup(f"Automatic profile backup {now.isoformat(timespec='seconds')}", int(profile_id or 0), user_id, automatic=True, system_execution=True)
     else:
         backup = create_app_backup(f"Automatic application backup {now.isoformat(timespec='seconds')}", user_id, automatic=True)
     settings["last_run_at"] = backup.get("created_at") or now.isoformat(timespec="seconds")
-    save_auto_backup_settings(settings, user_id, backup_type, profile_id)
+    _save_auto_backup_runtime(settings, user_id, backup_type, profile_id)
     prune_old_backups(user_id, settings["retention_days"], backup_type, profile_id)
     return backup
 

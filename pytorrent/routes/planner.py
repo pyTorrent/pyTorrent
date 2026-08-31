@@ -43,7 +43,7 @@ def download_planner_save():
         settings = download_planner.save_settings(profile_id, request.get_json(silent=True) or {}, current_user_id())
         return ok({"settings": settings, "profile_id": profile_id})
     except Exception as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 400
+        return jsonify({"ok": False, "error": str(exc)}), (403 if isinstance(exc, PermissionError) else 400)
 
 
 @bp.post("/download-planner/check")
@@ -58,7 +58,7 @@ def download_planner_check():
             run_profile["dry_run"] = "true"
         return ok({"result": download_planner.enforce(run_profile, force=True, user_id=current_user_id())})
     except Exception as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 400
+        return jsonify({"ok": False, "error": str(exc)}), (403 if isinstance(exc, PermissionError) else 400)
 
 
 @bp.get("/download-planner/preview")
@@ -80,7 +80,7 @@ def download_planner_history_clear():
         deleted = download_planner.clear_history(int(profile["id"]))
         return ok({"deleted": deleted, "history": [], "history_total": 0})
     except Exception as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 400
+        return jsonify({"ok": False, "error": str(exc)}), (403 if isinstance(exc, PermissionError) else 400)
 
 
 @bp.post("/download-planner/override")
@@ -92,7 +92,7 @@ def download_planner_override():
         seconds = int((request.get_json(silent=True) or {}).get("seconds") or 0)
         return ok(download_planner.set_manual_override(int(profile["id"]), seconds))
     except Exception as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 400
+        return jsonify({"ok": False, "error": str(exc)}), (403 if isinstance(exc, PermissionError) else 400)
 
 
 @bp.get("/poller/settings")
@@ -116,4 +116,4 @@ def poller_settings_save():
         profile_id = int(profile["id"])
         return ok({"settings": poller_control.save_settings(profile_id, request.get_json(silent=True) or {}), "profile_id": profile_id})
     except Exception as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 400
+        return jsonify({"ok": False, "error": str(exc)}), (403 if isinstance(exc, PermissionError) else 400)

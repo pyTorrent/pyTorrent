@@ -21,7 +21,7 @@ from flask import Blueprint, jsonify, request, abort, send_file, redirect, Respo
 from ..config import DB_PATH, JOBS_RETENTION_DAYS, SMART_QUEUE_HISTORY_RETENTION_DAYS, LOG_RETENTION_DAYS, WORKERS, PYTORRENT_TMP_DIR
 from ..db import connect, utcnow
 from ..services.auth import current_user_id as default_user_id, current_user, list_users, save_user, delete_user, login_user, logout_user, enabled as auth_enabled, require_profile_write, require_admin, is_admin
-from ..services import auth, preferences, rtorrent, torrent_stats, speed_peaks, tracker_cache, rss as rss_service, ratio_rules, backup as backup_service, download_planner, operation_logs, poller_control, database_maintenance, profile_status_cache
+from ..services import auth, preferences, rtorrent, torrent_stats, speed_peaks, tracker_cache, rss as rss_service, ratio_rules, backup as backup_service, download_planner, operation_logs, poller_control, database_maintenance, profile_status_cache, path_policy
 from ..services.torrent_cache import torrent_cache
 from ..services.torrent_summary import cached_summary
 from ..services.workers import enqueue, enqueue_many, list_jobs, cancel_job, retry_job, force_job, clear_jobs, emergency_clear_jobs
@@ -169,51 +169,42 @@ def _active_profile_cache_summary(profile_id: int | None = None, conn=None) -> d
     return {"profile_id": profile_id, "profile_rows": tracker_rows + stats_rows, "tracker_rows": tracker_rows, "torrent_stats_rows": stats_rows, "runtime_items": runtime_items}
 
 
-def cleanup_summary() -> dict:
-    active_profile = preferences.active_profile()
-    profile_id = int((active_profile or {}).get("id") or 0)
+def cleanup_summary(profile_id: int | None = None) -> dict:
+    """Return cleanup counters for the request profile, with global diagnostics reserved for admins."""
+    # Note: The operation profile is resolved from the request instead of process/session active state, preventing cross-profile summary drift.
+    if profile_id is None:
+        profile = request_profile()
+        profile_id = int((profile or {}).get("id") or 0)
+    else:
+        profile_id = int(profile_id or 0)
+    admin = is_admin(current_user())
     with connect() as conn:
-        operation_logs_total = _table_count(
-            "operation_logs",
-            "WHERE profile_id=? OR profile_id IS NULL",
-            (profile_id,),
-            conn=conn,
-        ) if profile_id else _table_count("operation_logs", conn=conn)
-        # Note: Cleanup counters are profile-scoped to match the cleanup buttons shown in the UI.
+        operation_logs_total = _table_count("operation_logs", "WHERE profile_id=?", (profile_id,), conn=conn) if profile_id else 0
         jobs_total = _table_count("jobs", "WHERE profile_id=?", (profile_id,), conn=conn) if profile_id else 0
         jobs_clearable = _table_count("jobs", "WHERE profile_id=? AND status NOT IN ('pending', 'running')", (profile_id,), conn=conn) if profile_id else 0
-        jobs_global_total = _table_count("jobs", conn=conn)
-        jobs_global_clearable = _table_count("jobs", "WHERE status NOT IN ('pending', 'running')", conn=conn)
         smart_queue_history_total = _table_count("smart_queue_history", "WHERE profile_id=?", (profile_id,), conn=conn) if profile_id else 0
         automation_history_total = _table_count("automation_history", "WHERE profile_id=?", (profile_id,), conn=conn) if profile_id else 0
         cache_summary = _active_profile_cache_summary(profile_id if profile_id else None, conn=conn)
+        jobs_global_total = _table_count("jobs", conn=conn) if admin else None
+        jobs_global_clearable = _table_count("jobs", "WHERE status NOT IN ('pending', 'running')", conn=conn) if admin else None
     operation_log_retention = operation_logs.get_settings(profile_id) if profile_id else operation_logs.get_settings(0)
     poller_runtime = poller_control.snapshot(profile_id) if profile_id else {}
     return {
-        "jobs_total": jobs_total,
-        "jobs_clearable": jobs_clearable,
-        "jobs_global_total": jobs_global_total,
-        "jobs_global_clearable": jobs_global_clearable,
-        "profile_id": profile_id,
-        "smart_queue_history_total": smart_queue_history_total,
-        "operation_logs_total": operation_logs_total,
-        "automation_history_total": automation_history_total,
+        "jobs_total": jobs_total, "jobs_clearable": jobs_clearable,
+        "jobs_global_total": jobs_global_total, "jobs_global_clearable": jobs_global_clearable,
+        "profile_id": profile_id, "smart_queue_history_total": smart_queue_history_total,
+        "operation_logs_total": operation_logs_total, "automation_history_total": automation_history_total,
         "planner_history_total": download_planner.history_count(profile_id) if profile_id else 0,
-        "cache": cache_summary,
-        "poller_runtime": poller_runtime,
+        "cache": cache_summary, "poller_runtime": poller_runtime,
         "retention_days": {
-            "jobs": JOBS_RETENTION_DAYS,
-            "smart_queue_history": SMART_QUEUE_HISTORY_RETENTION_DAYS,
+            "jobs": JOBS_RETENTION_DAYS, "smart_queue_history": SMART_QUEUE_HISTORY_RETENTION_DAYS,
             "operation_logs": operation_log_retention.get("retention_days", LOG_RETENTION_DAYS),
-            "automation_history": SMART_QUEUE_HISTORY_RETENTION_DAYS,
-            "planner_history": SMART_QUEUE_HISTORY_RETENTION_DAYS,
+            "automation_history": SMART_QUEUE_HISTORY_RETENTION_DAYS, "planner_history": SMART_QUEUE_HISTORY_RETENTION_DAYS,
         },
         "operation_log_retention": operation_log_retention,
-        "retention_labels": {
-            "operation_logs": operation_logs.retention_label(operation_log_retention),
-        },
-        "database": _db_size(),
-        "admin": is_admin(current_user()),
+        "retention_labels": {"operation_logs": operation_logs.retention_label(operation_log_retention)},
+        "database": _db_size() if admin else None,
+        "admin": admin,
     }
 
 def active_default_download_path(profile: dict | None) -> str:
@@ -292,8 +283,12 @@ def _chunk_hashes(hashes: list[str], size: int = MOVE_BULK_MAX_HASHES) -> list[l
 
 
 def enqueue_bulk_parts(profile: dict, action_name: str, data: dict) -> list[dict]:
+    """Enqueue one or more non-empty torrent mutation batches."""
+    # Note: The backend rejects empty hashes even when frontend selection guards are bypassed.
     base_payload = enrich_bulk_payload(profile, action_name, data)
     hashes = base_payload.get("hashes") or []
+    if not hashes:
+        raise ValueError("At least one torrent hash is required")
     chunks = _chunk_hashes(hashes)
     if len(chunks) <= 1:
         job_id = enqueue(action_name, profile["id"], base_payload)

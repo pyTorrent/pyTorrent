@@ -157,13 +157,17 @@ def register_socketio_handlers(socketio) -> None:
         # Note: The handler only acknowledges the existing Socket.IO connection; it never touches rTorrent.
         if auth.enabled() and not auth.ensure_request_user():
             return {"ok": False, "error": "Authentication required"}
+        profile_id = int((data or {}).get("profile_id") or 0)
+        # Note: Diagnostic acknowledgements validate the requested profile before echoing its identifier.
+        if profile_id and auth.enabled() and not auth.can_access_profile(profile_id, auth.current_user_id()):
+            return {"ok": False, "error": "Profile access denied"}
         try:
             transport = str(socketio.server.transport(str(request.sid), namespace="/") or "unknown")
         except Exception:
             transport = "unknown"
         return {
             "ok": True,
-            "profile_id": int((data or {}).get("profile_id") or 0),
+            "profile_id": profile_id,
             "transport": transport,
             "server_time_ms": round(time.time() * 1000.0, 3),
         }

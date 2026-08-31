@@ -51,7 +51,7 @@ def register_auth_routes(bp):
         try:
             return _ok({"user": save_user(request.get_json(silent=True) or {})})
         except Exception as exc:
-            return jsonify({"ok": False, "error": str(exc)}), 400
+            return jsonify({"ok": False, "error": str(exc)}), (403 if isinstance(exc, PermissionError) else 400)
 
     @bp.put("/auth/users/<int:user_id>")
     def auth_users_update(user_id: int):
@@ -60,7 +60,7 @@ def register_auth_routes(bp):
         try:
             return _ok({"user": save_user(request.get_json(silent=True) or {}, user_id)})
         except Exception as exc:
-            return jsonify({"ok": False, "error": str(exc)}), 400
+            return jsonify({"ok": False, "error": str(exc)}), (403 if isinstance(exc, PermissionError) else 400)
 
     @bp.delete("/auth/users/<int:user_id>")
     def auth_users_delete(user_id: int):
@@ -73,7 +73,7 @@ def register_auth_routes(bp):
         except DeletionError as exc:
             return jsonify({"ok": False, "error": str(exc)}), 409
         except Exception as exc:
-            return jsonify({"ok": False, "error": str(exc)}), 400
+            return jsonify({"ok": False, "error": str(exc)}), (403 if isinstance(exc, PermissionError) else 400)
     @bp.get("/auth/users/<int:user_id>/tokens")
     def auth_user_tokens_list(user_id: int):
         if not auth_enabled():
@@ -88,7 +88,7 @@ def register_auth_routes(bp):
             data = request.get_json(silent=True) or {}
             return _ok({"token": create_api_token(user_id, str(data.get("name") or "API token"))})
         except Exception as exc:
-            return jsonify({"ok": False, "error": str(exc)}), 400
+            return jsonify({"ok": False, "error": str(exc)}), (403 if isinstance(exc, PermissionError) else 400)
 
     @bp.delete("/auth/users/<int:user_id>/tokens/<int:token_id>")
     def auth_user_tokens_delete(user_id: int, token_id: int):
@@ -100,5 +100,5 @@ def register_auth_routes(bp):
         except HTTPException:
             raise
         except Exception as exc:
-            return jsonify({"ok": False, "error": str(exc)}), 400
+            return jsonify({"ok": False, "error": str(exc)}), (403 if isinstance(exc, PermissionError) else 400)
 

@@ -4,10 +4,11 @@ import time
 from datetime import datetime, timezone
 from ..db import connect, utcnow, default_user_id
 from . import auth, rtorrent
-from .workers import enqueue
+from .workers import prepare_jobs, insert_prepared_jobs, dispatch_prepared_jobs
 
 
 def _age_minutes_from_epoch(value) -> int:
+    # Note: Seed-age calculations consume the torrent completion timestamp, never its creation timestamp.
     try:
         created = datetime.fromtimestamp(int(value or 0), timezone.utc)
         return max(0, int((datetime.now(timezone.utc) - created).total_seconds() // 60))
@@ -28,16 +29,14 @@ def _group_for_torrent(groups_by_name: dict[str, dict], torrent: dict) -> dict |
     return groups_by_name.get(name) if name else None
 
 
-def _record(user_id: int, profile_id: int, group: dict, torrent: dict, action: str, status: str, reason: str, details: dict | None = None) -> None:
+def _record(user_id: int, profile_id: int, group: dict, torrent: dict, action: str, status: str, reason: str, details: dict | None = None, *, actor_type: str = "user") -> None:
+    """Record Ratio Rules history without advancing assignment success state implicitly."""
+    # Note: Queueing and successful application are distinct states; only the worker completion callback marks an assignment applied.
     now = utcnow()
     with connect() as conn:
         conn.execute(
-            "INSERT INTO ratio_history(user_id,profile_id,group_id,group_name,torrent_hash,torrent_name,action,status,reason,details_json,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-            (user_id, profile_id, group.get("id"), group.get("name"), torrent.get("hash"), torrent.get("name"), action, status, reason, json.dumps(details or {}), now),
-        )
-        conn.execute(
-            "INSERT INTO ratio_assignments(profile_id,torrent_hash,group_id,group_name,applied_at,last_status,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(profile_id,torrent_hash) DO UPDATE SET group_id=excluded.group_id,group_name=excluded.group_name,applied_at=excluded.applied_at,last_status=excluded.last_status,updated_at=excluded.updated_at",
-            (profile_id, torrent.get("hash"), group.get("id"), group.get("name"), now if status == "applied" else None, status, now),
+            "INSERT INTO ratio_history(user_id,profile_id,group_id,group_name,torrent_hash,torrent_name,action,status,reason,details_json,actor_type,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            (user_id, profile_id, group.get("id"), group.get("name"), torrent.get("hash"), torrent.get("name"), action, status, reason, json.dumps(details or {}), "system" if actor_type == "system" else "user", now),
         )
 
 
@@ -53,9 +52,11 @@ def _should_apply(profile: dict, group: dict, torrent: dict) -> tuple[bool, str]
     wanted_ratio = max(min_ratio, max_ratio)
     seed_time = max(int(group.get("seed_time_minutes") or 0), int(group.get("min_seed_time_minutes") or 0))
     ratio_ok = float(torrent.get("ratio") or 0) >= wanted_ratio if wanted_ratio else True
-    seed_ok = _age_minutes_from_epoch(torrent.get("created")) >= seed_time if seed_time else True
+    seed_ok = _age_minutes_from_epoch(torrent.get("completed_at")) >= seed_time if seed_time and int(torrent.get("completed_at") or 0) > 0 else not seed_time
     if not ratio_ok:
         return False, "ratio threshold not reached"
+    if seed_time and int(torrent.get("completed_at") or 0) <= 0:
+        return False, "seed start time is not available yet"
     if not seed_ok:
         return False, "minimum seed time not reached"
     min_upload = int(group.get("active_upload_min_bytes") or 1024)
@@ -73,7 +74,7 @@ def check(profile: dict, user_id: int | None = None, system_execution: bool = Fa
         raise PermissionError("No write access to profile")
     with connect() as conn:
         groups = conn.execute("SELECT * FROM ratio_groups WHERE profile_id=? AND enabled=1 ORDER BY lower(name), id", (profile_id,)).fetchall()
-        already = {row["torrent_hash"] for row in conn.execute("SELECT torrent_hash FROM ratio_assignments WHERE profile_id=? AND last_status='applied'", (profile_id,)).fetchall()}
+        already = {row["torrent_hash"] for row in conn.execute("SELECT torrent_hash FROM ratio_assignments WHERE profile_id=? AND (last_status='applied' OR pending_job_id IS NOT NULL)", (profile_id,)).fetchall()}
     groups_by_name: dict[str, dict] = {}
     for group in groups:
         groups_by_name.setdefault(str(group.get("name") or ""), group)
@@ -109,11 +110,62 @@ def check(profile: dict, user_id: int | None = None, system_execution: bool = Fa
             payload["label"] = group.get("set_label") or group.get("name") or ""
         else:
             api_action = action if action in {"stop", "remove", "pause"} else "stop"
-        job_id = enqueue(api_action, profile_id, payload, user_id=executor_user_id, system_managed=system_execution)
+        payload["job_context"].update({"ratio_group_id": group.get("id"), "ratio_action": action, "torrent_name": torrent.get("name")})
+        # Note: Persist the job, pending assignment and queued audit row in one transaction before dispatch so a fast worker cannot be overwritten back to queued.
+        prepared = prepare_jobs([{
+            "action_name": api_action,
+            "profile_id": profile_id,
+            "payload": payload,
+            "user_id": executor_user_id,
+            "system_managed": system_execution,
+        }])
+        job_id = str(prepared[0]["job_id"])
+        now = utcnow()
+        with connect() as conn:
+            insert_prepared_jobs(conn, prepared)
+            conn.execute(
+                "INSERT INTO ratio_assignments(profile_id,torrent_hash,group_id,group_name,applied_at,last_status,pending_job_id,updated_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(profile_id,torrent_hash) DO UPDATE SET group_id=excluded.group_id,group_name=excluded.group_name,applied_at=NULL,last_status=excluded.last_status,pending_job_id=excluded.pending_job_id,updated_at=excluded.updated_at",
+                (profile_id, torrent.get("hash"), group.get("id"), group.get("name"), None, "queued", job_id, now),
+            )
+            conn.execute(
+                "INSERT INTO ratio_history(user_id,profile_id,group_id,group_name,torrent_hash,torrent_name,action,status,reason,details_json,actor_type,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                (executor_user_id, profile_id, group.get("id"), group.get("name"), torrent.get("hash"), torrent.get("name"), action, "queued", reason, json.dumps({"job_id": job_id, "api_action": api_action}), "system" if system_execution else "user", now),
+            )
+        dispatch_prepared_jobs(prepared)
         queued_jobs.append(job_id)
         applied += 1
-        _record(executor_user_id, profile_id, group, torrent, action, "applied", reason, {"job_id": job_id, "api_action": api_action})
     return {"applied": applied, "skipped": skipped, "job_ids": queued_jobs}
+
+
+def record_job_result(job_id: str, job: dict, payload: dict, success: bool, *, result: dict | None = None, error: str = "") -> None:
+    """Finalize a queued Ratio Rules assignment from the worker terminal state."""
+    # Note: A failed job clears pending_job_id and leaves applied_at empty, allowing the scheduler to retry on its next pass.
+    ctx = (payload or {}).get("job_context") or {}
+    if str(ctx.get("source") or "") != "ratio":
+        return
+    hashes = [str(value) for value in ((payload or {}).get("hashes") or []) if str(value or "").strip()]
+    if not hashes:
+        return
+    profile_id = int((job or {}).get("profile_id") or 0)
+    user_id = int((job or {}).get("user_id") or default_user_id())
+    actor_type = "system" if bool(int((job or {}).get("system_managed") or 0)) else "user"
+    group_id = int(ctx.get("ratio_group_id") or 0) or None
+    group_name = str(ctx.get("rule_name") or "")
+    action = str(ctx.get("ratio_action") or (job or {}).get("action") or "ratio")
+    now = utcnow()
+    with connect() as conn:
+        for torrent_hash in hashes:
+            row = conn.execute("SELECT pending_job_id FROM ratio_assignments WHERE profile_id=? AND torrent_hash=?", (profile_id, torrent_hash)).fetchone()
+            if row and str(row.get("pending_job_id") or "") not in {"", str(job_id)}:
+                continue
+            conn.execute(
+                "INSERT INTO ratio_assignments(profile_id,torrent_hash,group_id,group_name,applied_at,last_status,pending_job_id,updated_at) VALUES(?,?,?,?,?,?,NULL,?) ON CONFLICT(profile_id,torrent_hash) DO UPDATE SET group_id=excluded.group_id,group_name=excluded.group_name,applied_at=excluded.applied_at,last_status=excluded.last_status,pending_job_id=NULL,updated_at=excluded.updated_at",
+                (profile_id, torrent_hash, group_id, group_name, now if success else None, "applied" if success else "failed", now),
+            )
+            conn.execute(
+                "INSERT INTO ratio_history(user_id,profile_id,group_id,group_name,torrent_hash,torrent_name,action,status,reason,details_json,actor_type,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                (user_id, profile_id, group_id, group_name, torrent_hash, str(ctx.get("torrent_name") or ""), action, "applied" if success else "failed", "job completed" if success else (error or "job failed"), json.dumps({"job_id": job_id, "result": result or {}}), actor_type, now),
+            )
 
 
 _scheduler_started = False

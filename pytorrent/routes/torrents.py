@@ -69,37 +69,53 @@ def trackers_summary():
 
 
 @bp.get("/trackers/favicon/<path:domain>")
-
 @bp.get("/tracker-favicon/<path:domain>")
 def tracker_favicon(domain: str):
-    # Note: Favicon enablement follows the explicitly requested profile instead of a concurrently changing active profile.
+    # Note: GET is cache-only; it never performs outbound network I/O or mutates the favicon cache.
     profile = request_profile()
     prefs = preferences.get_preferences(profile_id=int(profile["id"])) if profile else preferences.get_preferences()
-    force = str(request.args.get("refresh") or "").lower() in {"1", "true", "yes", "force"}
-    # Note: Manual refresh must work from CLI even when tracker favicons are disabled in Preferences.
-    enabled = force or bool(prefs and prefs.get("tracker_favicons_enabled"))
-    static_url = tracker_cache.favicon_public_url(domain, enabled=enabled, create=True, force=force)
+    enabled = bool(prefs and prefs.get("tracker_favicons_enabled"))
+    static_url = tracker_cache.favicon_public_url(domain, enabled=enabled, create=False)
     if static_url:
-        # Note: The API only discovers/cache-warms the icon; the browser receives the file from /static/tracker_favicons/.
         return redirect(static_url, code=302)
     cached = tracker_cache.favicon_cache_row(domain)
     return jsonify({
         "ok": False,
         "error": "favicon not found",
         "domain": tracker_cache.tracker_domain(domain),
-        "enabled": bool(enabled),
+        "enabled": enabled,
         "cached_error": (cached or {}).get("error") if cached else None,
     }), 404
 
 
-
 @bp.get("/trackers/favicon")
 def tracker_favicon_query():
-    # Note: Query-string alias makes cache warming easier from shell scripts where path routing/proxies may differ.
+    # Note: The query alias is also cache-only, matching the path-based GET contract.
     domain = str(request.args.get("domain") or "").strip()
     if not domain:
         return jsonify({"ok": False, "error": "domain is required"}), 400
     return tracker_favicon(domain)
+
+
+@bp.post("/trackers/favicon")
+def tracker_favicon_refresh():
+    # Note: Explicit refresh requires profile write access and only fetches a tracker domain already observed in that profile.
+    profile = request_profile(require_write=True)
+    if not profile:
+        return jsonify({"ok": False, "error": "No profile"}), 400
+    payload = request.get_json(silent=True) or {}
+    domain = str(payload.get("domain") or "").strip()
+    if not domain:
+        return jsonify({"ok": False, "error": "domain is required"}), 400
+    if not tracker_cache.domain_known_for_profile(int(profile["id"]), domain):
+        return jsonify({"ok": False, "error": "Tracker domain is not known for this profile"}), 403
+    try:
+        static_url = tracker_cache.favicon_public_url(domain, enabled=True, create=True, force=True)
+    except PermissionError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 403
+    if static_url:
+        return ok({"url": static_url, "domain": tracker_cache.tracker_domain(domain)})
+    return jsonify({"ok": False, "error": "favicon not found"}), 404
 
 
 @bp.get("/torrent-stats")
@@ -745,13 +761,19 @@ def torrent_action(action_name: str):
 
 @bp.post("/torrents/create")
 def torrent_create():
-    profile = request_profile()
+    # Note: Hashing local profile data is a write-capability operation even when the generated torrent is only downloaded to the browser.
+    profile = request_profile(require_write=True)
     if not profile:
         return jsonify({"ok": False, "error": "No profile"}), 400
     form = request.form if request.content_type and request.content_type.startswith("multipart/form-data") else (request.get_json(silent=True) or {})
     try:
+        # Note: Torrent creation may hash only local files inside this profile's backend-owned download root.
+        if bool(profile.get("is_remote")):
+            raise ValueError("Create Torrent from a local path is unavailable for remote rTorrent profiles")
+        root = rtorrent.default_download_path(profile)
+        source_path = path_policy.require_local_path(str(form.get("source_path") or ""), [root])
         created = torrent_creator.build_torrent(
-            source_path=form.get("source_path", ""),
+            source_path=str(source_path),
             trackers=form.get("trackers", ""),
             comment=form.get("comment", ""),
             source=form.get("source", ""),
@@ -769,6 +791,8 @@ def torrent_create():
         headers["X-PyTorrent-Info-Hash"] = created["info_hash"]
         headers["X-PyTorrent-Create-Message"] = f"Created {created['filename']} ({created['file_count']} file(s))"
         return Response(created["data"], headers=headers)
+    except PermissionError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 403
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
 

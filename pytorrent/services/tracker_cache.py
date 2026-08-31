@@ -4,14 +4,12 @@ import mimetypes
 import re
 import time
 import threading
-import ssl
-import urllib.error
 import urllib.parse
-import urllib.request
 from html.parser import HTMLParser
 from pathlib import Path
 from ..config import BASE_DIR
 from ..db import connect, utcnow
+from .safe_http import fetch_public
 
 TRACKER_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60
 FAVICON_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60
@@ -219,32 +217,17 @@ def favicon_public_url(domain: str, enabled: bool = True, create: bool = False, 
     return f"{PUBLIC_FAVICON_BASE}/{urllib.parse.quote(str(rel).replace(chr(92), '/'))}"
 
 def _fetch(url: str, limit: int = 262144) -> tuple[bytes, str, str]:
-    # Note: Favicon discovery uses browser-like headers and a certificate fallback, because tracker login pages/CDNs often reject minimal Python requests.
-    req = urllib.request.Request(
+    # Note: Favicon discovery permits only publicly routable HTTP(S) targets and keeps TLS verification enabled on every request and redirect.
+    return fetch_public(
         url,
         headers={
             "User-Agent": "Mozilla/5.0 (compatible; pyTorrent favicon fetcher)",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/png,image/svg+xml,image/*,*/*;q=0.8",
             "Connection": "close",
         },
+        timeout=8,
+        limit=limit,
     )
-
-    def _read(context=None):
-        with urllib.request.urlopen(req, timeout=8, context=context) as resp:
-            data = resp.read(limit + 1)
-            if len(data) > limit:
-                data = data[:limit]
-            content_type = str(resp.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
-            final_url = str(resp.geturl() or url)
-            return data, content_type, final_url
-
-    try:
-        return _read()
-    except urllib.error.URLError as exc:
-        reason = getattr(exc, "reason", None)
-        if isinstance(reason, ssl.SSLError) or "CERTIFICATE_VERIFY_FAILED" in str(exc):
-            return _read(ssl._create_unverified_context())
-        raise
 
 
 def _is_icon(data: bytes, content_type: str, url: str) -> bool:
@@ -460,6 +443,14 @@ def cached_domains_for_profile(profile_id: int, limit: int = 200) -> list[str]:
                 domains.append(domain)
     return domains[:max(1, int(limit or 200))]
 
+
+
+def domain_known_for_profile(profile_id: int, domain: str) -> bool:
+    # Note: Manual favicon refresh is restricted to tracker domains already observed for the selected profile.
+    clean = tracker_domain(domain)
+    if not clean:
+        return False
+    return clean in set(cached_domains_for_profile(int(profile_id), limit=5000))
 
 def warm_favicon_cache(domains: list[str], enabled: bool = True, limit: int = 20, force: bool = False) -> dict:
     """Warm missing or stale tracker favicons for a bounded list of domains."""

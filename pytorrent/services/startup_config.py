@@ -30,7 +30,7 @@ def _log_status(profile: dict, status: str, message: str, *, error: str = "", re
         source="system",
         action="rtorrent_config",
         details={"status": status, "error": error, "result": result or {}},
-        user_id=int(profile.get("user_id") or 0) or None,
+        actor_type="system",
     )
 
 
@@ -116,6 +116,7 @@ def schedule_startup_config_apply(socketio, delay_seconds: int = 60, retry_secon
                     source="system",
                     action="rtorrent_config",
                     details={"error": str(exc)},
+                    actor_type="system",
                 )
                 socketio.emit("rtorrent_config_applied", {"ok": False, "profile_id": int(failed_profile_id or 0), "error": str(exc)}, to=f"profile:{int(failed_profile_id)}" if failed_profile_id else None)
             socketio.sleep(max(5, int(retry_seconds)))

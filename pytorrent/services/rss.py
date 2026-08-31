@@ -1,7 +1,6 @@
 from __future__ import annotations
 import re
 import time
-import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone, timedelta
 from email.utils import parsedate_to_datetime
@@ -9,6 +8,7 @@ from typing import Iterable
 
 from ..db import connect, default_user_id, utcnow
 from . import auth, rtorrent
+from .safe_http import fetch_public
 from .workers import enqueue
 
 RSS_FETCH_LIMIT = 2_000_000
@@ -70,9 +70,9 @@ def parse_feed(raw: bytes) -> list[dict]:
 
 
 def fetch_feed(url: str) -> list[dict]:
-    req = urllib.request.Request(url, headers={"User-Agent": "pyTorrent RSS"})
-    with urllib.request.urlopen(req, timeout=12) as res:
-        raw = res.read(RSS_FETCH_LIMIT)
+    """Fetch an RSS/Atom feed only from public HTTP(S) destinations."""
+    # Note: DNS resolution and every redirect hop are revalidated to block loopback/private/link-local SSRF targets.
+    raw, _content_type, _final_url = fetch_public(url, timeout=12, limit=RSS_FETCH_LIMIT, headers={"User-Agent": "pyTorrent RSS"})
     return parse_feed(raw)
 
 
@@ -121,16 +121,30 @@ def matches_rule(rule: dict, item: dict) -> tuple[bool, str]:
     return True, "matched"
 
 
-def _log(profile_id: int, feed_id: int | None, rule_id: int | None, item: dict, status: str, message: str) -> None:
+def _log(profile_id: int, feed_id: int | None, rule_id: int | None, item: dict, status: str, message: str, *, job_id: str | None = None) -> int | None:
+    """Write one RSS history row and return its id when accepted."""
+    # Note: Callers reserve a queued row before enqueueing so the unique index prevents duplicate jobs, not merely duplicate history.
     with connect() as conn:
         try:
-            conn.execute(
-                "INSERT INTO rss_history(profile_id,feed_id,rule_id,title,link,status,message,created_at) VALUES(?,?,?,?,?,?,?,?)",
-                (profile_id, feed_id, rule_id, item.get("title"), item.get("link"), status, message, utcnow()),
+            cur = conn.execute(
+                "INSERT INTO rss_history(profile_id,feed_id,rule_id,title,link,status,message,job_id,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                (profile_id, feed_id, rule_id, item.get("title"), item.get("link"), status, message, job_id, utcnow()),
             )
+            return int(cur.lastrowid)
         except Exception:
-            # Note: Duplicate successful RSS matches are ignored to prevent recurring duplicate downloads.
-            pass
+            return None
+
+
+def _set_history_job(history_id: int, job_id: str) -> None:
+    # Note: The history row is linked after enqueue succeeds without changing its pre-enqueue reservation status.
+    with connect() as conn:
+        conn.execute("UPDATE rss_history SET job_id=? WHERE id=? AND status='queued'", (str(job_id), int(history_id)))
+
+
+def _fail_history_reservation(history_id: int, message: str) -> None:
+    # Note: Failed enqueue reservations become retryable because the RSS unique index covers only queued/added rows.
+    with connect() as conn:
+        conn.execute("UPDATE rss_history SET status='failed', message=? WHERE id=? AND status='queued'", (str(message or "enqueue failed"), int(history_id)))
 
 
 def check(profile: dict, user_id: int | None = None, only_due: bool = False, system_execution: bool = False) -> dict:
@@ -165,9 +179,22 @@ def check(profile: dict, user_id: int | None = None, only_due: bool = False, sys
                     if not link:
                         _log(profile_id, feed["id"], rule["id"], item, "skipped", "missing link")
                         continue
-                    enqueue("add_magnet", profile_id, {"uri": link, "start": bool(rule["start"]), "directory": rule.get("save_path") or rtorrent.default_download_path(profile), "label": rule.get("label") or "", "source": "rss"}, user_id=executor_user_id, system_managed=system_execution)
-                    queued += 1
-                    _log(profile_id, feed["id"], rule["id"], item, "queued", reason)
+                    history_id = _log(profile_id, feed["id"], rule["id"], item, "queued", reason)
+                    if not history_id:
+                        continue
+                    try:
+                        payload = {
+                            "uri": link, "start": bool(rule["start"]),
+                            "directory": rule.get("save_path") or rtorrent.default_download_path(profile),
+                            "label": rule.get("label") or "", "source": "rss",
+                            "job_context": {"source": "rss", "rss_history_id": history_id, "feed_id": feed.get("id"), "rule_id": rule.get("id"), "title": item.get("title"), "hash_count": 0},
+                        }
+                        job_id = enqueue("add_magnet", profile_id, payload, user_id=executor_user_id, system_managed=system_execution)
+                        _set_history_job(history_id, job_id)
+                        queued += 1
+                    except Exception as exc:
+                        _fail_history_reservation(history_id, str(exc))
+                        raise
             with connect() as conn:
                 conn.execute("UPDATE rss_feeds SET last_error=NULL,last_checked_at=?,next_check_at=?,updated_at=? WHERE id=?", (now, next_check, now, feed["id"]))
         except Exception as exc:
@@ -175,6 +202,22 @@ def check(profile: dict, user_id: int | None = None, only_due: bool = False, sys
             with connect() as conn:
                 conn.execute("UPDATE rss_feeds SET last_error=?,last_checked_at=?,next_check_at=?,updated_at=? WHERE id=?", (str(exc), now, next_check, now, feed["id"]))
     return {"queued": queued, "tested": tested, "feeds_checked": len(feeds), "errors": errors}
+
+
+def record_job_result(job_id: str, job: dict, payload: dict, success: bool, *, result: dict | None = None, error: str = "") -> None:
+    """Finalize the RSS history reservation linked to a terminal add job."""
+    # Note: Worker completion is the single authority that changes queued RSS history to added or failed.
+    ctx = (payload or {}).get("job_context") or {}
+    if str(ctx.get("source") or "") != "rss":
+        return
+    history_id = int(ctx.get("rss_history_id") or 0)
+    if not history_id:
+        return
+    with connect() as conn:
+        conn.execute(
+            "UPDATE rss_history SET status=?, message=?, job_id=? WHERE id=? AND (job_id=? OR job_id IS NULL)",
+            ("added" if success else "failed", "job completed" if success else (error or "job failed"), str(job_id), history_id, str(job_id)),
+        )
 
 
 def test_rule(feed_url: str, rule: dict) -> dict:

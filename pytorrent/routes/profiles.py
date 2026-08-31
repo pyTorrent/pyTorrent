@@ -12,7 +12,9 @@ def profiles_list():
     for row in preferences.list_profiles():
         item = dict(row)
         # Note: Frontend actions can hide write-only operations without trusting this flag; backend still enforces permissions.
+        item["can_read"] = auth.can_access_profile(int(item.get("id") or 0), auth.current_user_id() or default_user_id())
         item["can_write"] = auth.can_write_profile(int(item.get("id") or 0), auth.current_user_id() or default_user_id())
+        item["capabilities"] = auth.capabilities(int(item.get("id") or 0), auth.current_user_id() or default_user_id())
         stats = preferences.get_profile_runtime_stats(int(item.get("id") or 0))
         if stats:
             stats["total_size_h"] = human_size(stats.get("total_size_bytes"))
@@ -27,11 +29,16 @@ def profiles_list():
         profiles.append(item)
         # Note: Profile picker health/version data comes from the existing poller snapshot, avoiding a second HTTP render pass and any live SCGI work.
         diagnostics.append(passive_profile_diagnostics(item))
+    active_row = preferences.active_profile()
+    active_id = int((active_row or {}).get("id") or 0)
+    # Note: Return the same backend-enriched capability object for the active profile so admin-only UX never depends on a raw profile row.
+    active_item = next((item for item in profiles if int(item.get("id") or 0) == active_id), None) if active_id else None
     return ok({
         "profiles": profiles,
         "diagnostics": diagnostics,
-        "active": preferences.active_profile(),
+        "active": active_item,
         "can_manage_profiles": (not auth.enabled()) or auth.is_admin(),
+        "capabilities": auth.capabilities(active_id or None),
     })
 
 
@@ -86,7 +93,8 @@ def profiles_activate(profile_id: int):
         poller_control.request_immediate_poll(profile_id)
         return ok({
             "profile": profile,
-            "can_write": auth.can_write_profile(int(profile.get("id") or 0), default_user_id()),
+            "can_write": auth.can_write_profile(int(profile.get("id") or 0), auth.current_user_id() or default_user_id()),
+            "capabilities": auth.capabilities(int(profile.get("id") or 0), auth.current_user_id() or default_user_id()),
             "status_cache": cached_status,
             "status_cache_ready": cached_status is not None,
             "port_check_cache": cached_port_check,

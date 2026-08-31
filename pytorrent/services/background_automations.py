@@ -72,6 +72,7 @@ def _log_status(profile_id: int, status: str, message: str, *, error: str = "") 
         source="system",
         action="background_automation",
         details={"status": status, "error": error},
+        actor_type="system",
     )
 
 
@@ -98,7 +99,7 @@ def _run_profile(socketio, profile: dict[str, Any]) -> None:
                 source="system",
                 action="background_automation",
                 details={"applied": len(result.get("applied") or []), "batches": len(result.get("batches") or []), "result": result},
-                user_id=_audit_user_id(profile),
+                actor_type="system",
             )
             emit_profile_event(socketio, "automation_update", result, profile_id)
     except Exception as exc:
@@ -110,7 +111,7 @@ def _run_profile(socketio, profile: dict[str, Any]) -> None:
             source="system",
             action="background_automation",
             details={"error": str(exc)},
-            user_id=_audit_user_id(profile),
+            actor_type="system",
         )
     finally:
         lock.release()

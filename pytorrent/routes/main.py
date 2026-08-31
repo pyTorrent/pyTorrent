@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import json
-from urllib.parse import quote
+from urllib.parse import quote, unquote, urlsplit
 import queue
 import tempfile
 import threading
@@ -106,6 +106,7 @@ def _frontend_bootstrap_config(prefs: dict, profile: dict | None, current_user: 
         "canManageProfiles": 1 if (not auth.enabled() or auth.is_admin(current_user)) else 0,
         "activeProfile": profile.get("id") if profile else None,
         "activeProfileCanWrite": bool(auth.can_write_profile(int(profile.get("id") or 0))) if profile else None,
+        "capabilities": auth.capabilities(int(profile.get("id") or 0) if profile else None),
         "tableColumns": _bootstrap_json_value(prefs.get("table_columns_json"), {}, dict),
         "torrentSort": _bootstrap_json_value(prefs.get("torrent_sort_json"), {}, dict),
         "activeFilter": str(prefs.get("active_filter") or "all"),
@@ -309,12 +310,32 @@ def favicon_ico():
     return response
 
 
+def _safe_login_next(value: str | None) -> str:
+    """Accept only same-site relative login destinations."""
+    # Note: Reject absolute, protocol-relative and encoded backslash/control variants so browsers cannot normalize ?next= into an external redirect.
+    target = str(value or "").strip()
+    decoded = unquote(target)
+    if (
+        not target
+        or not target.startswith("/")
+        or target.startswith("//")
+        or decoded.startswith("//")
+        or "\\" in decoded
+        or any(ord(char) < 32 for char in decoded)
+    ):
+        return url_for("main.index")
+    parsed = urlsplit(target)
+    if parsed.scheme or parsed.netloc:
+        return url_for("main.index")
+    return target
+
+
 @bp.route("/login", methods=["GET", "POST"])
 def login():
     # Note: When optional authentication is disabled, /login is intentionally unavailable.
     if not auth.enabled():
         abort(404)
-    next_url = request.args.get("next") or url_for("main.index")
+    next_url = _safe_login_next(request.args.get("next"))
     if auth.uses_external_provider():
         user = auth.authenticate_external_user()
         if user:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 from functools import wraps
 from typing import Any
+import ipaddress
 import secrets, re
 from urllib.parse import urlparse
 from flask import abort, g, has_request_context, jsonify, redirect, request, session, url_for
@@ -115,7 +116,7 @@ def external_auth_summary() -> dict[str, Any]:
         "auto_create_role": AUTH_PROXY_AUTO_CREATE_ROLE,
         "auto_create_permission": AUTH_PROXY_AUTO_CREATE_PERMISSION,
         "bypass_enabled": bool(AUTH_BYPASS_HOSTS),
-        "bypass_hosts": sorted(AUTH_BYPASS_HOSTS),
+        "bypass_addresses": sorted(AUTH_BYPASS_HOSTS),
         "bypass_user": AUTH_BYPASS_USER,
         "password_editable": not uses_external_provider(),
     }
@@ -125,17 +126,43 @@ def password_hash(password: str) -> str:
     return generate_password_hash(password or "")
 
 
-def _host_matches_bypass(host: str) -> bool:
-    clean = str(host or "").strip().lower()
+def _bypass_address_matches(remote_addr: str) -> bool:
+    """Match a trusted client address/CIDR without consulting the client-controlled Host header."""
+    # Note: request.remote_addr is already proxy-adjusted only when ProxyFix was explicitly configured by the operator.
+    clean = str(remote_addr or "").strip()
     if not clean:
         return False
-    return clean in AUTH_BYPASS_HOSTS or clean.split(":", 1)[0] in AUTH_BYPASS_HOSTS
+    try:
+        client_ip = ipaddress.ip_address(clean)
+    except ValueError:
+        return False
+    for entry in AUTH_BYPASS_HOSTS:
+        candidate = str(entry or "").strip()
+        if not candidate:
+            continue
+        if candidate.startswith("[") and "]" in candidate:
+            candidate = candidate[1:candidate.index("]")]
+        elif candidate.count(":") == 1 and "/" not in candidate:
+            host, maybe_port = candidate.rsplit(":", 1)
+            if maybe_port.isdigit():
+                candidate = host
+        try:
+            if "/" in candidate:
+                if client_ip in ipaddress.ip_network(candidate, strict=False):
+                    return True
+            elif client_ip == ipaddress.ip_address(candidate):
+                return True
+        except ValueError:
+            continue
+    return False
 
 
 def auth_bypassed_request() -> bool:
+    """Allow configured auth bypass only for trusted network addresses."""
+    # Note: Host and forwarded headers are never interpreted here; trusted-proxy handling belongs to configured ProxyFix.
     if not enabled() or not AUTH_BYPASS_HOSTS or not has_request_context():
         return False
-    return _host_matches_bypass(request.host)
+    return _bypass_address_matches(request.remote_addr or "")
 
 
 
@@ -306,6 +333,32 @@ def require_profile_read(profile_id: int | None) -> None:
 def require_profile_write(profile_id: int | None) -> None:
     if enabled() and not can_write_profile(profile_id):
         raise PermissionError("Read-only profile access")
+
+
+def capabilities(profile_id: int | None = None, user_id: int | None = None) -> dict[str, bool]:
+    """Return backend-owned authorization capabilities for UI hints and API clients."""
+    # Note: These flags mirror backend guards; JavaScript may hide controls but never grants authority from them.
+    uid = int(user_id or current_user_id() or default_user_id())
+    if not enabled():
+        can_admin = True
+    else:
+        with connect() as conn:
+            user = conn.execute("SELECT role,is_active FROM users WHERE id=?", (uid,)).fetchone()
+        can_admin = bool(user and user.get("role") == "admin" and int(user.get("is_active") or 0))
+    can_read = bool(profile_id and can_access_profile(profile_id, uid)) if profile_id else False
+    can_write = bool(profile_id and can_write_profile(profile_id, uid)) if profile_id else False
+    return {
+        "can_read": can_read,
+        "can_write": can_write,
+        "can_admin": bool(can_admin),
+        "manage_profiles": bool(can_admin),
+        "manage_users": bool(can_admin),
+        "manage_job_scheduling": bool(can_admin),
+        "manage_app_backups": bool(can_admin),
+        "manage_api_tokens": bool(can_admin or uid == current_user_id()),
+        "manage_profile_backup": can_write,
+        "manage_operation_logs": can_write,
+    }
 
 
 def login_user(username: str, password: str) -> dict[str, Any] | None:
@@ -581,7 +634,8 @@ def delete_user(user_id: int) -> dict[str, object]:
             ).fetchone()
             if int((other or {}).get("n") or 0) == 0:
                 raise ValueError("Cannot delete the last active administrator")
-        deleted = purge_user(conn, uid)
+        # Note: Owned profiles are reassigned to the deleting administrator instead of being silently cascaded with the account.
+        deleted = purge_user(conn, uid, reassign_profile_owner_to=current_user_id())
     # Note: User deletion can remove several owned profiles outside preferences.delete_profile(), so clear every process-local profile cache after the DB transaction commits.
     deleted_profile_ids = [int(profile_id) for profile_id in (deleted.get("deleted_profiles") or [])]
     if deleted_profile_ids:
@@ -718,7 +772,8 @@ def _request_api_token() -> str:
     header = request.headers.get("Authorization") or ""
     if header.lower().startswith("bearer "):
         return header.split(None, 1)[1].strip()
-    return (request.headers.get("X-API-Key") or request.args.get("api_key") or "").strip()
+    # Note: API keys are accepted only in headers so secrets do not leak through URLs, logs, history or referrers.
+    return (request.headers.get("X-API-Key") or "").strip()
 
 
 def install_guards(app) -> None:
@@ -761,7 +816,10 @@ def install_guards(app) -> None:
                 return jsonify({"ok": False, "error": "Authentication required"}), 401
             return redirect(url_for("main.login"))
         if request.path.startswith("/api/auth/users") and not is_admin(user):
-            return jsonify({"ok": False, "error": "Admin only"}), 403
+            # Note: Non-admins may manage only their own token subresource; user-account administration remains admin-only.
+            match = re.fullmatch(r"/api/auth/users/(\d+)/tokens(?:/\d+)?", request.path.rstrip("/"))
+            if not match or int(match.group(1)) != int(current_user_id() or 0):
+                return jsonify({"ok": False, "error": "Admin only", "code": "admin_required"}), 403
         if request.path.startswith(PROFILE_READ_PREFIXES):
             profile_id = _request_profile_id()
             if profile_id and not can_access_profile(profile_id):

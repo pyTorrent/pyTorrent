@@ -114,12 +114,76 @@ def _details_summary(details: dict) -> str:
     return ", ".join(parts)
 
 
-def _row_to_public(row: dict) -> dict:
+_TRANSFER_PRIVATE_DETAIL_KEYS = {
+    "target_profile_id",
+    "target_path",
+    "target_allowed_roots",
+    "moved_to",
+    "load_directory",
+}
+
+
+def _find_transfer_target_profile_id(value: Any) -> int:
+    """Find a destination profile identifier inside nested transfer log details."""
+    # Note: Job details can place target_profile_id in a nested context or result, so authorization cannot inspect only the top level.
+    if isinstance(value, dict):
+        if "target_profile_id" in value:
+            try:
+                return int(value.get("target_profile_id") or 0)
+            except (TypeError, ValueError):
+                pass
+        for item in value.values():
+            target_id = _find_transfer_target_profile_id(item)
+            if target_id:
+                return target_id
+    elif isinstance(value, list):
+        for item in value:
+            target_id = _find_transfer_target_profile_id(item)
+            if target_id:
+                return target_id
+    return 0
+
+
+def _scrub_transfer_private_details(value: Any) -> Any:
+    """Remove destination-only identifiers and paths from nested transfer log details."""
+    # Note: Source-only readers must not recover target profile paths from nested result or item objects.
+    if isinstance(value, dict):
+        return {
+            key: _scrub_transfer_private_details(item)
+            for key, item in value.items()
+            if key not in _TRANSFER_PRIVATE_DETAIL_KEYS
+        }
+    if isinstance(value, list):
+        return [_scrub_transfer_private_details(item) for item in value]
+    return value
+
+
+def _row_to_public(row: dict, *, viewer_user_id: int | None = None, conservative_transfer: bool = False) -> dict:
+    """Decorate one log row with parsed details and explicit execution identity."""
+    # Note: System identity and destination-profile redaction are resolved by the backend before log details reach clients.
     item = dict(row)
+    if str(item.get("actor_type") or "user") == "system":
+        item["executed_by_user_id"] = None
+        item["actor_label"] = "System"
+    else:
+        item["executed_by_user_id"] = item.get("user_id")
+        item["actor_label"] = "User"
     try:
         item["details"] = json.loads(item.get("details_json") or "{}")
     except Exception:
         item["details"] = {}
+    if str(item.get("action") or "") == "profile_transfer":
+        target_id = _find_transfer_target_profile_id(item["details"])
+        can_read_target = False
+        if target_id and not conservative_transfer:
+            try:
+                can_read_target = auth.can_access_profile(target_id, viewer_user_id)
+            except Exception:
+                can_read_target = False
+        if target_id and not can_read_target:
+            item["details"] = _scrub_transfer_private_details(item["details"])
+            item["details"]["target_profile_hidden"] = True
+            item["details_json"] = json.dumps(item["details"], ensure_ascii=False, sort_keys=True)
     item["details_h"] = _details_summary(item["details"])
     return item
 
@@ -263,19 +327,21 @@ def save_settings(profile_id: int, data: dict, user_id: int | None = None) -> di
     return get_settings(profile_id, user_id)
 
 
-def record(profile_id: int | None, event_type: str, message: str, *, severity: str = "info", source: str = "system", torrent_hash: str | None = None, torrent_name: str | None = None, action: str | None = None, details: dict | None = None, user_id: int | None = None) -> int:
+def record(profile_id: int | None, event_type: str, message: str, *, severity: str = "info", source: str = "system", torrent_hash: str | None = None, torrent_name: str | None = None, action: str | None = None, details: dict | None = None, user_id: int | None = None, actor_type: str = "user") -> int:
     """Insert one operation log row and lazily run retention for its category when due."""
+    # Note: actor_type separates scheduler/system execution from the fallback user id required by legacy database rows.
     now = utcnow()
     user_id = _user_id(user_id)
+    actor_type = "system" if str(actor_type or "").lower() == "system" else "user"
     event_type_s = str(event_type)
     source_s = str(source or "system")
     with connect() as conn:
         cur = conn.execute(
             """
-            INSERT INTO operation_logs(user_id, profile_id, event_type, severity, source, torrent_hash, torrent_name, action, message, details_json, created_at)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?)
+            INSERT INTO operation_logs(user_id, profile_id, event_type, severity, source, torrent_hash, torrent_name, action, message, details_json, actor_type, created_at)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
             """,
-            (user_id, int(profile_id or 0) or None, event_type_s, str(severity or "info"), source_s, torrent_hash, torrent_name, action, str(message), _details(details), now),
+            (user_id, int(profile_id or 0) or None, event_type_s, str(severity or "info"), source_s, torrent_hash, torrent_name, action, str(message), _details(details), actor_type, now),
         )
         row_id = int(cur.lastrowid)
     try:
@@ -289,7 +355,8 @@ def record(profile_id: int | None, event_type: str, message: str, *, severity: s
             with connect() as conn:
                 created = conn.execute("SELECT * FROM operation_logs WHERE id=?", (row_id,)).fetchone()
             if created:
-                _emit_created_log(int(profile_id), _row_to_public(created))
+                # Note: One room can contain source-only readers, so live transfer logs use the conservative redacted representation.
+                _emit_created_log(int(profile_id), _row_to_public(created, conservative_transfer=True))
         except Exception:
             # Note: Live delivery is best-effort and must never make log persistence fail.
             pass
@@ -354,7 +421,7 @@ def _result_items_by_hash(result: dict) -> dict[str, dict]:
     return {str(item.get("hash")): item for item in rows if isinstance(item, dict) and item.get("hash")}
 
 
-def record_job_event(profile_id: int, action: str, status: str, payload: dict | None, result: dict | None = None, error: str = "", job_id: str | None = None, user_id: int | None = None) -> None:
+def record_job_event(profile_id: int, action: str, status: str, payload: dict | None, result: dict | None = None, error: str = "", job_id: str | None = None, user_id: int | None = None, actor_type: str = "user") -> None:
     """Record queued, running and terminal job states with per-torrent context when available."""
     payload = payload or {}
     result = result or {}
@@ -390,10 +457,10 @@ def record_job_event(profile_id: int, action: str, status: str, payload: dict | 
         name = str(payload.get("name") or payload.get("filename") or payload.get("uri") or "torrent")[:300]
         status_label = {"queued": "queued", "started": "started", "done": "added", "failed": "failed", "retry": "retry scheduled", "cancelled": "cancelled"}.get(str(status), str(status))
         msg = f"{_job_action_label(action)} {status_label}: {name}"
-        record(profile_id, "torrent_added" if status == "done" else event_type, msg, severity=severity, source=source, action=action, details=base_details, user_id=user_id)
+        record(profile_id, "torrent_added" if status == "done" else event_type, msg, severity=severity, source=source, action=action, details=base_details, user_id=user_id, actor_type=actor_type)
         return
     if not hashes:
-        record(profile_id, event_type, f"{_job_action_label(action)} {status}", severity=severity, source=source, action=action, details=base_details, user_id=user_id)
+        record(profile_id, event_type, f"{_job_action_label(action)} {status}", severity=severity, source=source, action=action, details=base_details, user_id=user_id, actor_type=actor_type)
         return
     for h in hashes:
         item = by_hash.get(str(h)) or {}
@@ -403,14 +470,14 @@ def record_job_event(profile_id: int, action: str, status: str, payload: dict | 
         if result_item.get("skipped"):
             row_details["skipped"] = result_item.get("skipped")
             row_details["skipped_reason"] = result_item.get("skipped_reason")
-        record(profile_id, "torrent_removed" if action == "remove" and status == "done" else event_type, f"{_job_action_label(action)} {status}: {name}", severity=severity, source=source, torrent_hash=str(h), torrent_name=name, action=action, details=row_details, user_id=user_id)
+        record(profile_id, "torrent_removed" if action == "remove" and status == "done" else event_type, f"{_job_action_label(action)} {status}: {name}", severity=severity, source=source, torrent_hash=str(h), torrent_name=name, action=action, details=row_details, user_id=user_id, actor_type=actor_type)
 
 
-def record_worker_event(profile_id: int, action: str, status: str, message: str, *, payload: dict | None = None, job_id: str | None = None, user_id: int | None = None, error: str = "", details: dict | None = None) -> None:
+def record_worker_event(profile_id: int, action: str, status: str, message: str, *, payload: dict | None = None, job_id: str | None = None, user_id: int | None = None, error: str = "", details: dict | None = None, actor_type: str = "user") -> None:
     """Log worker-only lifecycle events that do not execute the normal job action path."""
     payload = payload or {}
     merged = {"job_id": job_id, "status": status, "error": error, "payload": payload, **(details or {})}
-    record(profile_id, _job_event_type(status), message, severity=_job_severity(status), source="worker", action=action, details=merged, user_id=user_id)
+    record(profile_id, _job_event_type(status), message, severity=_job_severity(status), source="worker", action=action, details=merged, user_id=user_id, actor_type=actor_type)
 
 
 def _torrent_complete(row: dict | None) -> bool:
@@ -441,10 +508,10 @@ def record_cache_diff(profile_id: int, added: list[dict], removed: list[str], up
     """Record torrent cache changes detected by the poller without depending on manual jobs."""
     # Note: This covers full-list polling; live-only completion patches are handled by the same transition logic below.
     for row in added or []:
-        record(profile_id, "torrent_added", f"Torrent added: {row.get('name') or row.get('hash')}", source="poller", torrent_hash=row.get("hash"), torrent_name=row.get("name"), details={"size": row.get("size"), "path": row.get("path"), "label": row.get("label"), "tracker": row.get("tracker")})
+        record(profile_id, "torrent_added", f"Torrent added: {row.get('name') or row.get('hash')}", source="poller", actor_type="system", torrent_hash=row.get("hash"), torrent_name=row.get("name"), details={"size": row.get("size"), "path": row.get("path"), "label": row.get("label"), "tracker": row.get("tracker")})
     for h in removed or []:
         old = old_rows.get(str(h)) or {}
-        record(profile_id, "torrent_removed", f"Torrent removed: {old.get('name') or h}", source="poller", torrent_hash=str(h), torrent_name=old.get("name"), details={"path": old.get("path"), "label": old.get("label"), "tracker": old.get("tracker")})
+        record(profile_id, "torrent_removed", f"Torrent removed: {old.get('name') or h}", source="poller", actor_type="system", torrent_hash=str(h), torrent_name=old.get("name"), details={"path": old.get("path"), "label": old.get("label"), "tracker": old.get("tracker")})
     for patch in updated or []:
         h = str(patch.get("hash") or "")
         old = old_rows.get(h) or {}
@@ -452,14 +519,14 @@ def record_cache_diff(profile_id: int, added: list[dict], removed: list[str], up
         was_complete = _torrent_complete(old)
         is_complete = _torrent_complete(merged)
         if h and not was_complete and is_complete:
-            record(profile_id, "torrent_completed", f"Torrent completed: {old.get('name') or patch.get('name') or h}", source="poller", torrent_hash=h, torrent_name=old.get("name") or patch.get("name"), details=_torrent_detail(old, patch))
+            record(profile_id, "torrent_completed", f"Torrent completed: {old.get('name') or patch.get('name') or h}", source="poller", actor_type="system", torrent_hash=h, torrent_name=old.get("name") or patch.get("name"), details=_torrent_detail(old, patch))
 
 
 def list_logs(profile_id: int, *, limit: int = 200, offset: int = 0, event_type: str = "", q: str = "", hide_jobs: bool = False, hide_automations: bool = False) -> dict:
     """Return operation logs with searchable messages, torrents, actions and detail JSON."""
     limit = max(1, min(int(limit or 200), 1000))
     offset = max(0, int(offset or 0))
-    where = ["(profile_id=? OR profile_id IS NULL)"]
+    where = ["profile_id=?"]
     params: list[Any] = [int(profile_id or 0)]
     if event_type:
         where.append("event_type=?")
@@ -477,17 +544,18 @@ def list_logs(profile_id: int, *, limit: int = 200, offset: int = 0, event_type:
     with connect() as conn:
         rows = conn.execute(f"SELECT * FROM operation_logs{sql_where} ORDER BY id DESC LIMIT ? OFFSET ?", (*params, limit, offset)).fetchall()
         total = conn.execute(f"SELECT COUNT(*) AS n FROM operation_logs{sql_where}", tuple(params)).fetchone()["n"]
-    return {"logs": [_row_to_public(r) for r in rows], "total": int(total or 0), "limit": limit, "offset": offset}
+    viewer_user_id = auth.current_user_id()
+    return {"logs": [_row_to_public(r, viewer_user_id=viewer_user_id) for r in rows], "total": int(total or 0), "limit": limit, "offset": offset}
 
 
 def stats(profile_id: int) -> dict:
     profile_id = int(profile_id or 0)
     with connect() as conn:
-        total = conn.execute("SELECT COUNT(*) AS n FROM operation_logs WHERE profile_id=? OR profile_id IS NULL", (profile_id,)).fetchone()["n"]
-        by_type = conn.execute("SELECT event_type, COUNT(*) AS n FROM operation_logs WHERE profile_id=? OR profile_id IS NULL GROUP BY event_type ORDER BY n DESC LIMIT 12", (profile_id,)).fetchall()
-        by_day = conn.execute("SELECT substr(created_at,1,10) AS bucket, COUNT(*) AS n FROM operation_logs WHERE profile_id=? OR profile_id IS NULL GROUP BY bucket ORDER BY bucket DESC LIMIT 14", (profile_id,)).fetchall()
-        by_month = conn.execute("SELECT substr(created_at,1,7) AS bucket, COUNT(*) AS n FROM operation_logs WHERE profile_id=? OR profile_id IS NULL GROUP BY bucket ORDER BY bucket DESC LIMIT 12", (profile_id,)).fetchall()
-        top_actions = conn.execute("SELECT COALESCE(action, event_type) AS action, COUNT(*) AS n FROM operation_logs WHERE profile_id=? OR profile_id IS NULL GROUP BY COALESCE(action, event_type) ORDER BY n DESC LIMIT 12", (profile_id,)).fetchall()
+        total = conn.execute("SELECT COUNT(*) AS n FROM operation_logs WHERE profile_id=?", (profile_id,)).fetchone()["n"]
+        by_type = conn.execute("SELECT event_type, COUNT(*) AS n FROM operation_logs WHERE profile_id=? GROUP BY event_type ORDER BY n DESC LIMIT 12", (profile_id,)).fetchall()
+        by_day = conn.execute("SELECT substr(created_at,1,10) AS bucket, COUNT(*) AS n FROM operation_logs WHERE profile_id=? GROUP BY bucket ORDER BY bucket DESC LIMIT 14", (profile_id,)).fetchall()
+        by_month = conn.execute("SELECT substr(created_at,1,7) AS bucket, COUNT(*) AS n FROM operation_logs WHERE profile_id=? GROUP BY bucket ORDER BY bucket DESC LIMIT 12", (profile_id,)).fetchall()
+        top_actions = conn.execute("SELECT COALESCE(action, event_type) AS action, COUNT(*) AS n FROM operation_logs WHERE profile_id=? GROUP BY COALESCE(action, event_type) ORDER BY n DESC LIMIT 12", (profile_id,)).fetchall()
     return {"total": int(total or 0), "by_type": by_type, "by_day": by_day, "by_month": by_month, "top_actions": top_actions, "settings": get_settings(profile_id)}
 
 
@@ -510,7 +578,7 @@ def retention_label(settings: dict) -> str:
 
 
 def clear(profile_id: int, *, event_type: str = "", category: str = "") -> int:
-    where = ["(profile_id=? OR profile_id IS NULL)"]
+    where = ["profile_id=?"]
     params: list[Any] = [int(profile_id or 0)]
     if category in VALID_LOG_CATEGORIES:
         where.append(_category_where(category))
@@ -526,7 +594,7 @@ def _apply_retention_category(conn, profile_id: int, settings: dict, category: s
     mode = settings.get(f"{category}_retention_mode") or "manual"
     deleted_days = 0
     deleted_lines = 0
-    base_where = f"(profile_id=? OR profile_id IS NULL) AND {_category_where(category)}"
+    base_where = f"profile_id=? AND {_category_where(category)}"
     if mode in {"days", "both"}:
         cutoff = (datetime.now(timezone.utc) - timedelta(days=int(settings[f"{category}_retention_days"]))).isoformat(timespec="seconds")
         cur = conn.execute(f"DELETE FROM operation_logs WHERE {base_where} AND created_at<?", (int(profile_id or 0), cutoff))

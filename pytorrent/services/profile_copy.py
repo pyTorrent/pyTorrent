@@ -111,6 +111,15 @@ def _actor_id(user_id: int | None = None) -> int:
     return int(user_id or auth.current_user_id() or default_user_id())
 
 
+def _actor_is_admin(user_id: int) -> bool:
+    # Note: Service-level admin checks use the explicit actor id so copied settings cannot rely on ambient request state.
+    if not auth.enabled():
+        return True
+    with connect() as conn:
+        row = conn.execute("SELECT role,is_active FROM users WHERE id=?", (int(user_id),)).fetchone()
+    return bool(row and row.get("role") == "admin" and int(row.get("is_active") or 0))
+
+
 def _validate_profiles(
     source_profile_id: int,
     target_profile_id: int,
@@ -281,6 +290,9 @@ def copy_job_scheduling(source_profile_id: int, target_profile_id: int, user_id:
     # Note: Connection URL, profile name, default flag and remote/local mode remain untouched because they identify the destination daemon itself.
     actor_id = _actor_id(user_id)
     source, _ = _validate_profiles(source_profile_id, target_profile_id, actor_id)
+    # Note: Job scheduling is admin-owned regardless of the profile-copy entry point, matching normal profile editing policy.
+    if not _actor_is_admin(actor_id):
+        raise PermissionError("Administrator permission is required")
     fields = (
         "max_parallel_jobs",
         "ordered_parallel_jobs",
@@ -465,7 +477,7 @@ def copy_rtorrent_config(source_profile_id: int, target_profile_id: int, user_id
     values = {key: item.get("value") for key, item in overrides.items() if item.get("value") is not None}
     if not values:
         return {"scope": "rtorrent_config", "copied": 0, "result": {"ok": True, "updated": [], "stored": [], "errors": []}}
-    apply_on_start = any(bool(item.get("apply_on_start")) for item in overrides.values())
+    source_flags = {str(key): 1 if bool(item.get("apply_on_start")) else 0 for key, item in overrides.items() if key in values}
     with connect() as conn:
         target_only_flags = {
             str(row.get("key")): int(row.get("apply_on_start") or 0)
@@ -475,14 +487,14 @@ def copy_rtorrent_config(source_profile_id: int, target_profile_id: int, user_id
             ).fetchall()
             if str(row.get("key") or "") not in values
         }
-    result = rtorrent_config.set_config(dict(target), values, apply_now=False, apply_on_start=apply_on_start)
-    if target_only_flags:
-        with connect() as conn:
-            for key, startup_flag in target_only_flags.items():
-                conn.execute(
-                    "UPDATE rtorrent_config_overrides SET apply_on_start=? WHERE profile_id=? AND key=?",
-                    (startup_flag, int(target_profile_id), key),
-                )
+    # Note: set_config has a legacy profile-wide startup flag, so restore every copied and target-only key flag explicitly after the copy.
+    result = rtorrent_config.set_config(dict(target), values, apply_now=False, apply_on_start=False)
+    with connect() as conn:
+        for key, startup_flag in {**target_only_flags, **source_flags}.items():
+            conn.execute(
+                "UPDATE rtorrent_config_overrides SET apply_on_start=? WHERE profile_id=? AND key=?",
+                (startup_flag, int(target_profile_id), key),
+            )
     return {"scope": "rtorrent_config", "copied": len(result.get("stored") or []), "result": result}
 
 

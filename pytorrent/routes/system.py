@@ -1,9 +1,12 @@
 from __future__ import annotations
 from ._shared import *
 import bisect
+import logging
 import posixpath
 from ..services import operation_logs, connection_diagnostics
 from ..services.frontend_assets import static_hash
+
+logger = logging.getLogger(__name__)
 
 @bp.get("/system/disk")
 def system_disk():
@@ -88,8 +91,10 @@ def health_check():
         with connect() as conn:
             conn.execute("SELECT 1").fetchone()
         return ok({"status": "ok"})
-    except Exception as exc:
-        return jsonify({"ok": False, "status": "error", "error": str(exc)}), 500
+    except Exception:
+        # Note: Public health responses never expose database or filesystem exception details.
+        logger.exception("Health check failed")
+        return jsonify({"ok": False, "status": "error", "error": "Service health check failed"}), 500
 
 
 @bp.get("/connection/diagnostics")
@@ -120,8 +125,10 @@ def health_check_nagios():
         with connect() as conn:
             conn.execute("SELECT 1").fetchone()
         return "OK - pyTorrent API healthy\n", 200, {"Content-Type": "text/plain; charset=utf-8"}
-    except Exception as exc:
-        return f"CRITICAL - pyTorrent API unhealthy: {exc}\n", 500, {"Content-Type": "text/plain; charset=utf-8"}
+    except Exception:
+        # Note: Monitoring receives a stable generic failure while technical details remain in server logs.
+        logger.exception("Nagios health check failed")
+        return "CRITICAL - pyTorrent API unhealthy\n", 500, {"Content-Type": "text/plain; charset=utf-8"}
 
 
 @bp.get("/app/status")
@@ -257,7 +264,7 @@ def jobs_clear():
         raise PermissionError("Administrator permission is required")
     if str(request.args.get("force") or "").lower() in {"1", "true", "yes"}:
         # Note: Emergency cleanup can still be global, but only when an admin explicitly requests scope=global.
-        deleted = emergency_clear_jobs(profile_id=profile_id)
+        deleted = emergency_clear_jobs(profile_id=profile_id, actor_user_id=auth.current_user_id())
         return ok({"deleted": deleted, "emergency": True, "profile_id": profile_id, "scope": scope if scope == "global" else "profile"})
     deleted = clear_jobs(profile_id=profile_id)
     return ok({"deleted": deleted, "emergency": False, "profile_id": profile_id, "scope": scope if scope == "global" else "profile"})
@@ -419,26 +426,38 @@ def cleanup_all():
 
 @bp.post("/jobs/<job_id>/cancel")
 def jobs_cancel(job_id: str):
+    # Note: The acting user is recorded explicitly and running jobs cannot be presented as cancelled without an interrupt primitive.
     require_profile_write(_job_profile_id(job_id))
-    if not cancel_job(job_id):
-        return jsonify({"ok": False, "error": "Only unfinished jobs can be cancelled"}), 400
-    return ok({"emergency": True})
+    try:
+        if not cancel_job(job_id, actor_user_id=auth.current_user_id()):
+            return jsonify({"ok": False, "error": "Only pending jobs can be cancelled"}), 409
+    except PermissionError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 403
+    return ok({"emergency": False})
 
 
 
 @bp.post("/jobs/<job_id>/force")
 def jobs_force(job_id: str):
+    # Note: Manual force reauthorizes every touched profile and converts scheduler authority into ordinary user authority.
     require_profile_write(_job_profile_id(job_id))
-    if not force_job(job_id):
-        return jsonify({"ok": False, "error": "Only pending jobs can be forced"}), 400
+    try:
+        if not force_job(job_id, actor_user_id=auth.current_user_id()):
+            return jsonify({"ok": False, "error": "Only pending jobs can be forced"}), 400
+    except PermissionError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 403
     return ok({"job_id": job_id})
 
 
 @bp.post("/jobs/<job_id>/retry")
 def jobs_retry(job_id: str):
+    # Note: Manual retry uses the current actor and current RW permissions instead of inheriting the original job trust.
     require_profile_write(_job_profile_id(job_id))
-    if not retry_job(job_id):
-        return jsonify({"ok": False, "error": "Only failed or cancelled jobs can be retried"}), 400
+    try:
+        if not retry_job(job_id, actor_user_id=auth.current_user_id()):
+            return jsonify({"ok": False, "error": "Only failed or cancelled jobs can be retried"}), 400
+    except PermissionError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 403
     return ok()
 
 
@@ -521,14 +540,41 @@ def _path_profile_from_request(*, require_write_access: bool = False):
     return profile
 
 
+def _profile_download_roots(profile: dict) -> list[str]:
+    """Return physical backend-owned filesystem roots exposed through the path browser."""
+    # Note: User preferences and request payloads cannot expand filesystem authority beyond the rTorrent profile download root.
+    root = str(rtorrent.default_download_path(profile) or "").strip()
+    if not root:
+        return []
+    return [rtorrent.resolve_accessible_directory(profile, root)]
+
+
+def _authorized_profile_path(profile: dict, value: str, *, default_to_root: bool = False) -> str:
+    """Resolve and authorize one existing remote filesystem path for the active profile."""
+    # Note: Physical-path comparison blocks nested symlink escapes as well as lexical ../ traversal.
+    roots = _profile_download_roots(profile)
+    if not roots:
+        raise PermissionError("Profile download root is unavailable")
+    requested = str(value or "").strip() or (roots[0] if default_to_root else "")
+    lexical = path_policy.require_remote_path(requested, [str(rtorrent.default_download_path(profile) or "")], default_path=str(rtorrent.default_download_path(profile) or "") if default_to_root else "")
+    physical = rtorrent.resolve_accessible_directory(profile, lexical)
+    return path_policy.require_remote_path(physical, roots)
+
+
 @bp.get("/path/default")
 def path_default():
     profile = _path_profile_from_request()
     if not profile:
         return jsonify({"ok": False, "error": "No profile"}), 400
     try:
-        # Note: Echo the path source profile so delayed frontend path hydration can reject stale responses.
-        return ok({"path": active_default_download_path(profile), "profile_default_path": rtorrent.default_download_path(profile), "profile_id": int(profile["id"])})
+        # Note: The browser starts inside the backend-owned profile root even if an old user preference points elsewhere.
+        root = _authorized_profile_path(profile, "", default_to_root=True)
+        preferred = str(active_default_download_path(profile) or "")
+        try:
+            preferred = _authorized_profile_path(profile, preferred)
+        except Exception:
+            preferred = root
+        return ok({"path": preferred, "profile_default_path": root, "profile_id": int(profile["id"])})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
 
@@ -551,7 +597,10 @@ def path_browse():
     except Exception:
         parsed_max_dirs = None
     try:
+        base = _authorized_profile_path(profile, base, default_to_root=True)
         return ok(_annotate_path_directories(profile, rtorrent.browse_path(profile, base, max_dirs=parsed_max_dirs, search=search, cache_only=cache_only, force_refresh=force_refresh)))
+    except PermissionError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 403
     except rtorrent.PathBrowseTimeoutError as exc:
         # Note: A dedicated 504 distinguishes a bounded remote filesystem timeout from invalid path input.
         return jsonify({"ok": False, "error": str(exc), "timeout": True}), 504
@@ -569,24 +618,33 @@ def path_directory_create():
         return jsonify({"ok": False, "error": "No profile"}), 400
     data = request.get_json(silent=True) or {}
     try:
-        # Note: This endpoint only creates an empty directory and does not alter any torrent state.
-        result = rtorrent.create_directory(profile, data.get("parent") or "", data.get("name") or "")
+        # Note: Directory creation is constrained to the same backend-owned root as browsing.
+        parent = _authorized_profile_path(profile, data.get("parent") or "", default_to_root=True)
+        result = rtorrent.create_directory(profile, parent, data.get("name") or "")
         return ok({"directory": result})
+    except PermissionError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 403
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
 
 
 @bp.post("/path/directories/check-rename")
 def path_directory_check_rename():
-    profile = _path_profile_from_request(require_write_access=True)
+    # Note: Rename eligibility is a read-only filesystem check; actual rename still requires RW.
+    profile = _path_profile_from_request(require_write_access=False)
     if not profile:
         return jsonify({"ok": False, "error": "No profile"}), 400
     data = request.get_json(silent=True) or {}
     try:
-        # Note: Large directory listings skip per-folder empty checks; this endpoint checks one selected folder lazily.
-        result = rtorrent.check_directory_rename_state(profile, data.get("path") or "")
+        # Note: Large directory listings skip per-folder empty checks; this endpoint checks one selected folder lazily inside the profile root.
+        checked_path = _authorized_profile_path(profile, data.get("path") or "")
+        if checked_path in _profile_download_roots(profile):
+            raise ValueError("Cannot rename the profile download root")
+        result = rtorrent.check_directory_rename_state(profile, checked_path)
         result = _rename_state_for_path(profile, result)
         return ok({"directory": result})
+    except PermissionError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 403
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
 
@@ -597,13 +655,17 @@ def path_directory_rename():
     if not profile:
         return jsonify({"ok": False, "error": "No profile"}), 400
     data = request.get_json(silent=True) or {}
-    path = str(data.get("path") or "").strip()
-    if _path_has_cached_torrents(int(profile.get("id") or 0), path):
-        return jsonify({"ok": False, "error": "Directory contains a known torrent path"}), 400
     try:
-        # Note: The service also verifies that the remote directory is empty before renaming.
+        path = _authorized_profile_path(profile, data.get("path") or "")
+        if path in _profile_download_roots(profile):
+            raise ValueError("Cannot rename the profile download root")
+        if _path_has_cached_torrents(int(profile.get("id") or 0), path):
+            return jsonify({"ok": False, "error": "Directory contains a known torrent path"}), 400
+        # Note: Rename stays inside the profile root and the service also verifies that the remote directory is empty.
         result = rtorrent.rename_empty_directory(profile, path, data.get("new_name") or "")
         return ok({"directory": result})
+    except PermissionError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 403
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
 

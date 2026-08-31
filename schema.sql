@@ -273,6 +273,7 @@ CREATE TABLE IF NOT EXISTS rss_history (
   link TEXT,
   status TEXT NOT NULL,
   message TEXT,
+  job_id TEXT,
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_rss_history_profile_created ON rss_history(profile_id, created_at);
@@ -286,6 +287,7 @@ CREATE TABLE IF NOT EXISTS ratio_assignments (
   group_name TEXT,
   applied_at TEXT,
   last_status TEXT,
+  pending_job_id TEXT,
   updated_at TEXT NOT NULL,
   PRIMARY KEY(profile_id, torrent_hash)
 );
@@ -302,6 +304,7 @@ CREATE TABLE IF NOT EXISTS ratio_history (
   status TEXT NOT NULL,
   reason TEXT,
   details_json TEXT,
+  actor_type TEXT NOT NULL DEFAULT 'user',
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_ratio_history_profile_created ON ratio_history(profile_id, created_at);
@@ -487,6 +490,7 @@ CREATE TABLE IF NOT EXISTS automation_history (
   torrent_name TEXT,
   rule_name TEXT,
   actions_json TEXT,
+  actor_type TEXT NOT NULL DEFAULT 'user',
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_automation_history_profile_created ON automation_history(profile_id, created_at);
@@ -564,6 +568,7 @@ CREATE TABLE IF NOT EXISTS operation_logs (
   action TEXT,
   message TEXT NOT NULL,
   details_json TEXT,
+  actor_type TEXT NOT NULL DEFAULT 'user',
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_operation_logs_profile_created ON operation_logs(profile_id, created_at);

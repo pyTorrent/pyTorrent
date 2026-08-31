@@ -112,7 +112,7 @@ def rss_rule_test():
         result = rss_service.test_rule(str(data.get("feed_url") or ""), data.get("rule") or data)
         return ok({"result": result})
     except Exception as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 400
+        return jsonify({"ok": False, "error": str(exc)}), (403 if isinstance(exc, PermissionError) else 400)
 
 
 @bp.post("/rss/check")

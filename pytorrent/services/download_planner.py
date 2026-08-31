@@ -91,8 +91,9 @@ def _rtorrent_ready(profile: dict) -> tuple[bool, str]:
         return False, str(exc)
 
 
-def _log_connection_status(profile: dict, status: str, message: str, *, error: str = "", user_id: int | None = None) -> None:
+def _log_connection_status(profile: dict, status: str, message: str, *, error: str = "", user_id: int | None = None, system_execution: bool = False) -> None:
     """Record planner connectivity state changes as system operations without noisy repeats."""
+    # Note: Background planner records are attributed to the scheduler, while manual checks retain the requesting user.
     profile_id = int(profile.get("id") or 0)
     if _PLANNER_CONNECTION_STATUS.get(profile_id) == status:
         return
@@ -105,7 +106,8 @@ def _log_connection_status(profile: dict, status: str, message: str, *, error: s
         source="system",
         action="download_planner",
         details={"status": status, "error": error},
-        user_id=user_id or int(profile.get("user_id") or 0) or None,
+        user_id=None if system_execution else (user_id or int(profile.get("user_id") or 0) or None),
+        actor_type="system" if system_execution else "user",
     )
 
 
@@ -585,9 +587,9 @@ def enforce(profile: dict, force: bool = False, user_id: int | None = None, syst
     _LAST_RUN[profile_id] = now
     ready, connection_error = _rtorrent_ready(profile)
     if not ready:
-        _log_connection_status(profile, "waiting", f"Download Planner is waiting for rTorrent: {connection_error}", error=connection_error, user_id=user_id)
+        _log_connection_status(profile, "waiting", f"Download Planner is waiting for rTorrent: {connection_error}", error=connection_error, user_id=user_id, system_execution=system_execution)
         return {"ok": True, "enabled": True, "profile_id": profile_id, "skipped": True, "reason": "rtorrent_unavailable", "error": connection_error, "retry_after_seconds": interval}
-    _log_connection_status(profile, "connected", "Download Planner detected a working rTorrent connection", user_id=user_id)
+    _log_connection_status(profile, "connected", "Download Planner detected a working rTorrent connection", user_id=user_id, system_execution=system_execution)
     decision = evaluate(profile, settings, user_id=execution_user_id, system_execution=system_execution)
     result: dict[str, Any] = {"ok": True, "enabled": True, **decision, "limits_changed": False, "paused": 0, "resumed": 0}
     wanted_limits = (int(decision["down"]), int(decision["up"]))
@@ -602,12 +604,30 @@ def enforce(profile: dict, force: bool = False, user_id: int | None = None, syst
     if decision["pause_downloads"]:
         hashes = _active_downloading_hashes(profile)
         if hashes:
-            action = {"dry_run": True} if dry_run else rtorrent.action(profile, hashes, "pause", {"source": "download_planner", "reasons": decision["reasons"]})
-            if not dry_run:
-                _remember_paused(profile_id, hashes, ",".join(decision["reasons"]))
-            result["paused"] = len(hashes)
+            if dry_run:
+                paused_hashes = list(hashes)
+                action = {"dry_run": True, "requested_count": len(hashes)}
+            else:
+                # Note: Record every torrent immediately after its successful pause so a later partial failure cannot leave an untracked paused torrent.
+                paused_hashes = []
+                pause_results = []
+                try:
+                    for torrent_hash in hashes:
+                        item = rtorrent.action(profile, [torrent_hash], "pause", {"source": "download_planner", "reasons": decision["reasons"]})
+                        pause_results.append(item)
+                        if int(item.get("count") or 0) > 0:
+                            paused_hashes.append(torrent_hash)
+                            _remember_paused(profile_id, [torrent_hash], ",".join(decision["reasons"]))
+                except Exception:
+                    result["paused"] = len(paused_hashes)
+                    result["pause_result"] = {"ok": False, "count": len(paused_hashes), "results": pause_results}
+                    if paused_hashes:
+                        _append_history(profile_id, "paused_torrents", {"count": len(paused_hashes), "reasons": decision["reasons"], "dry_run": False, "partial": True})
+                    raise
+                action = {"ok": True, "count": len(paused_hashes), "requested_count": len(hashes), "results": pause_results}
+            result["paused"] = len(paused_hashes)
             result["pause_result"] = action
-            _append_history(profile_id, "paused_torrents", {"count": len(hashes), "reasons": decision["reasons"], "dry_run": dry_run})
+            _append_history(profile_id, "paused_torrents", {"count": len(paused_hashes), "reasons": decision["reasons"], "dry_run": dry_run})
             if "high_cpu" in decision["reasons"] or "high_load" in decision["reasons"]:
                 _append_history(profile_id, "cpu_protection_trigger", {"cpu": decision.get("cpu"), "dry_run": dry_run})
             if "high_disk" in decision["reasons"]:
