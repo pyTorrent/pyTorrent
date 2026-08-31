@@ -15,7 +15,9 @@ from ..config import (
     AUTH_PROXY_AUTO_CREATE_ROLE,
     AUTH_PROXY_USER_HEADER,
     API_ALLOWED_ORIGINS,
+    AUTH_BYPASS_IPS,
     AUTH_BYPASS_HOSTS,
+    AUTH_BYPASS_ADDRESSES,
     AUTH_BYPASS_USER,
     METRICS_PATH,
 )
@@ -115,8 +117,8 @@ def external_auth_summary() -> dict[str, Any]:
         "auto_create": bool(AUTH_PROXY_AUTO_CREATE) if uses_external_provider() else False,
         "auto_create_role": AUTH_PROXY_AUTO_CREATE_ROLE,
         "auto_create_permission": AUTH_PROXY_AUTO_CREATE_PERMISSION,
-        "bypass_enabled": bool(AUTH_BYPASS_HOSTS),
-        "bypass_addresses": sorted(AUTH_BYPASS_HOSTS),
+        "bypass_enabled": bool(AUTH_BYPASS_ADDRESSES),
+        "bypass_addresses": sorted(AUTH_BYPASS_ADDRESSES),
         "bypass_user": AUTH_BYPASS_USER,
         "password_editable": not uses_external_provider(),
     }
@@ -127,8 +129,8 @@ def password_hash(password: str) -> str:
 
 
 def _bypass_address_matches(remote_addr: str) -> bool:
-    """Match a trusted client address/CIDR without consulting the client-controlled Host header."""
-    # Note: request.remote_addr is already proxy-adjusted only when ProxyFix was explicitly configured by the operator.
+    """Match a trusted client IP/CIDR without consulting client-controlled HTTP host data."""
+    # Note: request.remote_addr is proxy-adjusted only when ProxyFix is explicitly configured; new PYTORRENT_AUTH_BYPASS_IPS values accept IP/CIDR only.
     clean = str(remote_addr or "").strip()
     if not clean:
         return False
@@ -136,13 +138,15 @@ def _bypass_address_matches(remote_addr: str) -> bool:
         client_ip = ipaddress.ip_address(clean)
     except ValueError:
         return False
-    for entry in AUTH_BYPASS_HOSTS:
+    entries = [(entry, False) for entry in AUTH_BYPASS_IPS] + [(entry, True) for entry in AUTH_BYPASS_HOSTS]
+    for entry, legacy in entries:
         candidate = str(entry or "").strip()
         if not candidate:
             continue
-        if candidate.startswith("[") and "]" in candidate:
+        # The old variable historically documented IP:port; tolerate that syntax only for migration compatibility.
+        if legacy and candidate.startswith("[") and "]" in candidate:
             candidate = candidate[1:candidate.index("]")]
-        elif candidate.count(":") == 1 and "/" not in candidate:
+        elif legacy and candidate.count(":") == 1 and "/" not in candidate:
             host, maybe_port = candidate.rsplit(":", 1)
             if maybe_port.isdigit():
                 candidate = host
@@ -156,28 +160,27 @@ def _bypass_address_matches(remote_addr: str) -> bool:
             continue
     return False
 
-
-def auth_bypassed_request() -> bool:
-    """Allow configured auth bypass only for trusted network addresses."""
-    # Note: Host and forwarded headers are never interpreted here; trusted-proxy handling belongs to configured ProxyFix.
-    if not enabled() or not AUTH_BYPASS_HOSTS or not has_request_context():
-        return False
-    return _bypass_address_matches(request.remote_addr or "")
-
-
-
 def bypass_user_id() -> int:
-    """Return the configured active user id used for trusted auth-bypass requests."""
+    """Return the exact configured active user id used for trusted auth-bypass requests."""
+    # Note: Bypass fails closed when the configured account is missing or inactive; it never silently falls back to another account.
     username = str(AUTH_BYPASS_USER or "admin").strip() or "admin"
     with connect() as conn:
         row = conn.execute("SELECT id FROM users WHERE username=? AND is_active=1", (username,)).fetchone()
-        if row:
-            return int(row["id"])
-        row = conn.execute("SELECT id FROM users WHERE username='admin' AND is_active=1").fetchone()
-        if row:
-            return int(row["id"])
-        row = conn.execute("SELECT id FROM users WHERE id=? AND is_active=1", (default_user_id(),)).fetchone()
         return int(row["id"]) if row else 0
+
+
+def auth_bypassed_request() -> bool:
+    """Allow configured auth bypass only for trusted network addresses and an active configured user."""
+    # Note: Host and forwarded headers are never interpreted here; trusted-proxy handling belongs to configured ProxyFix.
+    if not enabled() or not AUTH_BYPASS_ADDRESSES or not has_request_context():
+        return False
+    if not _bypass_address_matches(request.remote_addr or ""):
+        return False
+    user_id = bypass_user_id()
+    if not user_id:
+        return False
+    g.auth_bypass_user_id = user_id
+    return True
 
 def current_user_id() -> int:
     if not enabled():
@@ -185,7 +188,7 @@ def current_user_id() -> int:
     if not has_request_context():
         return 0
     if auth_bypassed_request():
-        return bypass_user_id()
+        return int(getattr(g, "auth_bypass_user_id", 0) or 0)
     api_user_id = getattr(g, "api_user_id", None)
     if api_user_id:
         return int(api_user_id)
@@ -503,7 +506,7 @@ def ensure_request_user() -> int:
     if not enabled():
         return default_user_id()
     if auth_bypassed_request():
-        return bypass_user_id()
+        return int(getattr(g, "auth_bypass_user_id", 0) or 0)
     uid = current_user_id()
     if uid:
         return uid
@@ -636,9 +639,11 @@ def delete_user(user_id: int) -> dict[str, object]:
                 raise ValueError("Cannot delete the last active administrator")
         # Note: Owned profiles are reassigned to the deleting administrator instead of being silently cascaded with the account.
         deleted = purge_user(conn, uid, reassign_profile_owner_to=current_user_id())
-    # Note: User deletion can remove several owned profiles outside preferences.delete_profile(), so clear every process-local profile cache after the DB transaction commits.
+    # Note: Ownership reassignment must invalidate the poller profile snapshot too; deleted profiles additionally discard endpoint/runtime caches.
     deleted_profile_ids = [int(profile_id) for profile_id in (deleted.get("deleted_profiles") or [])]
-    if deleted_profile_ids:
+    reassigned_profile_ids = [int(profile_id) for profile_id in (deleted.get("reassigned_profiles") or [])]
+    affected_profile_ids = sorted(set(deleted_profile_ids + reassigned_profile_ids))
+    if affected_profile_ids:
         from . import poller_control, preferences
         from .websocket import invalidate_poller_profiles_cache
         for profile_id in deleted_profile_ids:

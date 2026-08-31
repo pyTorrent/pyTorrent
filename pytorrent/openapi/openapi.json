@@ -1678,6 +1678,17 @@
           },
           "timeout_seconds": {
             "type": "integer"
+          },
+          "can_read": {
+            "type": "boolean",
+            "description": "Backend-evaluated read access for the current user."
+          },
+          "can_write": {
+            "type": "boolean",
+            "description": "Backend-evaluated write access for the current user."
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/AuthorizationCapabilities"
           }
         },
         "type": "object"
@@ -2813,17 +2824,53 @@
             "type": "object"
           }
         ]
+      },
+      "AuthorizationCapabilities": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "can_read": {
+            "type": "boolean"
+          },
+          "can_write": {
+            "type": "boolean"
+          },
+          "can_admin": {
+            "type": "boolean"
+          },
+          "manage_profiles": {
+            "type": "boolean"
+          },
+          "manage_users": {
+            "type": "boolean"
+          },
+          "manage_job_scheduling": {
+            "type": "boolean"
+          },
+          "manage_app_backups": {
+            "type": "boolean"
+          },
+          "manage_api_tokens": {
+            "type": "boolean"
+          },
+          "manage_profile_backup": {
+            "type": "boolean"
+          },
+          "manage_operation_logs": {
+            "type": "boolean"
+          }
+        }
       }
     },
     "securitySchemes": {
       "apiKeyAuth": {
-        "description": "Optional per-user API token. Tokens are accepted only when PYTORRENT_AUTH_ENABLE=1. When auth is disabled, API endpoints do not require credentials.",
+        "description": "Optional per-user API token. Tokens are accepted only when PYTORRENT_AUTH_ENABLE=1. When auth is disabled, API endpoints do not require credentials. API tokens are accepted only through request headers; ?api_key= query parameters are not supported.",
         "in": "header",
         "name": "X-API-Key",
         "type": "apiKey"
       },
       "bearerApiToken": {
-        "description": "Optional per-user API token in Authorization: Bearer <token>. Tokens are accepted only when PYTORRENT_AUTH_ENABLE=1.",
+        "description": "Optional per-user API token in Authorization: Bearer <token>. Tokens are accepted only when PYTORRENT_AUTH_ENABLE=1. API tokens are accepted only through request headers; ?api_key= query parameters are not supported.",
         "scheme": "bearer",
         "type": "http"
       },
@@ -3215,6 +3262,16 @@
               }
             },
             "description": "Error"
+          },
+          "409": {
+            "description": "Deletion conflicts with dependent data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3222,7 +3279,8 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Delete user"
+        "summary": "Delete user",
+        "description": "Delete a user account. Profiles owned by that user are reassigned to the administrator performing the deletion instead of being cascade-deleted."
       },
       "put": {
         "parameters": [
@@ -3336,6 +3394,16 @@
               }
             },
             "description": "Token list"
+          },
+          "403": {
+            "description": "Permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3352,7 +3420,7 @@
         "summary": "List API tokens for a user"
       },
       "post": {
-        "description": "Available only when application authentication is enabled. The returned token is shown once and must be copied immediately.",
+        "description": "Available only when application authentication is enabled. Admins can create tokens for any user; regular authenticated users can create tokens only for their own user id. The returned token is shown once and must be copied immediately.",
         "parameters": [
           {
             "in": "path",
@@ -3418,6 +3486,16 @@
               }
             },
             "description": "Generated token"
+          },
+          "403": {
+            "description": "Permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3436,7 +3514,7 @@
     },
     "/api/auth/users/{user_id}/tokens/{token_id}": {
       "delete": {
-        "description": "Available only when application authentication is enabled. Revoked tokens stop working immediately.",
+        "description": "Available only when application authentication is enabled. Admins can revoke tokens for any user; regular authenticated users can revoke only their own tokens. Revoked tokens stop working immediately.",
         "parameters": [
           {
             "in": "path",
@@ -3479,6 +3557,16 @@
               }
             },
             "description": "Updated token list"
+          },
+          "403": {
+            "description": "Permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4504,6 +4592,16 @@
               }
             },
             "description": "Error"
+          },
+          "403": {
+            "description": "Backup source read access or target write/admin permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4511,7 +4609,8 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Restore backup"
+        "summary": "Restore backup",
+        "description": "Restore a backup into the selected target profile. Reading a profile backup requires source-profile read access; restoring requires target-profile write access. Non-admin restores do not overwrite technical rtorrent_profiles connection/scheduler settings or profile ownership. Restored automation rules are revalidated, including profile-transfer targets."
       }
     },
     "/api/cleanup/all": {
@@ -5279,7 +5378,8 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Application health check"
+        "summary": "Application health check",
+        "description": "Public health status suitable for monitoring. Internal exception details are written to server logs and are not returned to clients."
       }
     },
     "/api/health/nagios": {
@@ -5475,6 +5575,16 @@
               }
             },
             "description": "Error"
+          },
+          "409": {
+            "description": "Job is not pending",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -5482,7 +5592,8 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Cancel pending or failed job"
+        "summary": "Cancel pending job",
+        "description": "Cancel only a pending job. Running work is not marked cancelled because pyTorrent has no operation-interrupt primitive."
       }
     },
     "/api/jobs/{job_id}/force": {
@@ -5537,7 +5648,8 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Force pending job to run next"
+        "summary": "Force pending job to run next",
+        "description": "Force a pending job to run next. A manual force is executed as the current user, rechecks current write access (including a profile-transfer target), and does not retain system-managed scheduler authority."
       }
     },
     "/api/jobs/{job_id}/retry": {
@@ -5592,7 +5704,8 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Retry failed or cancelled job"
+        "summary": "Retry failed or cancelled job",
+        "description": "Retry a failed or cancelled job as the current user. Current source/target write permissions are checked again and any former system-managed authority is removed."
       }
     },
     "/api/labels": {
@@ -5786,7 +5899,7 @@
     },
     "/api/operation-logs": {
       "get": {
-        "description": "Lists active-profile operation logs with filters, retention settings and statistics.",
+        "description": "Lists operation logs for the selected profile only. Global (profile_id NULL) records are not included in profile-scoped views.",
         "parameters": [
           {
             "in": "query",
@@ -5849,7 +5962,7 @@
     },
     "/api/operation-logs/apply-retention": {
       "post": {
-        "description": "Runs retention cleanup for active-profile operation logs.",
+        "description": "Mutates operation-log records for the selected profile only; global records are never affected by profile-scoped cleanup.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -5872,6 +5985,16 @@
               }
             },
             "description": "Retention result"
+          },
+          "403": {
+            "description": "Profile write access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -5884,7 +6007,7 @@
     },
     "/api/operation-logs/clear": {
       "post": {
-        "description": "Clears active-profile operation logs, optionally limited to one event type.",
+        "description": "Mutates operation-log records for the selected profile only; global records are never affected by profile-scoped cleanup.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -5910,6 +6033,16 @@
               }
             },
             "description": "Deleted count"
+          },
+          "403": {
+            "description": "Profile write access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -5960,7 +6093,7 @@
     },
     "/api/path/browse": {
       "get": {
-        "description": "Lists first-level directories that the rTorrent process can enter and read. The scan runs outside the synchronous SCGI request, is limited by PYTORRENT_PATH_BROWSE_TIMEOUT_SECONDS, prevents overlapping scans for the same remote user, skips file counting and never checks whether child directories are empty. Completed listings are cached for 15 minutes; search, show-all and cache-only refresh filter that cache.",
+        "description": "Browse directories only inside the selected profile download root; symlink escapes are rejected.",
         "parameters": [
           {
             "in": "query",
@@ -6039,6 +6172,16 @@
               }
             },
             "description": "The remote filesystem scan exceeded its configured timeout."
+          },
+          "403": {
+            "description": "Profile/path access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -6066,6 +6209,16 @@
               }
             },
             "description": "OK"
+          },
+          "403": {
+            "description": "Profile/path access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -6073,12 +6226,13 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Get active default download path"
+        "summary": "Get active default download path",
+        "description": "Return a preferred directory constrained to the selected profile download root."
       }
     },
     "/api/path/directories": {
       "post": {
-        "description": "Creates a directory on the active rTorrent host for inline path-picker use. Existing torrent state is not changed.",
+        "description": "Create a directory only inside the selected profile download root; requires profile write access.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -6114,6 +6268,16 @@
               }
             },
             "description": "Error"
+          },
+          "403": {
+            "description": "Profile/path access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -6126,7 +6290,7 @@
     },
     "/api/path/directories/check-rename": {
       "post": {
-        "description": "Checks one selected remote directory for inline rename. Used after fast browse skips mass empty-state checks on large or slow directories.",
+        "description": "Read-only check of rename eligibility for a directory inside the selected profile download root. Profile read access is sufficient.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -6162,6 +6326,16 @@
               }
             },
             "description": "Error"
+          },
+          "403": {
+            "description": "Profile/path access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -6174,7 +6348,7 @@
     },
     "/api/path/directories/rename": {
       "post": {
-        "description": "Renames a directory only when it is empty and does not contain a cached torrent path.",
+        "description": "Rename a directory only inside the selected profile download root; requires profile write access.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -6210,6 +6384,16 @@
               }
             },
             "description": "Error"
+          },
+          "403": {
+            "description": "Profile/path access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -6509,14 +6693,27 @@
                     },
                     {
                       "properties": {
-                        "active_profile": {
-                          "$ref": "#/components/schemas/Profile"
-                        },
                         "profiles": {
                           "items": {
                             "$ref": "#/components/schemas/Profile"
                           },
                           "type": "array"
+                        },
+                        "active": {
+                          "$ref": "#/components/schemas/Profile"
+                        },
+                        "can_manage_profiles": {
+                          "type": "boolean"
+                        },
+                        "capabilities": {
+                          "$ref": "#/components/schemas/AuthorizationCapabilities"
+                        },
+                        "diagnostics": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
                         }
                       },
                       "type": "object"
@@ -6952,6 +7149,16 @@
               }
             },
             "description": "Error"
+          },
+          "403": {
+            "description": "Profile access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -6959,7 +7166,8 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Activate profile"
+        "summary": "Activate profile",
+        "description": "Activate a profile the current user can read. The response includes backend-owned write/admin capabilities for that profile."
       }
     },
     "/api/profiles/{profile_id}/diagnostics": {
@@ -7287,15 +7495,25 @@
             },
             "description": "OK"
           },
-          "500": {
+          "400": {
+            "description": "RSS check error",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiError"
                 }
               }
-            },
-            "description": "Error"
+            }
+          },
+          "403": {
+            "description": "Profile write access denied or feed destination blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -7352,6 +7570,16 @@
               }
             },
             "description": "Error"
+          },
+          "403": {
+            "description": "Profile write access denied or feed destination blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -7359,7 +7587,8 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Add or update RSS feed"
+        "summary": "Add or update RSS feed",
+        "description": "Create or update RSS feed configuration. RSS feed URLs are fetched only over public HTTP(S); local/private/link-local destinations and redirects to them are blocked."
       }
     },
     "/api/rss/feeds/{feed_id}": {
@@ -8505,7 +8734,7 @@
     },
     "/api/torrents/create": {
       "post": {
-        "description": "Create a .torrent file from a source path on the active rTorrent host and optionally add/share it.",
+        "description": "Create a .torrent file from an existing local source path inside the selected profile download root. Symlink escapes and paths outside that root are rejected. Local hashing is unavailable for remote rTorrent profiles because pyTorrent cannot assume both processes share a filesystem.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -8546,10 +8775,12 @@
                     "type": "string"
                   },
                   "source": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Optional torrent source metadata string embedded in the generated .torrent file; this is not a filesystem path."
                   },
                   "source_path": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Absolute local file/directory path inside the selected profile download root."
                   },
                   "trackers": {
                     "type": "string"
@@ -8572,6 +8803,26 @@
               }
             },
             "description": "Created torrent file"
+          },
+          "400": {
+            "description": "Invalid, unavailable, remote-profile, or out-of-root source path",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Profile write access denied or source escapes the allowed root",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         },
         "summary": "Create torrent file"
@@ -9788,13 +10039,6 @@
             }
           },
           {
-            "in": "query",
-            "name": "refresh",
-            "schema": {
-              "type": "boolean"
-            }
-          },
-          {
             "$ref": "#/components/parameters/ProfileId"
           }
         ],
@@ -9818,7 +10062,8 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Backward-compatible tracker favicon alias"
+        "summary": "Get cached tracker favicon (compatibility alias)",
+        "description": "Cache-only favicon lookup. This GET never performs outbound network I/O and never creates or refreshes cache entries."
       }
     },
     "/api/trackers/favicon": {
@@ -9830,13 +10075,6 @@
             "name": "domain",
             "schema": {
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "refresh",
-            "schema": {
-              "type": "boolean"
             }
           },
           {
@@ -9873,7 +10111,109 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Resolve and cache tracker favicon by query parameter"
+        "summary": "Get cached tracker favicon by query parameter",
+        "description": "Cache-only favicon lookup by tracker domain or URL. This GET never performs outbound network I/O and never mutates cache state."
+      },
+      "post": {
+        "summary": "Refresh tracker favicon",
+        "description": "Explicitly fetch and refresh a favicon for a tracker domain already known to the selected profile. Requires profile write access. Outbound requests allow public HTTP(S) destinations only, revalidate redirects, and keep normal TLS certificate verification enabled.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProfileId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "domain"
+                ],
+                "properties": {
+                  "profile_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Explicit rTorrent profile id for this profile-scoped write request."
+                  },
+                  "domain": {
+                    "type": "string",
+                    "description": "Tracker domain or URL already observed in the selected profile."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Favicon refreshed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiOk"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "url": {
+                          "type": "string"
+                        },
+                        "domain": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Read-only profile, unknown tracker domain, or blocked non-public destination",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Favicon not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "apiKeyAuth": []
+          },
+          {
+            "bearerApiToken": []
+          }
+        ]
       }
     },
     "/api/trackers/favicon/{domain}": {
@@ -9885,13 +10225,6 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "refresh",
-            "schema": {
-              "type": "boolean"
             }
           },
           {
@@ -9918,7 +10251,8 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Resolve and cache tracker favicon by path"
+        "summary": "Get cached tracker favicon",
+        "description": "Cache-only favicon lookup. This GET never performs outbound network I/O and never creates or refreshes cache entries."
       }
     },
     "/api/trackers/summary": {

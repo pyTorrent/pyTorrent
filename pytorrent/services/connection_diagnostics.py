@@ -6,7 +6,7 @@ from typing import Any
 
 from flask import request
 
-from . import auth, poller_control, rtorrent
+from . import auth, poller_control, rtorrent, preferences
 
 _LOCK = threading.RLock()
 _PROFILE_STATE: dict[int, dict[str, Any]] = {}
@@ -158,8 +158,8 @@ def register_socketio_handlers(socketio) -> None:
         if auth.enabled() and not auth.ensure_request_user():
             return {"ok": False, "error": "Authentication required"}
         profile_id = int((data or {}).get("profile_id") or 0)
-        # Note: Diagnostic acknowledgements validate the requested profile before echoing its identifier.
-        if profile_id and auth.enabled() and not auth.can_access_profile(profile_id, auth.current_user_id()):
+        # Note: Diagnostic acknowledgements resolve the requested profile through the normal read guard, so inaccessible and nonexistent ids are never echoed.
+        if profile_id and not preferences.get_profile(profile_id, auth.current_user_id()):
             return {"ok": False, "error": "Profile access denied"}
         try:
             transport = str(socketio.server.transport(str(request.sid), namespace="/") or "unknown")

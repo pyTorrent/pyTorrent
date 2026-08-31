@@ -295,7 +295,7 @@ python -m pytorrent.cli reset-password admin
 
 ### API tokens
 
-When authentication is enabled, API requests can use a browser session cookie or a per-user API token. Admin users can generate tokens in:
+When authentication is enabled, API requests can use a browser session cookie or a per-user API token. Admins can manage tokens for any user, while regular authenticated users can manage only their own token subresource. Admin users can generate tokens in:
 
 ```text
 Tools -> Users -> Generate token
@@ -395,12 +395,17 @@ PYTORRENT_AUTH_PROXY_AUTO_CREATE_PERMISSION=rw
 
 `rw` is accepted as an alias for `full`. Admin users can access all profiles.
 
-Do not use auth bypass on public hostnames. Limit bypass hosts to trusted private addresses only:
+Auth bypass is based only on the trusted client IP address seen by pyTorrent. HTTP `Host` is never trusted for bypass decisions. Enable it only for explicitly trusted addresses or networks:
 
 ```env
-PYTORRENT_AUTH_BYPASS_HOSTS=10.11.1.11:8090,10.11.1.11
+PYTORRENT_AUTH_ENABLE=true
+PYTORRENT_AUTH_BYPASS_IPS=127.0.0.1,10.11.1.0/24
 PYTORRENT_AUTH_BYPASS_USER=admin
 ```
+
+`PYTORRENT_AUTH_BYPASS_IPS` accepts comma-separated IPv4/IPv6 addresses and CIDRs. `PYTORRENT_AUTH_BYPASS_USER` must name an existing active pyTorrent user; an invalid or inactive account makes the bypass fail closed instead of falling back to another user. `PYTORRENT_AUTH_BYPASS_HOSTS` remains a backward-compatible variable name, but its values are also interpreted only as IP/CIDR entries; HTTP hostnames are never trusted. If both variables are set, their address lists are combined, so clear the legacy variable when migrating. Restart pyTorrent after changing these variables.
+
+When pyTorrent is behind a trusted reverse proxy and bypass must use the original client address, enable `PYTORRENT_PROXY_FIX_ENABLE=true` and set `PYTORRENT_PROXY_FIX_X_FOR` to the exact number of trusted proxy hops. The application must not be directly reachable around that proxy, and the proxy must overwrite `X-Forwarded-For`; otherwise a client could spoof the address used by ProxyFix.
 
 ## GeoIP
 
@@ -530,7 +535,7 @@ PYTORRENT_DEBUG_INSTALL=1 bash scripts/install_stack.sh
 - Do not expose rTorrent SCGI directly to the public internet.
 - Use HTTPS and authentication for remote access.
 - Set a strong `PYTORRENT_SECRET_KEY` before production use.
-- Review auth bypass settings before publishing or deploying.
+- Keep auth bypass disabled unless trusted client IP/CIDR rules are required; never use HTTP hostnames as bypass identities.
 - Keep `.env` out of Git. Use `.env.example` for public defaults.
 
 ## Development

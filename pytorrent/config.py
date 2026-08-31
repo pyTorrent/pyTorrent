@@ -110,7 +110,10 @@ _SOCKETIO_CORS = _env_csv("PYTORRENT_SOCKETIO_CORS_ALLOWED_ORIGINS")
 SOCKETIO_CORS_ALLOWED_ORIGINS = _SOCKETIO_CORS or None
 _API_ALLOWED_ORIGINS = _env_csv("PYTORRENT_API_ALLOWED_ORIGINS")
 API_ALLOWED_ORIGINS = _API_ALLOWED_ORIGINS or _env_csv("PYTORRENT_SOCKETIO_CORS_ALLOWED_ORIGINS")
+AUTH_BYPASS_IPS = {item.lower() for item in _env_csv("PYTORRENT_AUTH_BYPASS_IPS", strip_trailing_slash=False)}
+# Backward-compatible alias: legacy values are interpreted only as IP/CIDR entries, never as trusted HTTP Host names.
 AUTH_BYPASS_HOSTS = {item.lower() for item in _env_csv("PYTORRENT_AUTH_BYPASS_HOSTS", strip_trailing_slash=False)}
+AUTH_BYPASS_ADDRESSES = AUTH_BYPASS_IPS | AUTH_BYPASS_HOSTS
 AUTH_BYPASS_USER = _env_str("PYTORRENT_AUTH_BYPASS_USER", "admin") or "admin"
 METRICS_ENABLE = _env_bool("PYTORRENT_METRICS_ENABLE", False, extra_true={"enable", "enabled"})
 _METRICS_PATH = _env_str("PYTORRENT_METRICS_PATH", "/metrics") or "/metrics"

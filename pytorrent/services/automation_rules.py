@@ -7,7 +7,7 @@ import uuid
 from ..db import connect, default_user_id, utcnow
 from . import rtorrent, auth
 from .preferences import active_profile, get_profile, get_profile_for_system, get_disk_monitor_preferences, get_profile_disk_monitor_preferences
-from .workers import enqueue
+from .workers import enqueue_many
 
 AUTOMATION_JOB_CHUNK_SIZE = 100
 AUTOMATION_LIGHT_ACTIONS = {'start', 'stop', 'pause', 'resume', 'set_label'}
@@ -425,10 +425,10 @@ def _job_context(rule: dict[str, Any], eff_type: str, hashes: list[str], torrent
     return ctx
 
 
-def _enqueue_automation_job(profile: dict[str, Any], rule: dict[str, Any], action_name: str, hashes: list[str], payload: dict[str, Any], torrents_by_hash: dict[str, dict[str, Any]], user_id: int | None = None, context_extra: dict[str, Any] | None = None, system_execution: bool = False, execution_id: str = '') -> list[str]:
-    """Queue automation effects while preserving the run's authorization scope."""
-    # Note: Scheduler authority is stored in the job row, never in user-controlled payload JSON.
-    job_ids: list[str] = []
+def _automation_job_specs(profile: dict[str, Any], rule: dict[str, Any], action_name: str, hashes: list[str], payload: dict[str, Any], torrents_by_hash: dict[str, dict[str, Any]], user_id: int | None = None, context_extra: dict[str, Any] | None = None, system_execution: bool = False, execution_id: str = '') -> list[dict[str, Any]]:
+    """Build automation jobs without writing them so one rule execution can be committed atomically."""
+    # Note: All effects are validated and normalized before enqueue_many performs the first database insert, preventing partially queued multi-effect runs.
+    specs: list[dict[str, Any]] = []
     chunks = [hashes] if action_name in AUTOMATION_LIGHT_ACTIONS else _chunk_hashes(hashes)
     for index, chunk in enumerate(chunks, start=1):
         part_payload = dict(payload or {})
@@ -439,8 +439,7 @@ def _enqueue_automation_job(profile: dict[str, Any], rule: dict[str, Any], actio
         extra = dict(context_extra or {})
         if execution_id:
             extra['automation_execution_id'] = str(execution_id)
-            # Note: Execution state is sealed only after every effect job has been queued successfully, preventing an early fast job from committing cooldown before sibling jobs exist.
-            extra['automation_execution_scheduled'] = False
+            extra['automation_execution_scheduled'] = True
         if len(chunks) > 1:
             extra.update({'bulk_label': f'automation-{index}', 'bulk_part': index, 'bulk_parts': len(chunks), 'parent_hash_count': len(hashes)})
         if action_name == 'move':
@@ -451,10 +450,20 @@ def _enqueue_automation_job(profile: dict[str, Any], rule: dict[str, Any], actio
             extra.update({'remove_data': bool(part_payload.get('remove_data'))})
         effect_type = str(context_extra.get('effect_type') if context_extra else action_name)
         part_payload['job_context'] = _job_context(rule, effect_type, chunk, torrents_by_hash, extra)
-        job_ids.append(enqueue(action_name, int(profile['id']), part_payload, user_id=user_id, system_managed=system_execution))
-    return job_ids
+        specs.append({
+            'action_name': action_name,
+            'profile_id': int(profile['id']),
+            'payload': part_payload,
+            'user_id': user_id,
+            'system_managed': bool(system_execution),
+        })
+    return specs
 
 
+def _enqueue_automation_job(profile: dict[str, Any], rule: dict[str, Any], action_name: str, hashes: list[str], payload: dict[str, Any], torrents_by_hash: dict[str, dict[str, Any]], user_id: int | None = None, context_extra: dict[str, Any] | None = None, system_execution: bool = False, execution_id: str = '') -> list[str]:
+    """Queue one already validated automation effect using the shared durable queue."""
+    # Note: Kept as a compatibility helper; multi-effect rule execution uses _automation_job_specs directly and commits all sibling jobs together.
+    return enqueue_many(_automation_job_specs(profile, rule, action_name, hashes, payload, torrents_by_hash, user_id, context_extra, system_execution, execution_id))
 
 
 def _safe_remote_path(value: str) -> str:
@@ -542,7 +551,16 @@ def _apply_effects_bulk(c: Any, profile: dict[str, Any], torrents: list[dict[str
     torrents_by_hash = {str(t.get('hash') or ''): t for t in torrents if str(t.get('hash') or '')}
     labels_by_hash = {str(t.get('hash') or ''): _label_names(t.get('label')) for t in torrents}
     applied: list[dict[str, Any]] = []
+    pending_specs: list[dict[str, Any]] = []
     if not hashes: return applied
+
+    def plan_jobs(action_name: str, target_hashes: list[str], payload: dict[str, Any], context_extra: dict[str, Any] | None = None, actor_id: int | None = user_id) -> list[int]:
+        # Note: Job ids are resolved only after every rule effect has been translated successfully.
+        specs = _automation_job_specs(profile, rule, action_name, target_hashes, payload, torrents_by_hash, actor_id, context_extra, system_execution, execution_id)
+        start_index = len(pending_specs)
+        pending_specs.extend(specs)
+        return list(range(start_index, start_index + len(specs)))
+
     for eff in effects:
         typ = str(eff.get('type') or '')
         if typ == 'move':
@@ -553,12 +571,12 @@ def _apply_effects_bulk(c: Any, profile: dict[str, Any], torrents: list[dict[str
                 'recheck': bool(eff.get('recheck', eff.get('move_data'))),
                 'keep_seeding': bool(eff.get('keep_seeding')),
             }
-            job_ids = _enqueue_automation_job(profile, rule, 'move', hashes, payload, torrents_by_hash, user_id, {'effect_type': 'move'}, system_execution, execution_id)
+            job_ids = plan_jobs('move', hashes, payload, {'effect_type': 'move'}, user_id)
             applied.append({'type': 'move', 'path': path, 'count': len(hashes), 'target_hashes': hashes, 'move_data': payload['move_data'], 'recheck': payload['recheck'], 'keep_seeding': payload['keep_seeding'], 'job_ids': job_ids})
         elif typ == 'profile_transfer':
             executor_id = int(user_id or _resolve_user_id(profile))
             payload = _automation_profile_transfer_payload(profile, eff, executor_id, system_execution)
-            job_ids = _enqueue_automation_job(profile, rule, 'profile_transfer', hashes, payload, torrents_by_hash, executor_id, {'effect_type': 'profile_transfer'}, system_execution, execution_id)
+            job_ids = plan_jobs('profile_transfer', hashes, payload, {'effect_type': 'profile_transfer'}, executor_id)
             applied.append({'type': 'profile_transfer', 'target_profile_id': payload['target_profile_id'], 'target_path': payload['target_path'], 'count': len(hashes), 'target_hashes': hashes, 'move_data': payload['move_data'], 'move_data_requested': payload['move_data_requested'], 'move_data_downgraded': payload['move_data_downgraded'], 'post_action': payload['post_action'], 'label_mode': payload['label_mode'], 'label': payload['label_value'], 'job_ids': job_ids})
         elif typ == 'add_label':
             label = str(eff.get('label') or '').strip()
@@ -573,9 +591,9 @@ def _apply_effects_bulk(c: Any, profile: dict[str, Any], torrents: list[dict[str
                     labels_by_hash[h] = _label_names(value)
                     grouped.setdefault(value, []).append(h)
                 target_hashes = [h for group in grouped.values() for h in group]
-                job_ids: list[str] = []
+                job_ids: list[int] = []
                 for value, group_hashes in grouped.items():
-                    job_ids.extend(_enqueue_automation_job(profile, rule, 'set_label', group_hashes, {'label': value}, torrents_by_hash, user_id, {'effect_type': 'add_label', 'label': label}, system_execution, execution_id))
+                    job_ids.extend(plan_jobs('set_label', group_hashes, {'label': value}, {'effect_type': 'add_label', 'label': label}, user_id))
                 if target_hashes:
                     applied.append({'type': 'add_label', 'label': label, 'count': len(target_hashes), 'target_hashes': target_hashes, 'job_ids': job_ids})
         elif typ == 'remove_label':
@@ -590,9 +608,9 @@ def _apply_effects_bulk(c: Any, profile: dict[str, Any], torrents: list[dict[str
                     labels_by_hash[h] = _label_names(value)
                     grouped.setdefault(value, []).append(h)
                 target_hashes = [h for group in grouped.values() for h in group]
-                job_ids: list[str] = []
+                job_ids: list[int] = []
                 for value, group_hashes in grouped.items():
-                    job_ids.extend(_enqueue_automation_job(profile, rule, 'set_label', group_hashes, {'label': value}, torrents_by_hash, user_id, {'effect_type': 'remove_label', 'label': label}, system_execution, execution_id))
+                    job_ids.extend(plan_jobs('set_label', group_hashes, {'label': value}, {'effect_type': 'remove_label', 'label': label}, user_id))
                 if target_hashes:
                     applied.append({'type': 'remove_label', 'label': label, 'count': len(target_hashes), 'target_hashes': target_hashes, 'job_ids': job_ids})
         elif typ == 'set_labels':
@@ -602,15 +620,20 @@ def _apply_effects_bulk(c: Any, profile: dict[str, Any], torrents: list[dict[str
             for h in target_hashes:
                 labels_by_hash[h] = list(target_labels)
             if target_hashes:
-                job_ids = _enqueue_automation_job(profile, rule, 'set_label', target_hashes, {'label': value}, torrents_by_hash, user_id, {'effect_type': 'set_labels', 'labels': value}, system_execution, execution_id)
+                job_ids = plan_jobs('set_label', target_hashes, {'label': value}, {'effect_type': 'set_labels', 'labels': value}, user_id)
                 applied.append({'type': 'set_labels', 'labels': value, 'count': len(target_hashes), 'target_hashes': target_hashes, 'job_ids': job_ids})
         elif typ in {'pause', 'stop', 'start', 'resume', 'recheck', 'reannounce'}:
-            job_ids = _enqueue_automation_job(profile, rule, typ, hashes, {}, torrents_by_hash, user_id, {'effect_type': typ}, system_execution, execution_id)
+            job_ids = plan_jobs(typ, hashes, {}, {'effect_type': typ}, user_id)
             applied.append({'type': typ, 'count': len(hashes), 'target_hashes': hashes, 'job_ids': job_ids})
         elif typ == 'remove':
             payload = {'remove_data': bool(eff.get('remove_data'))}
-            job_ids = _enqueue_automation_job(profile, rule, 'remove', hashes, payload, torrents_by_hash, user_id, {'effect_type': 'remove'}, system_execution, execution_id)
+            job_ids = plan_jobs('remove', hashes, payload, {'effect_type': 'remove'}, user_id)
             applied.append({'type': 'remove', 'count': len(hashes), 'target_hashes': hashes, 'remove_data': payload['remove_data'], 'job_ids': job_ids})
+    if pending_specs:
+        committed_ids = enqueue_many(pending_specs)
+        for action in applied:
+            indexes = [int(value) for value in action.get('job_ids') or []]
+            action['job_ids'] = [committed_ids[index] for index in indexes]
     return applied
 
 

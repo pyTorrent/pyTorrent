@@ -551,12 +551,17 @@ def _profile_download_roots(profile: dict) -> list[str]:
 
 def _authorized_profile_path(profile: dict, value: str, *, default_to_root: bool = False) -> str:
     """Resolve and authorize one existing remote filesystem path for the active profile."""
-    # Note: Physical-path comparison blocks nested symlink escapes as well as lexical ../ traversal.
+    # Note: Physical-path comparison blocks symlink escapes while accepting both the configured root spelling and physical paths returned by the browser.
     roots = _profile_download_roots(profile)
     if not roots:
         raise PermissionError("Profile download root is unavailable")
-    requested = str(value or "").strip() or (roots[0] if default_to_root else "")
-    lexical = path_policy.require_remote_path(requested, [str(rtorrent.default_download_path(profile) or "")], default_path=str(rtorrent.default_download_path(profile) or "") if default_to_root else "")
+    configured_root = str(rtorrent.default_download_path(profile) or "").strip()
+    requested = str(value or "").strip() or (configured_root if default_to_root else "")
+    try:
+        lexical = path_policy.require_remote_path(requested, [configured_root], default_path=configured_root if default_to_root else "")
+    except PermissionError:
+        # Existing browse responses use cd -P paths; permit that spelling only when it is already inside the resolved backend root.
+        lexical = path_policy.require_remote_path(requested, roots)
     physical = rtorrent.resolve_accessible_directory(profile, lexical)
     return path_policy.require_remote_path(physical, roots)
 
@@ -575,6 +580,8 @@ def path_default():
         except Exception:
             preferred = root
         return ok({"path": preferred, "profile_default_path": root, "profile_id": int(profile["id"])})
+    except PermissionError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 403
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
 
