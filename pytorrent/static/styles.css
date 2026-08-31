@@ -10189,3 +10189,9 @@ html[data-ui-framework="pytorrent"] .speed-limit-presets .btn {
     margin: 0.65rem;
   }
 }
+
+
+/* Profile permission UX is framework-neutral; backend remains authoritative. */
+.profile-readonly-notice{display:flex;align-items:center;gap:.55rem;margin:.55rem .75rem 0;padding:.5rem .7rem;border:1px solid var(--bs-border-color,#cbd5e1);border-radius:.45rem;background:var(--bs-tertiary-bg,#f8fafc);font-size:.86rem}
+.permission-write-blocked{opacity:.5!important;cursor:not-allowed!important;filter:saturate(.55)}
+.profile-read-only .permission-write-blocked{pointer-events:auto}

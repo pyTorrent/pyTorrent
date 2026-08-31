@@ -5,7 +5,7 @@ import json
 import threading
 from ..db import connect, default_user_id, utcnow
 from . import rtorrent, auth
-from .preferences import active_profile, get_profile, get_disk_monitor_preferences
+from .preferences import active_profile, get_profile, get_profile_for_system, get_disk_monitor_preferences, get_profile_disk_monitor_preferences
 from .workers import enqueue
 
 AUTOMATION_JOB_CHUNK_SIZE = 100
@@ -184,6 +184,19 @@ def _portable_rule(rule: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _validate_management_effects(profile_id: int, effects: list[dict[str, Any]], actor_id: int) -> None:
+    """Validate cross-profile effects while an authorized user creates or changes a rule."""
+    # Note: Background execution may outlive the editor's permissions, so target authority is checked before configuration is persisted.
+    for effect in effects:
+        if not isinstance(effect, dict) or str(effect.get('type') or '') != 'profile_transfer':
+            continue
+        target_id = int(effect.get('target_profile_id') or 0)
+        if not target_id or target_id == int(profile_id):
+            raise ValueError('Automation target profile is invalid')
+        if not auth.can_write_profile(target_id, actor_id) or not get_profile(target_id, actor_id):
+            raise ValueError('Write access to automation target profile is required')
+
+
 def export_rules(profile_id: int, user_id: int | None = None) -> dict[str, Any]:
     rules = [_portable_rule(rule) for rule in list_rules(profile_id, user_id)]
     return {'version': 1, 'app': 'pyTorrent', 'exported_at': utcnow(), 'scope': 'profile', 'rules': rules}
@@ -205,6 +218,7 @@ def import_rules(profile_id: int, payload: dict[str, Any] | list[Any], user_id: 
             raise ValueError('Rule needs at least one condition')
         if not isinstance(rule.get('effects'), list) or not rule.get('effects'):
             raise ValueError('Rule needs at least one effect')
+        _validate_management_effects(profile_id, rule['effects'], actor_id)
         normalized.append(rule)
     if not normalized:
         raise ValueError('No valid automation rules found')
@@ -238,6 +252,7 @@ def save_rule(profile_id: int, data: dict[str, Any], user_id: int | None = None)
         raise ValueError('Rule needs at least one condition')
     if not isinstance(effects, list) or not effects:
         raise ValueError('Rule needs at least one effect')
+    _validate_management_effects(profile_id, effects, actor_id)
     cooldown = max(0, int(data.get('cooldown_minutes') or 0))
     enabled = 1 if data.get('enabled', True) else 0
     now = utcnow()
@@ -374,7 +389,9 @@ def _job_context(rule: dict[str, Any], eff_type: str, hashes: list[str], torrent
     return ctx
 
 
-def _enqueue_automation_job(profile: dict[str, Any], rule: dict[str, Any], action_name: str, hashes: list[str], payload: dict[str, Any], torrents_by_hash: dict[str, dict[str, Any]], user_id: int | None = None, context_extra: dict[str, Any] | None = None) -> list[str]:
+def _enqueue_automation_job(profile: dict[str, Any], rule: dict[str, Any], action_name: str, hashes: list[str], payload: dict[str, Any], torrents_by_hash: dict[str, dict[str, Any]], user_id: int | None = None, context_extra: dict[str, Any] | None = None, system_execution: bool = False) -> list[str]:
+    """Queue automation effects while preserving the run's authorization scope."""
+    # Note: Scheduler authority is stored in the job row, never in user-controlled payload JSON.
     job_ids: list[str] = []
     chunks = [hashes] if action_name in AUTOMATION_LIGHT_ACTIONS else _chunk_hashes(hashes)
     for index, chunk in enumerate(chunks, start=1):
@@ -394,7 +411,7 @@ def _enqueue_automation_job(profile: dict[str, Any], rule: dict[str, Any], actio
             extra.update({'remove_data': bool(part_payload.get('remove_data'))})
         effect_type = str(context_extra.get('effect_type') if context_extra else action_name)
         part_payload['job_context'] = _job_context(rule, effect_type, chunk, torrents_by_hash, extra)
-        job_ids.append(enqueue(action_name, int(profile['id']), part_payload, user_id=user_id))
+        job_ids.append(enqueue(action_name, int(profile['id']), part_payload, user_id=user_id, system_managed=system_execution))
     return job_ids
 
 
@@ -413,18 +430,18 @@ def _path_inside_root(path: str, root: str) -> bool:
     root = _safe_remote_path(root)
     return bool(path and root and (path == root or path.startswith(root.rstrip('/') + '/')))
 
-def _automation_profile_transfer_payload(profile: dict[str, Any], eff: dict[str, Any], user_id: int) -> dict[str, Any]:
+def _automation_profile_transfer_payload(profile: dict[str, Any], eff: dict[str, Any], user_id: int, system_execution: bool = False) -> dict[str, Any]:
     """Validate automation profile-transfer settings with the same path semantics as the interactive transfer."""
-    # Note: Metadata-only rules preserve each torrent's live source directory, so target-root checks apply only when data files are moved.
+    # Note: Interactive runs recheck user access; trusted scheduler runs use the previously authorized profile-bound rule.
     source_id = int(profile.get('id') or 0)
-    if not auth.can_write_profile(source_id, user_id):
+    if not system_execution and not auth.can_write_profile(source_id, user_id):
         raise ValueError('Automation executor has no write access to source profile')
     target_id = int(eff.get('target_profile_id') or 0)
     if not target_id or target_id == source_id:
         raise ValueError('Automation target profile is invalid')
-    if not auth.can_write_profile(target_id, user_id):
+    if not system_execution and not auth.can_write_profile(target_id, user_id):
         raise ValueError('Automation executor has no write access to target profile')
-    target_profile = get_profile(target_id, user_id)
+    target_profile = get_profile_for_system(target_id) if system_execution else get_profile(target_id, user_id)
     if not target_profile:
         raise ValueError('Automation target profile does not exist')
 
@@ -435,7 +452,7 @@ def _automation_profile_transfer_payload(profile: dict[str, Any], eff: dict[str,
     roots = [default_path] if default_path else []
     if requested_move_data:
         try:
-            prefs = get_disk_monitor_preferences(target_id, user_id=user_id)
+            prefs = get_profile_disk_monitor_preferences(target_id) if system_execution else get_disk_monitor_preferences(target_id, user_id=user_id)
             for item in json.loads((prefs or {}).get('disk_monitor_paths_json') or '[]'):
                 clean = _safe_remote_path(str(item or ''))
                 if clean and clean not in roots:
@@ -478,7 +495,9 @@ def _automation_profile_transfer_payload(profile: dict[str, Any], eff: dict[str,
         'label_value': str(eff.get('label_value') or '').strip(),
     }
 
-def _apply_effects_bulk(c: Any, profile: dict[str, Any], torrents: list[dict[str, Any]], effects: list[dict[str, Any]], rule: dict[str, Any], user_id: int | None = None) -> list[dict[str, Any]]:
+def _apply_effects_bulk(c: Any, profile: dict[str, Any], torrents: list[dict[str, Any]], effects: list[dict[str, Any]], rule: dict[str, Any], user_id: int | None = None, system_execution: bool = False) -> list[dict[str, Any]]:
+    """Translate matching rule effects into durable user or scheduler jobs."""
+    # Note: Every effect from one check keeps the same trusted-system flag through worker retries.
     hashes = [str(t.get('hash') or '') for t in torrents if str(t.get('hash') or '')]
     torrents_by_hash = {str(t.get('hash') or ''): t for t in torrents if str(t.get('hash') or '')}
     labels_by_hash = {str(t.get('hash') or ''): _label_names(t.get('label')) for t in torrents}
@@ -494,12 +513,12 @@ def _apply_effects_bulk(c: Any, profile: dict[str, Any], torrents: list[dict[str
                 'recheck': bool(eff.get('recheck', eff.get('move_data'))),
                 'keep_seeding': bool(eff.get('keep_seeding')),
             }
-            job_ids = _enqueue_automation_job(profile, rule, 'move', hashes, payload, torrents_by_hash, user_id, {'effect_type': 'move'})
+            job_ids = _enqueue_automation_job(profile, rule, 'move', hashes, payload, torrents_by_hash, user_id, {'effect_type': 'move'}, system_execution)
             applied.append({'type': 'move', 'path': path, 'count': len(hashes), 'target_hashes': hashes, 'move_data': payload['move_data'], 'recheck': payload['recheck'], 'keep_seeding': payload['keep_seeding'], 'job_ids': job_ids})
         elif typ == 'profile_transfer':
             executor_id = int(user_id or _resolve_user_id(profile))
-            payload = _automation_profile_transfer_payload(profile, eff, executor_id)
-            job_ids = _enqueue_automation_job(profile, rule, 'profile_transfer', hashes, payload, torrents_by_hash, executor_id, {'effect_type': 'profile_transfer'})
+            payload = _automation_profile_transfer_payload(profile, eff, executor_id, system_execution)
+            job_ids = _enqueue_automation_job(profile, rule, 'profile_transfer', hashes, payload, torrents_by_hash, executor_id, {'effect_type': 'profile_transfer'}, system_execution)
             applied.append({'type': 'profile_transfer', 'target_profile_id': payload['target_profile_id'], 'target_path': payload['target_path'], 'count': len(hashes), 'target_hashes': hashes, 'move_data': payload['move_data'], 'move_data_requested': payload['move_data_requested'], 'move_data_downgraded': payload['move_data_downgraded'], 'post_action': payload['post_action'], 'label_mode': payload['label_mode'], 'label': payload['label_value'], 'job_ids': job_ids})
         elif typ == 'add_label':
             label = str(eff.get('label') or '').strip()
@@ -516,7 +535,7 @@ def _apply_effects_bulk(c: Any, profile: dict[str, Any], torrents: list[dict[str
                 target_hashes = [h for group in grouped.values() for h in group]
                 job_ids: list[str] = []
                 for value, group_hashes in grouped.items():
-                    job_ids.extend(_enqueue_automation_job(profile, rule, 'set_label', group_hashes, {'label': value}, torrents_by_hash, user_id, {'effect_type': 'add_label', 'label': label}))
+                    job_ids.extend(_enqueue_automation_job(profile, rule, 'set_label', group_hashes, {'label': value}, torrents_by_hash, user_id, {'effect_type': 'add_label', 'label': label}, system_execution))
                 if target_hashes:
                     applied.append({'type': 'add_label', 'label': label, 'count': len(target_hashes), 'target_hashes': target_hashes, 'job_ids': job_ids})
         elif typ == 'remove_label':
@@ -533,7 +552,7 @@ def _apply_effects_bulk(c: Any, profile: dict[str, Any], torrents: list[dict[str
                 target_hashes = [h for group in grouped.values() for h in group]
                 job_ids: list[str] = []
                 for value, group_hashes in grouped.items():
-                    job_ids.extend(_enqueue_automation_job(profile, rule, 'set_label', group_hashes, {'label': value}, torrents_by_hash, user_id, {'effect_type': 'remove_label', 'label': label}))
+                    job_ids.extend(_enqueue_automation_job(profile, rule, 'set_label', group_hashes, {'label': value}, torrents_by_hash, user_id, {'effect_type': 'remove_label', 'label': label}, system_execution))
                 if target_hashes:
                     applied.append({'type': 'remove_label', 'label': label, 'count': len(target_hashes), 'target_hashes': target_hashes, 'job_ids': job_ids})
         elif typ == 'set_labels':
@@ -543,14 +562,14 @@ def _apply_effects_bulk(c: Any, profile: dict[str, Any], torrents: list[dict[str
             for h in target_hashes:
                 labels_by_hash[h] = list(target_labels)
             if target_hashes:
-                job_ids = _enqueue_automation_job(profile, rule, 'set_label', target_hashes, {'label': value}, torrents_by_hash, user_id, {'effect_type': 'set_labels', 'labels': value})
+                job_ids = _enqueue_automation_job(profile, rule, 'set_label', target_hashes, {'label': value}, torrents_by_hash, user_id, {'effect_type': 'set_labels', 'labels': value}, system_execution)
                 applied.append({'type': 'set_labels', 'labels': value, 'count': len(target_hashes), 'target_hashes': target_hashes, 'job_ids': job_ids})
         elif typ in {'pause', 'stop', 'start', 'resume', 'recheck', 'reannounce'}:
-            job_ids = _enqueue_automation_job(profile, rule, typ, hashes, {}, torrents_by_hash, user_id, {'effect_type': typ})
+            job_ids = _enqueue_automation_job(profile, rule, typ, hashes, {}, torrents_by_hash, user_id, {'effect_type': typ}, system_execution)
             applied.append({'type': typ, 'count': len(hashes), 'target_hashes': hashes, 'job_ids': job_ids})
         elif typ == 'remove':
             payload = {'remove_data': bool(eff.get('remove_data'))}
-            job_ids = _enqueue_automation_job(profile, rule, 'remove', hashes, payload, torrents_by_hash, user_id, {'effect_type': 'remove'})
+            job_ids = _enqueue_automation_job(profile, rule, 'remove', hashes, payload, torrents_by_hash, user_id, {'effect_type': 'remove'}, system_execution)
             applied.append({'type': 'remove', 'count': len(hashes), 'target_hashes': hashes, 'remove_data': payload['remove_data'], 'job_ids': job_ids})
     return applied
 
@@ -567,14 +586,16 @@ def _record_skipped_rule(profile_id: int, rule: dict[str, Any], hashes: list[str
     return {'rule_id': rule['id'], 'rule_name': rule.get('name'), 'count': len(hashes), 'actions': [action], 'skipped': True}
 
 
-def check(profile: dict | None = None, user_id: int | None = None, force: bool = False, rule_id: int | None = None) -> dict[str, Any]:
+def check(profile: dict | None = None, user_id: int | None = None, force: bool = False, rule_id: int | None = None, system_execution: bool = False) -> dict[str, Any]:
+    """Evaluate profile-bound rules as an authorized user or trusted scheduler."""
+    # Note: User-triggered runs require current RW access; background runs rely on persisted rule authority, not a creator account.
     profile = profile or active_profile(user_id=user_id)
     if not profile:
         return {'ok': False, 'error': 'No active rTorrent profile'}
     profile_id = int(profile['id'])
     executor_id = _resolve_user_id(profile, user_id)
-    # Rules are shared profile configuration. The current caller (or profile owner for background runs) authorizes execution.
-    _require_profile_write(profile_id, executor_id)
+    if not system_execution:
+        _require_profile_write(profile_id, executor_id)
     lock = _check_lock(profile_id, rule_id)
     if not lock.acquire(blocking=False):
         return {'ok': True, 'checked': 0, 'applied': [], 'batches': [], 'rules': 0, 'skipped': True, 'reason': 'Automation check already running'}
@@ -602,7 +623,7 @@ def check(profile: dict | None = None, user_id: int | None = None, force: bool =
             matched = item['matched']
             hashes = item['hashes']
             try:
-                actions = _apply_effects_bulk(None, profile, matched, rule.get('effects') or [], rule, executor_id)
+                actions = _apply_effects_bulk(None, profile, matched, rule.get('effects') or [], rule, executor_id, system_execution)
             except Exception as exc:
                 actions = [{'error': str(exc), 'count': len(hashes), 'target_hashes': hashes}]
             changed_hashes = sorted({h for a in actions for h in (a.get('target_hashes') or [])})

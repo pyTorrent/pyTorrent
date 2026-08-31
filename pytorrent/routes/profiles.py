@@ -86,6 +86,7 @@ def profiles_activate(profile_id: int):
         poller_control.request_immediate_poll(profile_id)
         return ok({
             "profile": profile,
+            "can_write": auth.can_write_profile(int(profile.get("id") or 0), default_user_id()),
             "status_cache": cached_status,
             "status_cache_ready": cached_status is not None,
             "port_check_cache": cached_port_check,

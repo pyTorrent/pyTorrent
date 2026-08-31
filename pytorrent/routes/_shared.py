@@ -73,7 +73,7 @@ def _profile_selector_present() -> bool:
 
 
 def _requires_explicit_profile(require_write: bool) -> bool:
-    profile_write_path = request.path.startswith(auth.RTORRENT_WRITE_PREFIXES) or request.path.startswith(auth.RTORRENT_CONFIG_PREFIXES)
+    profile_write_path = auth.request_requires_profile_write()
     return bool((require_write or profile_write_path) and request.method in {"POST", "PUT", "PATCH", "DELETE"})
 
 def request_profile(require_write: bool = False):
@@ -98,9 +98,9 @@ def request_profile(require_write: bool = False):
         return None
     pid = int(profile["id"])
     if require_write and not auth.can_write_profile(pid, user_id):
-        abort(403)
+        raise PermissionError("Read-only profile access")
     if not require_write and not auth.can_access_profile(pid, user_id):
-        abort(403)
+        raise PermissionError("Profile access denied")
     return profile
 
 

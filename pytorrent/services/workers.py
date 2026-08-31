@@ -5,7 +5,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from . import rtorrent, auth, disk_guard, operation_logs
-from .preferences import get_profile
+from .preferences import get_profile, get_profile_for_system
 from ..config import WORKERS
 from ..db import connect, utcnow, default_user_id
 from .torrent_cache import torrent_cache
@@ -118,6 +118,17 @@ def _get_ordered_sem(profile_id: int, limit: int) -> threading.Semaphore:
 def _job_row(job_id: str):
     with connect() as conn:
         return conn.execute("SELECT rowid AS _rowid, * FROM jobs WHERE id=?", (job_id,)).fetchone()
+
+
+def _profile_for_job(job: dict, profile_id: int | None = None):
+    """Resolve a job profile with either user or trusted scheduler authority."""
+    # Note: Only the durable database flag can bypass user visibility; payload fields are never trusted for authorization.
+    resolved_profile_id = int(job.get("profile_id") or 0) if profile_id is None else int(profile_id or 0)
+    if not resolved_profile_id:
+        return None
+    if bool(int(job.get("system_managed") or 0)):
+        return get_profile_for_system(resolved_profile_id)
+    return get_profile(resolved_profile_id, int(job.get("user_id") or 0))
 
 
 def _job_payload(row) -> dict:
@@ -322,6 +333,7 @@ def _submit_job(job_id: str, action_name: str | None = None):
 
 def prepare_jobs(specs: list[dict]) -> list[dict]:
     """Normalize job rows before any database write so batches can be inserted atomically."""
+    # Note: system_managed is accepted only from internal call specifications and is persisted outside user-controlled payload JSON.
     prepared: list[dict] = []
     for spec in specs or []:
         action_name = str(spec.get("action_name") or spec.get("action") or "").strip()
@@ -339,6 +351,7 @@ def prepare_jobs(specs: list[dict]) -> list[dict]:
             "job_id": uuid.uuid4().hex,
             "user_id": user_id,
             "profile_id": profile_id,
+            "system_managed": 1 if spec.get("system_managed") else 0,
             "action_name": action_name,
             "payload": payload,
             "max_attempts": max_attempts,
@@ -349,11 +362,12 @@ def prepare_jobs(specs: list[dict]) -> list[dict]:
 
 
 def insert_prepared_jobs(conn, prepared: list[dict]) -> None:
+    # Note: The durable system flag lets watchdog retries preserve the original scheduler execution scope.
     for job in prepared:
         conn.execute(
-            "INSERT INTO jobs(id,user_id,profile_id,action,payload_json,status,attempts,max_attempts,progress_total,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO jobs(id,user_id,profile_id,system_managed,action,payload_json,status,attempts,max_attempts,progress_total,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
             (
-                job["job_id"], job["user_id"], job["profile_id"], job["action_name"],
+                job["job_id"], job["user_id"], job["profile_id"], job["system_managed"], job["action_name"],
                 json.dumps(job["payload"]), "pending", 0, job["max_attempts"], job["progress_total"],
                 job["created_at"], job["created_at"],
             ),
@@ -398,7 +412,9 @@ def enqueue_many(specs: list[dict]) -> list[str]:
     return [str(job["job_id"]) for job in prepared]
 
 
-def enqueue(action_name: str, profile_id: int, payload: dict, user_id: int | None = None, max_attempts: int = 2, force: bool = False) -> str:
+def enqueue(action_name: str, profile_id: int, payload: dict, user_id: int | None = None, max_attempts: int = 2, force: bool = False, system_managed: bool = False) -> str:
+    """Queue one user or trusted scheduler job."""
+    # Note: Callers cannot elevate a job through payload JSON; trusted scope is a separate internal argument and database column.
     return enqueue_many([{
         "action_name": action_name,
         "profile_id": int(profile_id),
@@ -406,6 +422,7 @@ def enqueue(action_name: str, profile_id: int, payload: dict, user_id: int | Non
         "user_id": user_id,
         "max_attempts": max_attempts,
         "force": force,
+        "system_managed": bool(system_managed),
     }])[0]
 
 
@@ -490,7 +507,9 @@ def _emit_disk_refresh_requested(profile_id: int, action_name: str, payload: dic
         return
     _schedule_profile_disk_refresh(int(profile_id), len((payload or {}).get("hashes") or []))
 
-def _execute(profile: dict, action_name: str, payload: dict, user_id: int | None = None):
+def _execute(profile: dict, action_name: str, payload: dict, user_id: int | None = None, system_managed: bool = False):
+    """Execute a claimed job using its persisted authorization scope."""
+    # Note: System scope affects only profile lookup; action payload validation and rTorrent safety checks remain unchanged.
     transfer_checkpoint = {"current": 0, "at": 0.0}
 
     def checkpoint(next_state: dict, current: int, total: int):
@@ -523,8 +542,9 @@ def _execute(profile: dict, action_name: str, payload: dict, user_id: int | None
             disk_guard.assert_can_start_download(profile)
         return rtorrent.add_torrent_raw(profile, raw, bool(payload.get("start", True)), str(payload.get("directory") or ""), str(payload.get("label") or ""), payload.get("file_priorities") or None)
     if action_name == "profile_transfer":
-        # Note: Target profile is resolved inside the worker with the original user's permissions, not trusted from the request payload.
-        target_profile = get_profile(int(payload.get("target_profile_id") or 0), user_id or default_user_id())
+        # Note: User jobs recheck the original user's target access; trusted scheduler jobs use the validated persisted rule scope.
+        target_id = int(payload.get("target_profile_id") or 0)
+        target_profile = get_profile_for_system(target_id) if system_managed else get_profile(target_id, user_id or default_user_id())
         if not target_profile:
             raise ValueError("Target profile does not exist or is not accessible")
         return rtorrent.transfer_profile(profile, target_profile, payload.get("hashes") or [], payload, checkpoint=checkpoint, resume_state=payload.get("__resume_state") or {})
@@ -643,10 +663,11 @@ def _emit_job_started(job_id: str, profile: dict, job: dict, payload: dict, atte
 
 
 def _emit_destination_profile_refresh(job: dict, payload: dict, action_name: str) -> None:
+    # Note: Destination refresh uses the job's persisted authority just like the transfer itself.
     if action_name != "profile_transfer":
         return
     try:
-        target_profile = get_profile(int(payload.get("target_profile_id") or 0), int(job.get("user_id") or 0))
+        target_profile = _profile_for_job(job, int(payload.get("target_profile_id") or 0))
         if target_profile:
             _emit_torrent_refresh(target_profile, action_name)
     except Exception:
@@ -717,7 +738,7 @@ def _handle_job_exception(job_id: str, job: dict, payload: dict, exc: Exception)
         if str(job.get("action") or "") == "profile_transfer":
             # Note: A terminal bulk-transfer failure forces one endpoint refresh so earlier successful parts are visible even when the final deferred refresh never runs.
             try:
-                source_profile = get_profile(int(job.get("profile_id") or 0), int(job.get("user_id") or 0))
+                source_profile = _profile_for_job(job)
                 if source_profile:
                     _emit_torrent_refresh(source_profile, "profile_transfer")
                 _emit_destination_profile_refresh(job, payload, "profile_transfer")
@@ -749,7 +770,8 @@ def _run(job_id: str):
         job = _job_row(job_id)
         if not job or job["status"] == "cancelled":
             return
-        profile = get_profile(int(job["profile_id"]), int(job["user_id"]))
+        # Note: A scheduler job keeps trusted profile resolution across delayed dispatch and retry attempts.
+        profile = _profile_for_job(job)
         if not profile:
             _fail_missing_profile(job_id, job)
             return
@@ -768,7 +790,13 @@ def _run(job_id: str):
             return
         event_meta = _job_event_meta(payload)
         _emit_job_started(job_id, profile, job, payload, attempts, event_meta)
-        result = _execute(profile, job["action"], payload, user_id=int(job.get("user_id") or 0))
+        result = _execute(
+            profile,
+            job["action"],
+            payload,
+            user_id=int(job.get("user_id") or 0),
+            system_managed=bool(int(job.get("system_managed") or 0)),
+        )
         fresh = _job_row(job_id)
         if fresh and fresh["status"] != "running":
             return
@@ -805,11 +833,12 @@ def _pending_timeout_seconds(profile: dict) -> int:
 
 
 def _timeout_running_jobs() -> None:
+    # Note: Watchdog timeout limits are resolved with each job's persisted user-or-system scope.
     now_ts = time.time()
     with connect() as conn:
-        rows = conn.execute("SELECT id,user_id,profile_id,action,started_at FROM jobs WHERE status='running'").fetchall()
+        rows = conn.execute("SELECT id,user_id,profile_id,system_managed,action,started_at FROM jobs WHERE status='running'").fetchall()
     for row in rows:
-        profile = get_profile(int(row["profile_id"]), int(row["user_id"]))
+        profile = _profile_for_job(row)
         if not profile:
             continue
         started_ts = _parse_ts(row.get("started_at"))
@@ -823,15 +852,16 @@ def _timeout_running_jobs() -> None:
 
 
 def _resubmit_interrupted_running_jobs() -> None:
+    # Note: Restart recovery preserves trusted scheduler authority stored on the interrupted job.
     now_ts = time.time()
     with connect() as conn:
-        rows = conn.execute("SELECT id,user_id,profile_id,action,heartbeat_at,updated_at FROM jobs WHERE status='running'").fetchall()
+        rows = conn.execute("SELECT id,user_id,profile_id,system_managed,action,heartbeat_at,updated_at FROM jobs WHERE status='running'").fetchall()
     for row in rows:
         with _runner_lock:
             active = row["id"] in _active_runners
         if active:
             continue
-        profile = get_profile(int(row["profile_id"]), int(row["user_id"]))
+        profile = _profile_for_job(row)
         if not profile:
             continue
         last_seen_ts = _parse_ts(row.get("heartbeat_at") or row.get("updated_at"))
@@ -850,15 +880,16 @@ def _resubmit_interrupted_running_jobs() -> None:
 
 
 def _resubmit_stale_pending_jobs() -> None:
+    # Note: Stale scheduler jobs remain recoverable even after their audit user's permissions change.
     now_ts = time.time()
     with connect() as conn:
-        rows = conn.execute("SELECT id,user_id,profile_id,action,updated_at FROM jobs WHERE status='pending'").fetchall()
+        rows = conn.execute("SELECT id,user_id,profile_id,system_managed,action,updated_at FROM jobs WHERE status='pending'").fetchall()
     for row in rows:
         with _runner_lock:
             active = row["id"] in _active_runners
         if active:
             continue
-        profile = get_profile(int(row["profile_id"]), int(row["user_id"]))
+        profile = _profile_for_job(row)
         if not profile:
             continue
         updated_ts = _parse_ts(row.get("updated_at"))

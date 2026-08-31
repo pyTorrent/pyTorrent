@@ -237,7 +237,7 @@ def jobs_list():
             return jsonify({"ok": False, "error": "No profile"}), 400
         profile_id = int(profile["id"])
     elif not is_admin():
-        abort(403)
+        raise PermissionError("Administrator permission is required")
     # Note: The UI reads profile-scoped jobs by default; scope=global remains an explicit admin diagnostics view.
     data = list_jobs(limit, offset, profile_id=profile_id)
     return ok({"jobs": data["rows"], "total": data["total"], "running_total": data["running_total"], "unfinished_total": data["unfinished_total"], "limit": data["limit"], "offset": data["offset"], "profile_id": profile_id, "scope": scope if scope == "global" else "profile"})
@@ -254,7 +254,7 @@ def jobs_clear():
             return jsonify({"ok": False, "error": "No profile"}), 400
         profile_id = int(profile["id"])
     elif not is_admin():
-        abort(403)
+        raise PermissionError("Administrator permission is required")
     if str(request.args.get("force") or "").lower() in {"1", "true", "yes"}:
         # Note: Emergency cleanup can still be global, but only when an admin explicitly requests scope=global.
         deleted = emergency_clear_jobs(profile_id=profile_id)

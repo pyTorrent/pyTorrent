@@ -7,8 +7,8 @@ from datetime import datetime, timezone, timedelta
 from email.utils import parsedate_to_datetime
 from typing import Iterable
 
-from ..db import connect, utcnow
-from . import rtorrent
+from ..db import connect, default_user_id, utcnow
+from . import auth, rtorrent
 from .workers import enqueue
 
 RSS_FETCH_LIMIT = 2_000_000
@@ -133,8 +133,13 @@ def _log(profile_id: int, feed_id: int | None, rule_id: int | None, item: dict, 
             pass
 
 
-def check(profile: dict, user_id: int | None = None, only_due: bool = False) -> dict:
+def check(profile: dict, user_id: int | None = None, only_due: bool = False, system_execution: bool = False) -> dict:
+    """Check profile RSS rules and queue matches under the requested execution scope."""
+    # Note: Scheduler jobs retain trusted profile authority while manual requests remain bound to their authenticated user.
     profile_id = int(profile["id"])
+    executor_user_id = int(user_id or auth.current_user_id() or profile.get("user_id") or default_user_id())
+    if not system_execution and not auth.can_write_profile(profile_id, executor_user_id):
+        raise PermissionError("No write access to profile")
     now = utcnow()
     with connect() as conn:
         if only_due:
@@ -160,7 +165,7 @@ def check(profile: dict, user_id: int | None = None, only_due: bool = False) -> 
                     if not link:
                         _log(profile_id, feed["id"], rule["id"], item, "skipped", "missing link")
                         continue
-                    enqueue("add_magnet", profile_id, {"uri": link, "start": bool(rule["start"]), "directory": rule.get("save_path") or rtorrent.default_download_path(profile), "label": rule.get("label") or "", "source": "rss"}, user_id=user_id)
+                    enqueue("add_magnet", profile_id, {"uri": link, "start": bool(rule["start"]), "directory": rule.get("save_path") or rtorrent.default_download_path(profile), "label": rule.get("label") or "", "source": "rss"}, user_id=executor_user_id, system_managed=system_execution)
                     queued += 1
                     _log(profile_id, feed["id"], rule["id"], item, "queued", reason)
             with connect() as conn:
@@ -196,18 +201,16 @@ def start_scheduler(socketio=None) -> None:
         # Note: The lightweight RSS scheduler uses persisted next_check_at values, so restarts do not reset cadence.
         while True:
             try:
-                from .preferences import get_profile
+                from .preferences import get_profile_for_system
                 with connect() as conn:
                     profiles = conn.execute("SELECT DISTINCT profile_id FROM rss_feeds WHERE enabled=1 AND profile_id IS NOT NULL").fetchall()
                 for row in profiles:
                     profile_id = int(row["profile_id"])
-                    with connect() as conn:
-                        owner = conn.execute("SELECT user_id FROM rtorrent_profiles WHERE id=?", (profile_id,)).fetchone()
-                    owner_id = int(owner["user_id"] if owner and owner.get("user_id") else default_user_id())
-                    profile = get_profile(profile_id, owner_id)
+                    profile = get_profile_for_system(profile_id)
                     if profile:
-                        # Note: RSS jobs run with the profile owner in background mode, independent of browser activity.
-                        result = check(profile, user_id=owner_id, only_due=True)
+                        # Note: The profile owner labels durable job history but does not authorize background RSS execution.
+                        audit_user_id = int(profile.get("user_id") or default_user_id())
+                        result = check(profile, user_id=audit_user_id, only_due=True, system_execution=True)
                         if socketio and result.get("queued"):
                             socketio.emit("rss_checked", {"profile_id": profile["id"], **result}, to=f"profile:{profile['id']}")
             except Exception:

@@ -43,6 +43,19 @@ def register_error_pages(app: Flask) -> None:
             icon="fa-compass-drafting",
         ), 404
 
+    @app.errorhandler(403)
+    def forbidden_http(error):
+        message = str(getattr(error, "description", "") or "Forbidden").strip() or "Forbidden"
+        if _wants_json_response():
+            return jsonify({"ok": False, "error": message}), 403
+        return render_template(
+            "error.html",
+            code=403,
+            title="Forbidden",
+            message=message,
+            icon="fa-lock",
+        ), 403
+
     @app.errorhandler(ValueError)
     def bad_request_value(error):
         message = str(error).strip() or "Invalid request"
@@ -60,7 +73,13 @@ def register_error_pages(app: Flask) -> None:
     def forbidden_operation(error):
         message = str(error).strip() or "Forbidden"
         if _wants_json_response():
-            return jsonify({"ok": False, "error": message}), 403
+            lowered = message.lower()
+            code = "permission_denied"
+            if lowered in {"read-only profile access", "no write access to profile"}:
+                code = "profile_read_only"
+            elif lowered in {"admin only", "administrator permission is required"}:
+                code = "admin_required"
+            return jsonify({"ok": False, "error": message, "code": code}), 403
         return render_template(
             "error.html",
             code=403,

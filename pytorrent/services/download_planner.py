@@ -76,8 +76,9 @@ def _all_profiles() -> list[dict]:
         return [dict(row) for row in conn.execute("SELECT * FROM rtorrent_profiles ORDER BY id").fetchall()]
 
 
-def _owner_user_id(profile: dict) -> int:
-    """Use the profile owner for background planner checks."""
+def _audit_user_id(profile: dict) -> int:
+    """Return a stable user id for planner audit records."""
+    # Note: The audit id does not grant or revoke trusted scheduler execution.
     return int(profile.get("user_id") or default_user_id())
 
 
@@ -221,13 +222,18 @@ def _user_label(user_id: int | None) -> str:
 
 
 
-def _preference_row_for_disk_source(profile_id: int, user_id: int | None = None) -> dict | None:
+def _preference_row_for_disk_source(profile_id: int, user_id: int | None = None, system_execution: bool = False) -> dict | None:
+    """Read disk-monitor settings with request or trusted scheduler scope."""
+    # Note: Shared profile disk settings stay available to background planning after user permission changes.
     from . import preferences
-    user_id = user_id or default_user_id()
+    if system_execution:
+        return preferences.get_profile_disk_monitor_preferences(profile_id)
+    user_id = user_id or auth.current_user_id() or default_user_id()
     return preferences.get_disk_monitor_preferences(profile_id, user_id)
 
-def _legacy_disk_guard_defaults(profile_id: int, user_id: int | None = None) -> dict:
-    pref = _preference_row_for_disk_source(profile_id, user_id)
+def _legacy_disk_guard_defaults(profile_id: int, user_id: int | None = None, system_execution: bool = False) -> dict:
+    # Note: Legacy planner defaults inherit the same request-or-scheduler scope as current disk settings.
+    pref = _preference_row_for_disk_source(profile_id, user_id, system_execution)
     if not pref or not pref.get("disk_monitor_stop_enabled"):
         return {}
     return {
@@ -335,11 +341,13 @@ def _next_boundary(now: datetime, settings: dict) -> str:
         candidates.append(dt)
     return min(candidates).isoformat() if candidates else ""
 
-def get_settings(profile_id: int, user_id: int | None = None) -> dict:
-    user_id = user_id or default_user_id()
+def get_settings(profile_id: int, user_id: int | None = None, system_execution: bool = False) -> dict:
+    """Return shared planner settings with legacy fallback under the caller's scope."""
+    # Note: Persisted planner rows are profile-bound; only legacy disk defaults need scoped preference access.
+    user_id = user_id or auth.current_user_id() or default_user_id()
     row = _row(user_id, profile_id)
     if not row:
-        migrated = normalize({**DEFAULTS, **_legacy_disk_guard_defaults(int(profile_id), user_id)})
+        migrated = normalize({**DEFAULTS, **_legacy_disk_guard_defaults(int(profile_id), user_id, system_execution)})
         return {
             **migrated,
             "profile_id": int(profile_id),
@@ -439,9 +447,11 @@ def _clear_planned(profile_id: int, hashes: list[str] | None = None) -> None:
             conn.execute("DELETE FROM download_plan_paused WHERE profile_id=?", (profile_id,))
 
 
-def disk_usage(profile: dict, user_id: int | None = None) -> dict | None:
+def disk_usage(profile: dict, user_id: int | None = None, system_execution: bool = False) -> dict | None:
+    """Read planner disk usage using request or scheduler-visible profile settings."""
+    # Note: The rTorrent disk probe is unchanged; only configuration lookup bypasses user permissions for trusted runs.
     profile_id = int(profile.get("id") or 0)
-    pref = _preference_row_for_disk_source(profile_id, user_id) or {}
+    pref = _preference_row_for_disk_source(profile_id, user_id, system_execution) or {}
     try:
         paths = json.loads(pref.get("disk_monitor_paths_json") or "[]")
     except Exception:
@@ -459,15 +469,18 @@ def disk_usage(profile: dict, user_id: int | None = None) -> dict | None:
         return None
 
 
-def _disk_percent(profile: dict, user_id: int | None = None) -> float | None:
-    usage = disk_usage(profile, user_id)
+def _disk_percent(profile: dict, user_id: int | None = None, system_execution: bool = False) -> float | None:
+    # Note: The authorization scope is forwarded unchanged to the shared disk-usage probe.
+    usage = disk_usage(profile, user_id, system_execution)
     if usage and usage.get("ok"):
         return float(usage.get("percent") or 0)
     return None
 
 
-def evaluate(profile: dict, settings: dict | None = None, now: datetime | None = None) -> dict:
-    settings = normalize(settings or get_settings(int(profile.get("id") or 0)))
+def evaluate(profile: dict, settings: dict | None = None, now: datetime | None = None, user_id: int | None = None, system_execution: bool = False) -> dict:
+    """Evaluate a planner decision without applying rTorrent mutations."""
+    # Note: Disk-protection inputs use the same authorization scope as the surrounding manual or scheduler run.
+    settings = normalize(settings or get_settings(int(profile.get("id") or 0), user_id, system_execution))
     now = now or datetime.now().astimezone()
     override_until = settings.get("manual_override_until") or _override_until(int(profile.get("id") or 0))
     override_active = bool(_parse_iso_ts(override_until) > time.time())
@@ -514,7 +527,7 @@ def evaluate(profile: dict, settings: dict | None = None, now: datetime | None =
             _HIGH_CPU_SINCE.pop(pid, None)
     disk = None
     if settings["auto_pause_disk_enabled"]:
-        disk = _disk_percent(profile, int(settings.get("user_id") or default_user_id()))
+        disk = _disk_percent(profile, user_id, system_execution)
         if disk is not None and disk >= float(settings["auto_pause_disk_percent"]):
             pause_downloads = True
             reasons.append("high_disk")
@@ -550,15 +563,17 @@ def evaluate(profile: dict, settings: dict | None = None, now: datetime | None =
     }
 
 
-def enforce(profile: dict, force: bool = False, user_id: int | None = None) -> dict:
+def enforce(profile: dict, force: bool = False, user_id: int | None = None, system_execution: bool = False) -> dict:
+    """Apply planner decisions as an authorized user or trusted scheduler."""
+    # Note: Manual checks retain RW enforcement while saved profile plans continue independently from user permissions.
     profile_id = int(profile.get("id") or 0)
-    execution_user_id = int(user_id or profile.get("user_id") or default_user_id())
-    settings = get_settings(profile_id, execution_user_id)
-    if not auth.can_write_profile(profile_id, execution_user_id):
+    execution_user_id = int(user_id or auth.current_user_id() or profile.get("user_id") or default_user_id())
+    settings = get_settings(profile_id, execution_user_id, system_execution)
+    if not system_execution and not auth.can_write_profile(profile_id, execution_user_id):
         return {"ok": True, "enabled": False, "profile_id": profile_id, "skipped": True, "reason": "execution user has no write access", "history": history(profile_id, 20), "history_total": history_count(profile_id)}
     user_id = execution_user_id
     if not settings.get("enabled"):
-        return {"ok": True, "enabled": False, "profile_id": profile_id, "history": history(profile_id, 20), "history_total": history_count(profile_id), "preview": preview(profile, user_id=user_id)}
+        return {"ok": True, "enabled": False, "profile_id": profile_id, "history": history(profile_id, 20), "history_total": history_count(profile_id), "preview": preview(profile, user_id=execution_user_id, system_execution=system_execution)}
     startup_remaining = int(PLANNER_STARTUP_DELAY_SECONDS - (time.monotonic() - _APP_STARTED_AT))
     if not force and startup_remaining > 0:
         # Note: The background planner keeps the same startup grace as rTorrent config apply, while manual checks still run immediately.
@@ -573,7 +588,7 @@ def enforce(profile: dict, force: bool = False, user_id: int | None = None) -> d
         _log_connection_status(profile, "waiting", f"Download Planner is waiting for rTorrent: {connection_error}", error=connection_error, user_id=user_id)
         return {"ok": True, "enabled": True, "profile_id": profile_id, "skipped": True, "reason": "rtorrent_unavailable", "error": connection_error, "retry_after_seconds": interval}
     _log_connection_status(profile, "connected", "Download Planner detected a working rTorrent connection", user_id=user_id)
-    decision = evaluate(profile, settings)
+    decision = evaluate(profile, settings, user_id=execution_user_id, system_execution=system_execution)
     result: dict[str, Any] = {"ok": True, "enabled": True, **decision, "limits_changed": False, "paused": 0, "resumed": 0}
     wanted_limits = (int(decision["down"]), int(decision["up"]))
     dry_run = bool(settings.get("dry_run")) or bool(force and str(profile.get("dry_run") or "").lower() == "true")
@@ -617,14 +632,17 @@ def enforce(profile: dict, force: bool = False, user_id: int | None = None) -> d
                 _append_history(profile_id, "resumed_torrents", {"count": len(hashes), "dry_run": dry_run})
     result["history"] = history(profile_id, 20)
     result["history_total"] = history_count(profile_id)
-    result["preview"] = preview(profile, user_id=user_id)
+    result["preview"] = preview(profile, user_id=execution_user_id, system_execution=system_execution)
     return result
 
 
-def preview(profile: dict, user_id: int | None = None) -> dict:
+def preview(profile: dict, user_id: int | None = None, system_execution: bool = False) -> dict:
+    """Return the current planner decision without mutating rTorrent."""
+    # Note: Preview shares disk-source resolution with enforce so read-only UI and background results stay consistent.
     profile_id = int(profile.get("id") or 0)
-    settings = get_settings(profile_id, user_id or int(profile.get("user_id") or default_user_id()))
-    decision = evaluate(profile, settings)
+    resolved_user_id = int(user_id or auth.current_user_id() or profile.get("user_id") or default_user_id())
+    settings = get_settings(profile_id, resolved_user_id, system_execution)
+    decision = evaluate(profile, settings, user_id=resolved_user_id, system_execution=system_execution)
     return {
         "profile_id": profile_id,
         "profile_name": decision.get("profile_name"),
@@ -659,8 +677,8 @@ def start_scheduler(socketio=None) -> None:
                     if not lock.acquire(blocking=False):
                         continue
                     try:
-                        # Note: Background planner runs per configured profile with the profile owner, not only for the active UI profile.
-                        result = enforce(profile, force=False, user_id=_owner_user_id(profile))
+                        # Note: The profile owner labels audit records only; saved planner state authorizes background execution.
+                        result = enforce(profile, force=False, user_id=_audit_user_id(profile), system_execution=True)
                         if socketio and result.get("enabled") and not result.get("skipped"):
                             emit_profile_event(socketio, "download_plan_update", result, profile_id)
                     except Exception as exc:

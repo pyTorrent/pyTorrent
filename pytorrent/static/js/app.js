@@ -15,6 +15,7 @@ const moduleImportSpecs = [
   ['./mobile.js', 'mobileSource'],
   ['./messages.js', 'messagesSource'],
   ['./torrentAdd.js', 'torrentAddSource'],
+  ['./permissions.js', 'permissionsSource'],
   ['./api.js', 'apiSource'],
   ['./createTorrent.js', 'createTorrentSource'],
   ['./torrentGeneralDetails.js', 'torrentGeneralDetailsSource'],
@@ -120,7 +121,7 @@ function normalizeRuntimeSource(source){
 
 export async function buildRuntimeSource(){
   const sources = await loadModuleSources();
-  return `(() => {\n${sources.map(normalizeRuntimeSource).join('\n')}\n})();\n`;
+  return `(() => {\n${sources.map(normalizeRuntimeSource).join('\n')}\n  installProfilePermissionUx();\n})();\n`;
 }
 
 export async function startApp(){

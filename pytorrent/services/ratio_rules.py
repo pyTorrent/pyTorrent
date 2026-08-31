@@ -64,10 +64,12 @@ def _should_apply(profile: dict, group: dict, torrent: dict) -> tuple[bool, str]
     return True, "ratio rule applied"
 
 
-def check(profile: dict, user_id: int | None = None) -> dict:
-    executor_user_id = int(user_id or profile.get("user_id") or default_user_id())
+def check(profile: dict, user_id: int | None = None, system_execution: bool = False) -> dict:
+    """Evaluate ratio rules under user or trusted scheduler authority."""
+    # Note: Manual checks require current RW access; scheduled checks persist as system jobs after configuration was authorized.
+    executor_user_id = int(user_id or auth.current_user_id() or profile.get("user_id") or default_user_id())
     profile_id = int(profile["id"])
-    if not auth.can_write_profile(profile_id, executor_user_id):
+    if not system_execution and not auth.can_write_profile(profile_id, executor_user_id):
         raise PermissionError("No write access to profile")
     with connect() as conn:
         groups = conn.execute("SELECT * FROM ratio_groups WHERE profile_id=? AND enabled=1 ORDER BY lower(name), id", (profile_id,)).fetchall()
@@ -107,7 +109,7 @@ def check(profile: dict, user_id: int | None = None) -> dict:
             payload["label"] = group.get("set_label") or group.get("name") or ""
         else:
             api_action = action if action in {"stop", "remove", "pause"} else "stop"
-        job_id = enqueue(api_action, profile_id, payload, user_id=executor_user_id)
+        job_id = enqueue(api_action, profile_id, payload, user_id=executor_user_id, system_managed=system_execution)
         queued_jobs.append(job_id)
         applied += 1
         _record(executor_user_id, profile_id, group, torrent, action, "applied", reason, {"job_id": job_id, "api_action": api_action})
@@ -127,19 +129,17 @@ def start_scheduler(socketio=None) -> None:
         # Note: Ratio rules are evaluated periodically and actions are executed through the existing safe job queue.
         while True:
             try:
-                from .preferences import get_profile
+                from .preferences import get_profile_for_system
                 with connect() as conn:
                     profiles = conn.execute("SELECT DISTINCT profile_id FROM ratio_groups WHERE enabled=1 AND profile_id IS NOT NULL").fetchall()
                 for row in profiles:
                     profile_id = int(row["profile_id"])
-                    with connect() as conn:
-                        owner = conn.execute("SELECT user_id FROM rtorrent_profiles WHERE id=?", (profile_id,)).fetchone()
-                    owner_id = int(owner["user_id"] if owner and owner.get("user_id") else default_user_id())
-                    profile = get_profile(profile_id, owner_id)
+                    profile = get_profile_for_system(profile_id)
                     if not profile:
                         continue
-                    # Note: Background ratio execution uses the profile owner as the execution principal; rule creators are audit metadata only.
-                    result = check(profile, user_id=owner_id)
+                    # Note: The owner id is audit metadata only; scheduler authorization is bound to the saved profile configuration.
+                    audit_user_id = int(profile.get("user_id") or default_user_id())
+                    result = check(profile, user_id=audit_user_id, system_execution=True)
                     if socketio and result.get("applied"):
                         socketio.emit("ratio_rules_checked", {"profile_id": profile["id"], **result}, to=f"profile:{profile['id']}")
             except Exception:

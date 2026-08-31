@@ -157,6 +157,7 @@ CREATE TABLE IF NOT EXISTS jobs (
   id TEXT PRIMARY KEY,
   user_id INTEGER NOT NULL,
   profile_id INTEGER,
+  system_managed INTEGER NOT NULL DEFAULT 0 CHECK(system_managed IN (0,1)),
   action TEXT NOT NULL,
   payload_json TEXT,
   status TEXT NOT NULL,

@@ -159,13 +159,15 @@ def _run_slow_profile_tasks(socketio, profile: dict, profile_id: int, settings: 
         except Exception as exc:
             _emit_profile(socketio, "torrent_stats_update", {"ok": False, "profile_id": profile_id, "error": str(exc)}, profile_id)
         try:
-            auto_result = automation_rules.check(profile, user_id=profile_user_id, force=False)
+            # Note: Poller-triggered rules are trusted background work; the owner id is retained only for audit rows.
+            auto_result = automation_rules.check(profile, user_id=profile_user_id, force=False, system_execution=True)
             if auto_result.get("applied") or auto_result.get("batches"):
                 _emit_profile(socketio, "automation_update", auto_result, profile_id)
         except Exception as exc:
             _emit_profile(socketio, "automation_update", {"ok": False, "profile_id": profile_id, "error": str(exc)}, profile_id)
         try:
-            plan_result = download_planner.enforce(profile, force=False, user_id=profile_user_id)
+            # Note: Saved planner state remains active even if the profile owner's user permission later changes.
+            plan_result = download_planner.enforce(profile, force=False, user_id=profile_user_id, system_execution=True)
             if plan_result.get("enabled") and not plan_result.get("skipped"):
                 _emit_profile(socketio, "download_plan_update", plan_result, profile_id)
         except Exception as exc:

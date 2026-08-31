@@ -252,6 +252,13 @@ def get_profile(profile_id: int, user_id: int | None = None):
         return conn.execute("SELECT * FROM rtorrent_profiles WHERE id=?", (profile_id,)).fetchone()
 
 
+def get_profile_for_system(profile_id: int):
+    """Return a configured profile for trusted background services only."""
+    # Note: System schedulers must survive user permission changes; request handlers must keep using get_profile().
+    with connect() as conn:
+        return conn.execute("SELECT * FROM rtorrent_profiles WHERE id=?", (int(profile_id),)).fetchone()
+
+
 def active_profile(user_id: int | None = None):
     user_id = user_id or auth.current_user_id() or default_user_id()
     with connect() as conn:

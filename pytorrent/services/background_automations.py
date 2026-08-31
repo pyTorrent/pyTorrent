@@ -37,8 +37,9 @@ def _profile_lock(profile_id: int) -> threading.Lock:
         return _profile_locks[profile_id]
 
 
-def _owner_user_id(profile: dict[str, Any]) -> int:
-    """Use the profile owner for background checks so rule permissions stay stable."""
+def _audit_user_id(profile: dict[str, Any]) -> int:
+    """Return a stable existing user id for legacy audit columns."""
+    # Note: This id labels background history only and is never used to authorize scheduler execution.
     return int(profile.get("user_id") or default_user_id())
 
 
@@ -88,7 +89,7 @@ def _run_profile(socketio, profile: dict[str, Any]) -> None:
             _log_status(profile_id, "disconnected", f"Background automations waiting for rTorrent: {error}", error=error)
             return
         _log_status(profile_id, "connected", "Background automations detected a working rTorrent connection")
-        result = automation_rules.check(profile, user_id=_owner_user_id(profile), force=False)
+        result = automation_rules.check(profile, user_id=_audit_user_id(profile), force=False, system_execution=True)
         if result.get("applied") or result.get("batches"):
             operation_logs.record(
                 profile_id,
@@ -97,7 +98,7 @@ def _run_profile(socketio, profile: dict[str, Any]) -> None:
                 source="system",
                 action="background_automation",
                 details={"applied": len(result.get("applied") or []), "batches": len(result.get("batches") or []), "result": result},
-                user_id=_owner_user_id(profile),
+                user_id=_audit_user_id(profile),
             )
             emit_profile_event(socketio, "automation_update", result, profile_id)
     except Exception as exc:
@@ -109,7 +110,7 @@ def _run_profile(socketio, profile: dict[str, Any]) -> None:
             source="system",
             action="background_automation",
             details={"error": str(exc)},
-            user_id=_owner_user_id(profile),
+            user_id=_audit_user_id(profile),
         )
     finally:
         lock.release()

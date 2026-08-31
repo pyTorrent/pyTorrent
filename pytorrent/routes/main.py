@@ -105,6 +105,7 @@ def _frontend_bootstrap_config(prefs: dict, profile: dict | None, current_user: 
         "currentUser": current_user,
         "canManageProfiles": 1 if (not auth.enabled() or auth.is_admin(current_user)) else 0,
         "activeProfile": profile.get("id") if profile else None,
+        "activeProfileCanWrite": bool(auth.can_write_profile(int(profile.get("id") or 0))) if profile else None,
         "tableColumns": _bootstrap_json_value(prefs.get("table_columns_json"), {}, dict),
         "torrentSort": _bootstrap_json_value(prefs.get("torrent_sort_json"), {}, dict),
         "activeFilter": str(prefs.get("active_filter") or "all"),

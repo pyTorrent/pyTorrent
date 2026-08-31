@@ -13,8 +13,10 @@ def ok(payload=None):
     return jsonify(data)
 
 
-def _profile_or_error():
-    profile = request_profile()
+def _profile_or_error(require_write: bool = False):
+    """Resolve planner profile context with explicit write enforcement for mutations."""
+    # Note: Service-level checks remain defense in depth; route selection returns 403 before any shared state changes.
+    profile = request_profile(require_write=require_write)
     if not profile:
         return None, (jsonify({"ok": False, "error": "No profile"}), 400)
     return profile, None
@@ -33,7 +35,7 @@ def download_planner_get():
 @bp.post("/download-planner")
 def download_planner_save():
     # Note: Planner settings are saved through one canonical endpoint to keep the frontend/backend contract explicit.
-    profile, error = _profile_or_error()
+    profile, error = _profile_or_error(require_write=True)
     if error:
         return error
     try:
@@ -46,7 +48,7 @@ def download_planner_save():
 
 @bp.post("/download-planner/check")
 def download_planner_check():
-    profile, error = _profile_or_error()
+    profile, error = _profile_or_error(require_write=True)
     if error:
         return error
     try:
@@ -54,7 +56,7 @@ def download_planner_check():
         run_profile = dict(profile)
         if data.get("dry_run"):
             run_profile["dry_run"] = "true"
-        return ok({"result": download_planner.enforce(run_profile, force=True)})
+        return ok({"result": download_planner.enforce(run_profile, force=True, user_id=current_user_id())})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
 
@@ -66,12 +68,12 @@ def download_planner_preview():
     if error:
         return error
     profile_id = int(profile["id"])
-    return ok({"preview": download_planner.preview(profile), "history": download_planner.history(profile_id, int(request.args.get("history_limit") or 40)), "history_total": download_planner.history_count(profile_id), "profile_id": profile_id})
+    return ok({"preview": download_planner.preview(profile, user_id=current_user_id()), "history": download_planner.history(profile_id, int(request.args.get("history_limit") or 40)), "history_total": download_planner.history_count(profile_id), "profile_id": profile_id})
 
 
 @bp.delete("/download-planner/history")
 def download_planner_history_clear():
-    profile, error = _profile_or_error()
+    profile, error = _profile_or_error(require_write=True)
     if error:
         return error
     try:
@@ -83,7 +85,7 @@ def download_planner_history_clear():
 
 @bp.post("/download-planner/override")
 def download_planner_override():
-    profile, error = _profile_or_error()
+    profile, error = _profile_or_error(require_write=True)
     if error:
         return error
     try:
@@ -107,7 +109,7 @@ def poller_settings_get():
 @bp.post("/poller/settings")
 def poller_settings_save():
     # Note: Poller saves echo the resolved profile id so stale save responses cannot repaint another profile.
-    profile, error = _profile_or_error()
+    profile, error = _profile_or_error(require_write=True)
     if error:
         return error
     try:

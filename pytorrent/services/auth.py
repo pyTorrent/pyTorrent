@@ -1,7 +1,7 @@
 from __future__ import annotations
 from functools import wraps
 from typing import Any
-import secrets
+import secrets, re
 from urllib.parse import urlparse
 from flask import abort, g, has_request_context, jsonify, redirect, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -56,6 +56,41 @@ PROFILE_READ_PREFIXES = (
     "/api/poller/settings",
     "/api/operation-logs",
 )
+
+
+# POST is sometimes used for read-only calculations/download link creation. These endpoints
+# stay available to read-only profile users; every real mutation remains write-protected.
+PROFILE_READONLY_POST_PATHS = {
+    "/api/torrents/preview",
+    "/api/torrents/space-check",
+    "/api/torrents/torrent-files.zip/link",
+    "/api/torrents/torrent-files.zip",
+    "/api/smart-queue/dry-run",
+    "/api/rss/rules/test",
+    "/api/rtorrent-config/generate",
+}
+
+
+def is_readonly_profile_post(path: str) -> bool:
+    clean = str(path or "").split("?", 1)[0]
+    if clean in PROFILE_READONLY_POST_PATHS:
+        return True
+    # File download-link creation and legacy POST ZIP streaming are read-only operations.
+    if re.fullmatch(r"/api/torrents/[^/]+/files/(?:\d+/)?download-link", clean):
+        return True
+    if re.fullmatch(r"/api/torrents/[^/]+/files/download\.zip(?:/link)?", clean):
+        return True
+    return False
+
+
+def request_requires_profile_write(path: str | None = None, method: str | None = None) -> bool:
+    clean = str(path if path is not None else request.path)
+    verb = str(method if method is not None else request.method).upper()
+    if verb in {"GET", "HEAD", "OPTIONS"}:
+        return False
+    if verb == "POST" and is_readonly_profile_post(clean):
+        return False
+    return clean.startswith(RTORRENT_CONFIG_PREFIXES) or clean.startswith(RTORRENT_WRITE_PREFIXES)
 
 
 def enabled() -> bool:
@@ -260,17 +295,17 @@ def writable_profile_ids(user_id: int | None = None) -> set[int] | None:
 
 def require_admin() -> None:
     if enabled() and not is_admin():
-        abort(403)
+        raise PermissionError("Administrator permission is required")
 
 
 def require_profile_read(profile_id: int | None) -> None:
     if enabled() and not can_access_profile(profile_id):
-        abort(403)
+        raise PermissionError("Profile access denied")
 
 
 def require_profile_write(profile_id: int | None) -> None:
     if enabled() and not can_write_profile(profile_id):
-        abort(403)
+        raise PermissionError("Read-only profile access")
 
 
 def login_user(username: str, password: str) -> dict[str, Any] | None:
@@ -595,7 +630,7 @@ def list_api_tokens(user_id: int) -> list[dict[str, Any]]:
     if not uid:
         return []
     if not is_admin() and current_user_id() != uid:
-        abort(403)
+        raise PermissionError("You do not have permission to manage API tokens for this user")
     with connect() as conn:
         rows = conn.execute(
             "SELECT id,user_id,name,token_prefix,last_used_at,created_at,updated_at,revoked_at FROM api_tokens WHERE user_id=? AND revoked_at IS NULL ORDER BY created_at DESC",
@@ -611,7 +646,7 @@ def create_api_token(user_id: int, name: str = "API token") -> dict[str, Any]:
     if not uid:
         raise ValueError("User is required")
     if not is_admin() and current_user_id() != uid:
-        abort(403)
+        raise PermissionError("You do not have permission to manage API tokens for this user")
     clean_name = str(name or "API token").strip()[:80] or "API token"
     secret = "pt_" + secrets.token_urlsafe(32)
     prefix = secret[:14]
@@ -639,7 +674,7 @@ def revoke_api_token(user_id: int, token_id: int) -> None:
     uid = int(user_id or 0)
     tid = int(token_id or 0)
     if not is_admin() and current_user_id() != uid:
-        abort(403)
+        raise PermissionError("You do not have permission to manage API tokens for this user")
     now = utcnow()
     with connect() as conn:
         row = conn.execute("SELECT revoked_at FROM api_tokens WHERE id=? AND user_id=?", (tid, uid)).fetchone()
@@ -737,10 +772,8 @@ def install_guards(app) -> None:
             if request.path.startswith("/api/profiles") and not request.path.endswith("/activate") and not is_admin(user):
                 return jsonify({"ok": False, "error": "Admin only"}), 403
             profile_id = _request_profile_id()
-            if request.path.startswith(RTORRENT_CONFIG_PREFIXES) and not can_write_profile(profile_id):
-                return jsonify({"ok": False, "error": "Read-only profile access"}), 403
-            if request.path.startswith(RTORRENT_WRITE_PREFIXES) and not can_write_profile(profile_id):
-                return jsonify({"ok": False, "error": "Read-only profile access"}), 403
+            if request_requires_profile_write() and not can_write_profile(profile_id):
+                return jsonify({"ok": False, "error": "Read-only profile access", "code": "profile_read_only"}), 403
         return None
 
 
