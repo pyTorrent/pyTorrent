@@ -2,15 +2,19 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 import json
+import random
 import threading
 import uuid
 from ..db import connect, default_user_id, utcnow
 from . import rtorrent, auth
-from .preferences import active_profile, get_profile, get_profile_for_system, get_disk_monitor_preferences, get_profile_disk_monitor_preferences
+from .preferences import active_profile, get_profile, get_profile_for_system, get_disk_monitor_preferences, get_profile_disk_monitor_preferences, get_profile_runtime_stats
+from .profile_status_cache import get_status as get_profile_status
+from .torrent_cache import torrent_cache
 from .workers import enqueue_many
 
 AUTOMATION_JOB_CHUNK_SIZE = 100
 AUTOMATION_LIGHT_ACTIONS = {'start', 'stop', 'pause', 'resume', 'set_label'}
+AUTOMATION_PROFILE_TARGET_MODES = {'fixed', 'least_active', 'least_speed', 'least_data', 'least_torrents', 'balanced'}
 _CHECK_LOCKS: dict[tuple[int, int | None], threading.Lock] = {}
 _CHECK_LOCKS_GUARD = threading.Lock()
 
@@ -117,6 +121,80 @@ def _select_rules_sql(where_sql: str) -> str:
     '''
 
 
+def _writable_automation_target_profiles(source_profile_id: int, actor_id: int) -> list[dict[str, Any]]:
+    """Return profiles that may receive an automatically selected transfer for one user."""
+    # Note: Dynamic profile selection is always constrained by the user's current RW profile permissions, including background runs.
+    writable_ids = auth.writable_profile_ids(actor_id)
+    with connect() as conn:
+        rows = [dict(row) for row in conn.execute('SELECT * FROM rtorrent_profiles ORDER BY id').fetchall()]
+    return [
+        profile
+        for profile in rows
+        if int(profile.get('id') or 0) != int(source_profile_id)
+        and (writable_ids is None or int(profile.get('id') or 0) in writable_ids)
+    ]
+
+
+def _automation_target_metrics(profile_id: int) -> dict[str, float]:
+    """Build cached load metrics used by dynamic automation profile selection."""
+    # Note: Prefer the shared torrent cache so selection adds no extra SCGI traffic; persisted snapshots are only fallbacks before a cache exists.
+    profile_id = int(profile_id)
+    cache_age = torrent_cache.age_seconds(profile_id)
+    if cache_age is not None:
+        rows = torrent_cache.snapshot(profile_id)
+        return {
+            'active': float(sum(1 for row in rows if int(row.get('state') or 0))),
+            'speed': float(sum(max(0, int(row.get('down_rate') or 0)) + max(0, int(row.get('up_rate') or 0)) for row in rows)),
+            'data': float(sum(max(0, int(row.get('size') or 0)) for row in rows)),
+            'torrents': float(len(rows)),
+        }
+
+    status = get_profile_status(profile_id) or {}
+    runtime = get_profile_runtime_stats(profile_id) or {}
+    infinity = float('inf')
+    active = status.get('active', runtime.get('active_count'))
+    torrents = status.get('total', runtime.get('torrent_count'))
+    speed = None
+    if status.get('down_rate') is not None or status.get('up_rate') is not None:
+        speed = max(0, int(status.get('down_rate') or 0)) + max(0, int(status.get('up_rate') or 0))
+    data = runtime.get('total_size_bytes')
+    return {
+        'active': float(active) if active is not None else infinity,
+        'speed': float(speed) if speed is not None else infinity,
+        'data': float(data) if data is not None else infinity,
+        'torrents': float(torrents) if torrents is not None else infinity,
+    }
+
+
+def _automation_target_score(metrics: dict[str, float], mode: str) -> tuple[float, ...]:
+    """Return the comparison tuple for one automatic destination strategy."""
+    # Note: Single-metric modes intentionally randomize exact ties; balanced mode uses active load, speed, data and count in that order.
+    if mode == 'least_active':
+        return (metrics['active'],)
+    if mode == 'least_speed':
+        return (metrics['speed'],)
+    if mode == 'least_data':
+        return (metrics['data'],)
+    if mode == 'least_torrents':
+        return (metrics['torrents'],)
+    return (metrics['active'], metrics['speed'], metrics['data'], metrics['torrents'])
+
+
+def _select_automation_target_profile(source_profile_id: int, actor_id: int, mode: str) -> tuple[dict[str, Any], dict[str, float]]:
+    """Choose a writable destination profile by load and randomize equally suitable candidates."""
+    # Note: Only best-scoring writable profiles enter the random draw, so load rules remain deterministic except for true ties.
+    candidates = _writable_automation_target_profiles(source_profile_id, actor_id)
+    if not candidates:
+        raise PermissionError('No writable automation target profile is available')
+    scored: list[tuple[tuple[float, ...], dict[str, Any], dict[str, float]]] = []
+    for candidate in candidates:
+        metrics = _automation_target_metrics(int(candidate.get('id') or 0))
+        scored.append((_automation_target_score(metrics, mode), candidate, metrics))
+    best_score = min(item[0] for item in scored)
+    best = [(candidate, metrics) for score, candidate, metrics in scored if score == best_score]
+    return random.choice(best)
+
+
 def _decorate_rule_state(rules: list[dict[str, Any]], profile_id: int | None) -> None:
     if profile_id is None:
         return
@@ -190,6 +268,13 @@ def _validate_management_effects(profile_id: int, effects: list[dict[str, Any]],
     # Note: Disabled rules may always be saved so access loss cannot prevent emergency disable; target RW is rechecked before enabling.
     for effect in effects:
         if not isinstance(effect, dict) or str(effect.get('type') or '') != 'profile_transfer':
+            continue
+        target_mode = str(effect.get('target_mode') or 'fixed').strip().lower()
+        if target_mode not in AUTOMATION_PROFILE_TARGET_MODES:
+            raise ValueError('Automation target profile selection mode is invalid')
+        if target_mode != 'fixed':
+            if enabled and not _writable_automation_target_profiles(profile_id, actor_id):
+                raise PermissionError('Write access to at least one automation target profile is required')
             continue
         target_id = int(effect.get('target_profile_id') or 0)
         if not target_id or target_id == int(profile_id):
@@ -445,7 +530,7 @@ def _automation_job_specs(profile: dict[str, Any], rule: dict[str, Any], action_
         if action_name == 'move':
             extra.update({'target_path': str(part_payload.get('path') or ''), 'move_data': bool(part_payload.get('move_data'))})
         if action_name == 'profile_transfer':
-            extra.update({'target_profile_id': int(part_payload.get('target_profile_id') or 0), 'target_path': str(part_payload.get('target_path') or ''), 'move_data': bool(part_payload.get('move_data')), 'post_action': str(part_payload.get('post_action') or 'current')})
+            extra.update({'target_profile_id': int(part_payload.get('target_profile_id') or 0), 'target_mode': str(part_payload.get('target_mode') or 'fixed'), 'target_path': str(part_payload.get('target_path') or ''), 'move_data': bool(part_payload.get('move_data')), 'post_action': str(part_payload.get('post_action') or 'current')})
         if action_name == 'remove':
             extra.update({'remove_data': bool(part_payload.get('remove_data'))})
         effect_type = str(context_extra.get('effect_type') if context_extra else action_name)
@@ -479,18 +564,28 @@ def _path_inside_root(path: str, root: str) -> bool:
     root = _safe_remote_path(root)
     return bool(path and root and (path == root or path.startswith(root.rstrip('/') + '/')))
 
-def _automation_profile_transfer_payload(profile: dict[str, Any], eff: dict[str, Any], user_id: int, system_execution: bool = False) -> dict[str, Any]:
+def _automation_profile_transfer_payload(profile: dict[str, Any], eff: dict[str, Any], user_id: int, system_execution: bool = False, selection_user_id: int | None = None) -> dict[str, Any]:
     """Validate automation profile-transfer settings with the same path semantics as the interactive transfer."""
-    # Note: Interactive runs recheck user access; trusted scheduler runs use the previously authorized profile-bound rule.
+    # Note: Fixed scheduler targets keep persisted rule authority, while dynamic targets are reselected only from the rule creator's current RW profiles.
     source_id = int(profile.get('id') or 0)
     if not system_execution and not auth.can_write_profile(source_id, user_id):
         raise PermissionError('Automation executor has no write access to source profile')
-    target_id = int(eff.get('target_profile_id') or 0)
-    if not target_id or target_id == source_id:
-        raise ValueError('Automation target profile is invalid')
-    if not system_execution and not auth.can_write_profile(target_id, user_id):
-        raise PermissionError('Automation executor has no write access to target profile')
-    target_profile = get_profile_for_system(target_id) if system_execution else get_profile(target_id, user_id)
+    target_mode = str(eff.get('target_mode') or 'fixed').strip().lower()
+    if target_mode not in AUTOMATION_PROFILE_TARGET_MODES:
+        raise ValueError('Automation target profile selection mode is invalid')
+    if target_mode == 'fixed':
+        target_id = int(eff.get('target_profile_id') or 0)
+        if not target_id or target_id == source_id:
+            raise ValueError('Automation target profile is invalid')
+        if not system_execution and not auth.can_write_profile(target_id, user_id):
+            raise PermissionError('Automation executor has no write access to target profile')
+        target_profile = get_profile_for_system(target_id) if system_execution else get_profile(target_id, user_id)
+    else:
+        selector_id = int(selection_user_id or user_id or 0)
+        if not selector_id:
+            raise PermissionError('Automation target profile selector has no user context')
+        target_profile, _ = _select_automation_target_profile(source_id, selector_id, target_mode)
+        target_id = int(target_profile.get('id') or 0)
     if not target_profile:
         raise ValueError('Automation target profile does not exist')
 
@@ -532,6 +627,7 @@ def _automation_profile_transfer_payload(profile: dict[str, Any], eff: dict[str,
         label_mode = 'none'
     return {
         'target_profile_id': target_id,
+        'target_mode': target_mode,
         'target_path': target_path,
         'path': target_path,
         'move_data': move_data,
@@ -575,9 +671,10 @@ def _apply_effects_bulk(c: Any, profile: dict[str, Any], torrents: list[dict[str
             applied.append({'type': 'move', 'path': path, 'count': len(hashes), 'target_hashes': hashes, 'move_data': payload['move_data'], 'recheck': payload['recheck'], 'keep_seeding': payload['keep_seeding'], 'job_ids': job_ids})
         elif typ == 'profile_transfer':
             executor_id = int(user_id or _resolve_user_id(profile))
-            payload = _automation_profile_transfer_payload(profile, eff, executor_id, system_execution)
+            selector_id = int(rule.get('created_by_user_id') or executor_id) if system_execution else executor_id
+            payload = _automation_profile_transfer_payload(profile, eff, executor_id, system_execution, selector_id)
             job_ids = plan_jobs('profile_transfer', hashes, payload, {'effect_type': 'profile_transfer'}, executor_id)
-            applied.append({'type': 'profile_transfer', 'target_profile_id': payload['target_profile_id'], 'target_path': payload['target_path'], 'count': len(hashes), 'target_hashes': hashes, 'move_data': payload['move_data'], 'move_data_requested': payload['move_data_requested'], 'move_data_downgraded': payload['move_data_downgraded'], 'post_action': payload['post_action'], 'label_mode': payload['label_mode'], 'label': payload['label_value'], 'job_ids': job_ids})
+            applied.append({'type': 'profile_transfer', 'target_profile_id': payload['target_profile_id'], 'target_mode': payload['target_mode'], 'target_path': payload['target_path'], 'count': len(hashes), 'target_hashes': hashes, 'move_data': payload['move_data'], 'move_data_requested': payload['move_data_requested'], 'move_data_downgraded': payload['move_data_downgraded'], 'post_action': payload['post_action'], 'label_mode': payload['label_mode'], 'label': payload['label_value'], 'job_ids': job_ids})
         elif typ == 'add_label':
             label = str(eff.get('label') or '').strip()
             if label:

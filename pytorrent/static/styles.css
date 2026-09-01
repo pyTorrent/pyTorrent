@@ -3256,13 +3256,18 @@ html[data-ui-framework="pytorrent"] .file-priority-table .file-row-actions .btn-
   align-items: center;
 }
 
-.automation-enabled,
-.automation-negate {
+.automation-enabled {
   flex: 0 0 auto;
   margin: 0;
   padding: 0.45rem 0.6rem 0.45rem 2.5rem;
   border: 1px solid var(--bs-border-color);
   border-radius: var(--pytorrent-control-radius, 0.5rem);
+}
+
+.automation-negate {
+  /* Note: Negate stays aligned as a normal switch without an extra field-like frame. */
+  flex: 0 0 auto;
+  margin: 0;
 }
 
 .automation-path-input {
@@ -4665,9 +4670,88 @@ body.sorting-preference-cards * {
 
 .user-form-grid {
   display: grid;
-  grid-template-columns: minmax(150px, 1fr) minmax(160px, 1fr) 120px 150px 110px auto auto;
   gap: 0.55rem;
+  min-width: 0;
+}
+
+/* Note: Users form rows keep related controls together while remaining framework-neutral in Bootstrap and PyTorrent UI. */
+.auth-user-account-row,
+.auth-user-permission-row,
+.auth-user-footer-row,
+.auth-user-form-actions {
   align-items: center;
+  display: grid;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.auth-user-account-row {
+  grid-template-columns: minmax(130px, 1.2fr) minmax(150px, 1.3fr) minmax(105px, 0.65fr) auto;
+}
+
+.auth-user-account-row.auth-password-hidden {
+  grid-template-columns: minmax(180px, 1fr) minmax(110px, 0.55fr) auto;
+}
+
+.auth-user-permission-row {
+  grid-template-columns: minmax(180px, 1fr) minmax(100px, 0.45fr) max-content;
+}
+
+.auth-user-footer-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.auth-user-form-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.auth-user-account-row > *,
+.auth-user-permission-row > * {
+  min-width: 0;
+}
+
+.auth-permission-editor {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  min-height: 1.55rem;
+  min-width: 0;
+}
+
+.auth-permission-editor > small:first-child {
+  margin-right: 0.1rem;
+}
+
+.auth-permission-chip {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.35rem;
+  max-width: 100%;
+}
+
+.auth-permission-chip > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auth-permission-chip .auth-permission-remove {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  display: inline-flex;
+  flex: 0 0 auto;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+}
+
+.user-form-grid .btn {
+  max-width: 100%;
+  white-space: nowrap;
 }
 
 .smart-panel {
@@ -4786,8 +4870,8 @@ body.sorting-preference-cards * {
 }
 
 @media (max-width: 992px) {
-  .user-form-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .auth-user-account-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(100px, 0.65fr) auto;
   }
 
   .smart-input-grid {
@@ -4797,8 +4881,25 @@ body.sorting-preference-cards * {
 
 @media (max-width: 576px) {
 
-  .user-form-grid,
+  .auth-user-account-row,
+  .auth-user-account-row.auth-password-hidden,
+  .auth-user-permission-row,
+  .auth-user-footer-row,
   .smart-input-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-user-account-row .form-switch {
+    min-height: 1.8rem;
+  }
+
+  .auth-user-permission-row .btn,
+  .auth-user-form-actions .btn {
+    width: 100%;
+  }
+
+  .auth-user-form-actions {
+    display: grid;
     grid-template-columns: 1fr;
   }
 

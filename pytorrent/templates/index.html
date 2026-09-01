@@ -1674,22 +1674,28 @@
                   <div class="tool-note mb-3">Manage optional pyTorrent users. Empty profile means all profiles. R/O
                     blocks rTorrent-changing actions; Full allows them.</div>
                   <div id="authProviderInfo" class="auth-provider-info d-none mb-3"></div>
-                  <div class="user-form-grid"><input id="authUserId" type="hidden"><input id="authUsername"
-                      class="form-control" placeholder="User"><input id="authPassword" class="form-control"
-                      type="password" placeholder="Password / new password"><select id="authRole" class="form-select">
-                      <option value="user">user</option>
-                      <option value="admin">admin</option>
-                    </select><select id="authProfile" class="form-select">
-                      <option value="0">All profiles</option>
-                    </select><select id="authAccess" class="form-select">
-                      <option value="ro">R/O</option>
-                      <option value="full">Full</option>
-                    </select><label class="form-check form-switch mb-0"><input id="authActive" class="form-check-input"
-                        type="checkbox" checked><span class="form-check-label">Active</span></label><button
-                      id="authUserSaveBtn" class="btn btn-sm btn-primary" type="button"><i
-                        class="fa-solid fa-floppy-disk"></i> Save user</button><button id="authUserCancelBtn"
-                      class="btn btn-sm btn-outline-secondary d-none" type="button"><i class="fa-solid fa-xmark"></i>
-                      Cancel</button></div>
+                  <div class="user-form-grid"><input id="authUserId" type="hidden">
+                    <!-- Note: User fields, profile permissions, and form actions use explicit rows so controls never wrap in an accidental order. -->
+                    <div class="auth-user-account-row"><input id="authUsername" class="form-control" placeholder="User"><input
+                        id="authPassword" class="form-control" type="password" placeholder="Password / new password"><select
+                        id="authRole" class="form-select">
+                        <option value="user">user</option>
+                        <option value="admin">admin</option>
+                      </select><label class="form-check form-switch mb-0"><input id="authActive" class="form-check-input"
+                          type="checkbox" checked><span class="form-check-label">Active</span></label></div>
+                    <div class="auth-user-permission-row"><select id="authProfile" class="form-select">
+                        <option value="0">All profiles</option>
+                      </select><select id="authAccess" class="form-select">
+                        <option value="ro">R/O</option>
+                        <option value="full">Full</option>
+                      </select><button id="authPermissionUpsertBtn" class="btn btn-sm btn-outline-primary" type="button"><i
+                          class="fa-solid fa-plus"></i> Add / update</button></div>
+                    <div class="auth-user-footer-row"><div id="authPermissionDraft" class="auth-permission-editor"></div>
+                      <div class="auth-user-form-actions"><button id="authUserSaveBtn" class="btn btn-sm btn-primary"
+                          type="button"><i class="fa-solid fa-floppy-disk"></i> Save user</button><button
+                          id="authUserCancelBtn" class="btn btn-sm btn-outline-secondary d-none" type="button"><i
+                            class="fa-solid fa-xmark"></i> Cancel</button></div></div>
+                  </div>
                   <div id="authTokenInline" class="api-token-inline d-none mt-3"></div>
                   <div id="authUsersManager" class="mt-3"></div>
                 </div>
@@ -2132,9 +2138,17 @@
                                 id="autoMoveRecheck" class="form-check-input" type="checkbox" checked><span
                                 class="form-check-label">Recheck</span></label><label data-auto-effect="move"
                               class="form-check form-switch"><input id="autoMoveKeepSeeding" class="form-check-input"
-                                type="checkbox" checked><span class="form-check-label">Keep seeding</span></label><input
-                              id="autoProfileTransferTargetId" data-auto-effect="profile_transfer" class="form-control"
-                              type="number" min="1" placeholder="Target profile ID"><input
+                                type="checkbox" checked><span class="form-check-label">Keep seeding</span></label><select
+                              id="autoProfileTransferTargetMode" data-auto-effect="profile_transfer" class="form-select">
+                              <option value="fixed">Specific target profile</option>
+                              <option value="least_active">Auto: fewest active torrents</option>
+                              <option value="least_speed">Auto: lowest current speed</option>
+                              <option value="least_data">Auto: least torrent data</option>
+                              <option value="least_torrents">Auto: fewest torrents total</option>
+                              <option value="balanced">Auto: balanced lowest load</option>
+                            </select><input id="autoProfileTransferTargetId" data-auto-effect="profile_transfer"
+                              data-auto-profile-target="fixed" class="form-control" type="number" min="1"
+                              placeholder="Target profile ID"><input
                               id="autoProfileTransferTargetPath" data-auto-effect="profile_transfer"
                               class="form-control" placeholder="Target path (blank = target default)"><label
                               data-auto-effect="profile_transfer" class="form-check form-switch"><input
