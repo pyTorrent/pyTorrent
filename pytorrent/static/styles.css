@@ -580,7 +580,7 @@ body {
 
 /* Note: Recovery modals must sit above loader feedback in both Bootstrap and the native PyTorrent runtime. */
 .initial-loader.is-recovery-suspended,
-.initial-loader.is-recovery-suspended + .global-loader {
+.initial-loader.is-recovery-suspended+.global-loader {
   z-index: 1040;
 }
 
@@ -791,7 +791,7 @@ body {
 }
 
 /* The header switches to its themed raised state only after the torrent list starts scrolling. */
-.table-wrap.is-scrolled .torrent-table > thead > tr > th {
+.table-wrap.is-scrolled .torrent-table>thead>tr>th {
   background: color-mix(in srgb, var(--pytorrent-table-header-bg, var(--bs-tertiary-bg)) 94%, transparent);
   box-shadow: var(--pytorrent-table-header-shadow, 0 3px 8px rgba(0, 0, 0, 0.08));
 }
@@ -1818,6 +1818,7 @@ html[data-ui-framework="pytorrent"] .modal-dialog-scrollable .modal-content {
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   .toast-item,
   .toast-item.is-leaving {
     animation: none;
@@ -2134,6 +2135,7 @@ html[data-ui-framework="pytorrent"] .modal-dialog-scrollable .modal-content {
 }
 
 @keyframes action-feedback-success {
+
   0%,
   100% {
     box-shadow: 0 0 0 0 transparent;
@@ -2145,6 +2147,7 @@ html[data-ui-framework="pytorrent"] .modal-dialog-scrollable .modal-content {
 }
 
 @keyframes action-feedback-error {
+
   0%,
   100% {
     transform: translateX(0);
@@ -2160,6 +2163,7 @@ html[data-ui-framework="pytorrent"] .modal-dialog-scrollable .modal-content {
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   .action-feedback-button,
   .action-feedback-indicator {
     animation: none !important;
@@ -2579,15 +2583,15 @@ body.mobile-mode .main-grid {
 }
 
 /* Note: Limit note layout rules to direct children so nested button feedback indicators keep their own dimensions and colors. */
-.view-preferences-note > i {
+.view-preferences-note>i {
   color: var(--bs-primary);
 }
 
-.view-preferences-note > span {
+.view-preferences-note>span {
   flex: 1 1 260px;
 }
 
-.view-preferences-note > .btn {
+.view-preferences-note>.btn {
   flex: 0 0 auto;
 }
 
@@ -2599,7 +2603,7 @@ body.mobile-mode .main-grid {
   align-items: center;
   align-self: stretch;
   background: var(--pytorrent-statusbar-bg, var(--bs-tertiary-bg));
-  border-left: 1px solid var(--bs-border-color);
+  border-inline-start: 0;
   color: inherit;
   display: inline-flex;
   flex: 0 0 auto;
@@ -3045,9 +3049,9 @@ body.mobile-mode .mobile-card {
   --detail-row-height: 27px;
 }
 
-.peers-table > :not(caption) > * > *,
-.tracker-table > :not(caption) > * > *,
-.file-priority-table > :not(caption) > * > * {
+.peers-table> :not(caption)>*>*,
+.tracker-table> :not(caption)>*>*,
+.file-priority-table> :not(caption)>*>* {
   line-height: 1.2;
   padding-bottom: 0.18rem;
   padding-top: 0.18rem;
@@ -3055,9 +3059,9 @@ body.mobile-mode .mobile-card {
 }
 
 /* Body cells stay compact enough for the 27px row while controls remain vertically centered. */
-.table.peers-table tbody > tr > *,
-.table.tracker-table tbody > tr > *,
-.table.file-priority-table tbody > tr > * {
+.table.peers-table tbody>tr>*,
+.table.tracker-table tbody>tr>*,
+.table.file-priority-table tbody>tr>* {
   padding-bottom: 0.05rem;
   padding-top: 0.05rem;
 }
@@ -3069,6 +3073,7 @@ body.mobile-mode .mobile-card {
 }
 
 @media (pointer: coarse) {
+
   .peers-table,
   .tracker-table,
   .file-priority-table {
@@ -3243,8 +3248,8 @@ html[data-ui-framework="pytorrent"] .file-priority-table .file-row-actions .btn-
   font-weight: 700;
 }
 
-.automation-card-header + .automation-rule-grid,
-.automation-main-card > .automation-card-title + .automation-builder-grid {
+.automation-card-header+.automation-rule-grid,
+.automation-main-card>.automation-card-title+.automation-builder-grid {
   margin-top: 0.5rem;
 }
 
@@ -4147,7 +4152,7 @@ body.mobile-mode .mobile-filter-bar {
   gap: 0.25rem;
 }
 
-.port-check-summary-copy > span:first-child,
+.port-check-summary-copy>span:first-child,
 .port-check-detail span {
   color: var(--bs-secondary-color);
   font-size: 0.72rem;
@@ -4436,7 +4441,7 @@ body.mobile-mode .mobile-filter-bar {
   box-shadow: inset 0 0 0 1px rgba(var(--bs-primary-rgb), 0.08);
 }
 
-.preference-card-placeholder > * {
+.preference-card-placeholder>* {
   visibility: hidden;
 }
 
@@ -4469,9 +4474,17 @@ body.mobile-mode .mobile-filter-bar {
 }
 
 @keyframes preference-card-drop {
-  0% { transform: scale(0.985); }
-  60% { transform: scale(1.012); }
-  100% { transform: scale(1); }
+  0% {
+    transform: scale(0.985);
+  }
+
+  60% {
+    transform: scale(1.012);
+  }
+
+  100% {
+    transform: scale(1);
+  }
 }
 
 body.sorting-preference-cards {
@@ -4528,6 +4541,53 @@ body.sorting-preference-cards * {
   text-align: right;
 }
 
+#statDl,
+#statUl {
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  inline-size: 9ch;
+  min-inline-size: 9ch;
+  max-inline-size: 9ch;
+  text-align: left;
+}
+
+.statusbar-scroll>[data-footer-item="speed_down"]+[data-footer-item="speed_up"] {
+  margin-inline-start: -1.80rem;
+}
+
+.statusbar-scroll>[data-footer-item="speed_up"] {
+  margin-inline-end: -0.5rem;
+}
+
+.statusbar-scroll.footer-separators-enabled>[data-footer-item]:not(.footer-pref-hidden):not(.d-none)~[data-footer-item]:not(.footer-pref-hidden):not(.d-none) {
+  position: relative;
+}
+
+.statusbar-scroll.footer-separators-enabled>[data-footer-item]:not(.footer-pref-hidden):not(.d-none)~[data-footer-item]:not(.footer-pref-hidden):not(.d-none)::before {
+  border-inline-start: 1px solid var(--bs-border-color);
+  content: "";
+  height: 75%;
+  inset-inline-start: -0.325rem;
+  opacity: 0.8;
+  position: absolute;
+  top: 12.5%;
+}
+
+.status-docs.footer-item-separated {
+  position: relative;
+}
+
+.status-docs.footer-item-separated::before {
+  border-inline-start: 1px solid var(--bs-border-color);
+  content: "";
+  height: 75%;
+  inset-inline-start: 0;
+  opacity: 0.5;
+  position: absolute;
+  top: 12.5%;
+}
+
 /* Torrent stats: keep metadata and refresh controls aligned without nested statistic tabs. */
 .torrent-stats-header {
   display: flex;
@@ -4537,7 +4597,7 @@ body.sorting-preference-cards * {
   flex-wrap: wrap;
 }
 
-.torrent-stats-header > div:first-child {
+.torrent-stats-header>div:first-child {
   flex: 1 1 320px;
 }
 
@@ -4706,8 +4766,8 @@ body.sorting-preference-cards * {
   justify-content: flex-end;
 }
 
-.auth-user-account-row > *,
-.auth-user-permission-row > * {
+.auth-user-account-row>*,
+.auth-user-permission-row>* {
   min-width: 0;
 }
 
@@ -4720,7 +4780,7 @@ body.sorting-preference-cards * {
   min-width: 0;
 }
 
-.auth-permission-editor > small:first-child {
+.auth-permission-editor>small:first-child {
   margin-right: 0.1rem;
 }
 
@@ -4731,7 +4791,7 @@ body.sorting-preference-cards * {
   max-width: 100%;
 }
 
-.auth-permission-chip > span {
+.auth-permission-chip>span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -6254,7 +6314,7 @@ body,
   padding: 0.7rem 0.75rem;
 }
 
-.preference-setting-row + .preference-setting-row {
+.preference-setting-row+.preference-setting-row {
   border-top: 1px solid var(--bs-border-color);
 }
 
@@ -6296,7 +6356,7 @@ body,
   gap: 0.75rem;
 }
 
-.easter-egg-source-list > .form-field {
+.easter-egg-source-list>.form-field {
   min-width: 0;
   width: 100%;
 }
@@ -6339,7 +6399,7 @@ body,
   object-fit: contain;
 }
 
-.preference-subsection + .preference-subsection {
+.preference-subsection+.preference-subsection {
   margin-top: 0.9rem;
   padding-top: 0.85rem;
   border-top: 1px solid var(--bs-border-color);
@@ -6362,7 +6422,7 @@ body,
   border: 0;
 }
 
-.preference-two-column-layout > .preference-subsection {
+.preference-two-column-layout>.preference-subsection {
   margin: 0;
   padding: 0;
   border: 0;
@@ -6397,7 +6457,7 @@ body,
   margin: 0.18rem 0 0;
 }
 
-.preference-choice-row > span {
+.preference-choice-row>span {
   display: grid;
   min-width: 0;
   gap: 0.1rem;
@@ -6432,6 +6492,7 @@ body,
 }
 
 @media (max-width: 768px) {
+
   .easter-egg-source-list,
   .preference-two-column-layout {
     grid-template-columns: 1fr;
@@ -7069,7 +7130,7 @@ body,
   padding-left: 0.8rem;
 }
 
-.notification-toggle-row + .notification-toggle-row,
+.notification-toggle-row+.notification-toggle-row,
 .notification-history-options {
   border-top: 1px solid var(--bs-border-color);
 }
@@ -8385,7 +8446,7 @@ body,
 }
 
 /* PyTorrent's table-sm padding is slightly taller than the virtual row step; keep non-compact rows inside their 32px slot. */
-html[data-ui-framework="pytorrent"] body:not(.compact-torrent-list) .torrent-table.table-sm > :not(caption) > * > * {
+html[data-ui-framework="pytorrent"] body:not(.compact-torrent-list) .torrent-table.table-sm> :not(caption)>*>* {
   padding-bottom: 0.18rem;
   padding-top: 0.18rem;
 }
@@ -8418,7 +8479,8 @@ html[data-ui-framework="pytorrent"] body.compact-torrent-list .torrent-table .st
   line-height: 1;
   vertical-align: middle;
 }
-html[data-ui-framework="pytorrent"] .torrent-table .status-badge > i.me-1 {
+
+html[data-ui-framework="pytorrent"] .torrent-table .status-badge>i.me-1 {
   margin-right: 0 !important;
 }
 
@@ -8824,7 +8886,7 @@ body.compact-torrent-list .mobile-progress .torrent-progress {
   border-bottom: 0;
 }
 
-.profile-transfer-torrents > small {
+.profile-transfer-torrents>small {
   color: var(--bs-secondary-color);
   padding: 0.42rem 0.65rem;
 }
@@ -8936,7 +8998,7 @@ body.compact-torrent-list .mobile-progress .torrent-progress {
   min-width: 0;
 }
 
-.profile-transfer-outside-warning-copy > i {
+.profile-transfer-outside-warning-copy>i {
   color: var(--bs-warning);
   flex: 0 0 auto;
   margin-top: 0.12rem;
@@ -9673,6 +9735,7 @@ body.compact-torrent-list .mobile-progress .torrent-progress {
     justify-content: flex-start;
   }
 }
+
 /* Note: Dedicated Files tree mode uses the detail pane as its scroll container instead of a short nested scroller. */
 .file-tree-panel.file-tree-standalone {
   margin: 0;
@@ -9871,7 +9934,7 @@ body.compact-torrent-list .mobile-progress .torrent-progress {
   position: relative;
 }
 
-.path-search-box > i {
+.path-search-box>i {
   color: var(--bs-secondary-color);
   left: 0.65rem;
   pointer-events: none;
@@ -9971,6 +10034,7 @@ body.sorting-preference-cards .footer-pref-card {
 }
 
 @media (max-width: 760px) {
+
   .path-location-heading,
   .path-picker-footer {
     align-items: stretch;
@@ -10028,6 +10092,7 @@ body.sorting-preference-cards .footer-pref-card {
   grid-column: 1 / -1;
   width: 100%;
 }
+
 /* PyTorrent runtime polish: navigation sizing and virtual-list row isolation. */
 html[data-ui-framework="pytorrent"] .topbar .nav-btn.btn-xs {
   min-height: 30px;
@@ -10042,18 +10107,18 @@ html[data-ui-framework="pytorrent"] body:not(.compact-torrent-list) .torrent-tab
   --torrent-row-height: 34px;
 }
 
-html[data-ui-framework="pytorrent"] body:not(.compact-torrent-list) .torrent-table tbody.torrent-virtual-body tr.torrent-virtual-row > td {
+html[data-ui-framework="pytorrent"] body:not(.compact-torrent-list) .torrent-table tbody.torrent-virtual-body tr.torrent-virtual-row>td {
   height: auto;
   padding-top: 0.2rem;
   padding-bottom: 0.2rem;
 }
 
-html[data-ui-framework="pytorrent"] body:not(.compact-torrent-list) .torrent-table tbody.torrent-virtual-body tr.torrent-virtual-row > td.sel {
+html[data-ui-framework="pytorrent"] body:not(.compact-torrent-list) .torrent-table tbody.torrent-virtual-body tr.torrent-virtual-row>td.sel {
   padding-top: 0;
   padding-bottom: 0;
 }
 
-html[data-ui-framework="pytorrent"] body:not(.compact-torrent-list) .torrent-table tbody.torrent-virtual-body tr.torrent-virtual-row > td.sel .torrent-select-cell {
+html[data-ui-framework="pytorrent"] body:not(.compact-torrent-list) .torrent-table tbody.torrent-virtual-body tr.torrent-virtual-row>td.sel .torrent-select-cell {
   /* Subtract the 1px row separator so the complete cell box is exactly --torrent-row-height. */
   height: calc(var(--torrent-row-height) - 1px);
 }
@@ -10159,7 +10224,7 @@ html[data-ui-framework="pytorrent"] body:not(.compact-torrent-list) .torrent-tab
   margin: 0;
 }
 
-.speed-limit-number-field > span {
+.speed-limit-number-field>span {
   color: var(--bs-secondary-color);
   font-size: 0.72rem;
   font-weight: 700;
@@ -10293,6 +10358,24 @@ html[data-ui-framework="pytorrent"] .speed-limit-presets .btn {
 
 
 /* Profile permission UX is framework-neutral; backend remains authoritative. */
-.profile-readonly-notice{display:flex;align-items:center;gap:.55rem;margin:.55rem .75rem 0;padding:.5rem .7rem;border:1px solid var(--bs-border-color,#cbd5e1);border-radius:.45rem;background:var(--bs-tertiary-bg,#f8fafc);font-size:.86rem}
-.permission-write-blocked{opacity:.5!important;cursor:not-allowed!important;filter:saturate(.55)}
-.profile-read-only .permission-write-blocked{pointer-events:auto}
+.profile-readonly-notice {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  margin: .55rem .75rem 0;
+  padding: .5rem .7rem;
+  border: 1px solid var(--bs-border-color, #cbd5e1);
+  border-radius: .45rem;
+  background: var(--bs-tertiary-bg, #f8fafc);
+  font-size: .86rem
+}
+
+.permission-write-blocked {
+  opacity: .5 !important;
+  cursor: not-allowed !important;
+  filter: saturate(.55)
+}
+
+.profile-read-only .permission-write-blocked {
+  pointer-events: auto
+}

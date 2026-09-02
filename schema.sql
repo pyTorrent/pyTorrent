@@ -96,6 +96,7 @@ CREATE TABLE IF NOT EXISTS profile_preferences (
   sidebar_shortcuts_expanded INTEGER DEFAULT 0,
   footer_items_json TEXT,
   footer_order_json TEXT,
+  footer_separators_enabled INTEGER DEFAULT 0,
   system_usage_chart_mode TEXT DEFAULT 'combined',
   system_usage_chart_expanded INTEGER DEFAULT 0,
   profile_ui_state_json TEXT DEFAULT '{}',

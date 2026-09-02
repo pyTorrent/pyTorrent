@@ -22,6 +22,7 @@ PREFERENCE_COPY_SCOPES: dict[str, tuple[str, ...]] = {
     "footer": (
         "footer_items_json",
         "footer_order_json",
+        "footer_separators_enabled",
         "system_usage_chart_mode",
         "system_usage_chart_expanded",
     ),

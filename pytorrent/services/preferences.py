@@ -664,6 +664,7 @@ PROFILE_PREFERENCE_COLUMNS = frozenset({
     "sidebar_shortcuts_expanded",
     "footer_items_json",
     "footer_order_json",
+    "footer_separators_enabled",
     "system_usage_chart_mode",
     "system_usage_chart_expanded",
 })
@@ -761,6 +762,9 @@ def save_profile_preferences(user_id: int, profile_id: int | None, data: dict) -
             updates["footer_items_json"] = json.dumps(normalize_footer_items(data.get("footer_items_json")), separators=(",", ":"))
         if data.get("footer_order_json") is not None:
             updates["footer_order_json"] = json.dumps(normalize_footer_order(data.get("footer_order_json")), separators=(",", ":"))
+        if data.get("footer_separators_enabled") is not None:
+            # Note: Footer separators are a profile-scoped presentation preference and default to enabled for existing behavior consistency.
+            updates["footer_separators_enabled"] = 1 if data.get("footer_separators_enabled") else 0
         if data.get("system_usage_chart_mode") is not None:
             mode = str(data.get("system_usage_chart_mode") or "combined").strip().lower()
             updates["system_usage_chart_mode"] = mode if mode in {"combined", "split"} else "combined"

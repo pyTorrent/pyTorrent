@@ -1466,8 +1466,15 @@
                         <div class="small text-muted mb-2">Choose visible items and drag them into the order you want.
                           Changes are saved automatically for the current user and rTorrent profile.</div>
                         <!-- Note: Footer item/order and CPU/RAM chart presentation are one profile-scoped section. -->
-                        <div class="view-preferences-note"><i class="fa-solid fa-circle-info"></i><span>Footer items, order and CPU/RAM chart layout are your personal settings for the active rTorrent profile.</span><button class="btn btn-sm btn-outline-primary d-none" type="button" data-profile-copy-scope="preferences.footer" data-profile-copy-label="footer settings"><i class="fa-solid fa-copy"></i> Copy my settings</button></div>
+                        <div class="view-preferences-note"><i class="fa-solid fa-circle-info"></i><span>Footer items, order, separators and CPU/RAM chart layout are your personal settings for the active rTorrent profile.</span><button class="btn btn-sm btn-outline-primary d-none" type="button" data-profile-copy-scope="preferences.footer" data-profile-copy-label="footer settings"><i class="fa-solid fa-copy"></i> Copy my settings</button></div>
                         <div id="footerPreferences" class="footer-preferences"></div>
+                        <!-- Note: Footer separators are a shared presentation option for both UI frameworks and are enabled by default. -->
+                        <div class="preference-setting-list mt-3">
+                          <label class="preference-setting-row form-check form-switch">
+                            <span class="preference-setting-copy"><b>Item separators</b><small>Show subtle vertical dividers between visible footer items.</small></span>
+                            <input id="footerSeparatorsEnabled" class="form-check-input" type="checkbox" checked>
+                          </label>
+                        </div>
                         <div class="system-chart-preferences">
                           <div class="system-chart-preferences-title">CPU / RAM chart</div>
                           <div class="system-chart-mode-options" role="group"

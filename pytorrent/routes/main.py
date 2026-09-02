@@ -141,6 +141,7 @@ def _frontend_bootstrap_config(prefs: dict, profile: dict | None, current_user: 
         "fontFamily": str(prefs.get("font_family") or "default"),
         "footerItems": _bootstrap_json_value(prefs.get("footer_items_json"), {}, dict),
         "footerOrder": _bootstrap_json_value(prefs.get("footer_order_json"), [], list),
+        "footerSeparatorsEnabled": flag("footer_separators_enabled", True),
         "easterEggEnabled": flag("easter_egg_enabled"),
         "easterEggLoadingImageUrl": str(prefs.get("easter_egg_loading_image_url") or ""),
         "easterEggClickImageUrl": str(prefs.get("easter_egg_click_image_url") or ""),
