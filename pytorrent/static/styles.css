@@ -4541,23 +4541,30 @@ body.sorting-preference-cards * {
   text-align: right;
 }
 
+/* Note: Speed items keep their natural footprint; JavaScript animates only real width changes so small and large rates do not leave artificial fixed gaps. */
+.statusbar-scroll>[data-footer-item="speed_down"],
+.statusbar-scroll>[data-footer-item="speed_up"] {
+  transition: inline-size var(--app-motion-base) ease;
+}
+
 #statDl,
 #statUl {
   display: inline-block;
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
-  inline-size: 9ch;
-  min-inline-size: 9ch;
-  max-inline-size: 9ch;
-  text-align: left;
+  white-space: nowrap;
 }
 
-.statusbar-scroll>[data-footer-item="speed_down"]+[data-footer-item="speed_up"] {
-  margin-inline-start: -1.80rem;
+[data-ui-framework="pytorrent"][data-pytorrent-motion="off"] .statusbar-scroll>[data-footer-item="speed_down"],
+[data-ui-framework="pytorrent"][data-pytorrent-motion="off"] .statusbar-scroll>[data-footer-item="speed_up"] {
+  transition: none;
 }
 
-.statusbar-scroll>[data-footer-item="speed_up"] {
-  margin-inline-end: -0.5rem;
+@media (prefers-reduced-motion: reduce) {
+  .statusbar-scroll>[data-footer-item="speed_down"],
+  .statusbar-scroll>[data-footer-item="speed_up"] {
+    transition: none;
+  }
 }
 
 .statusbar-scroll.footer-separators-enabled>[data-footer-item]:not(.footer-pref-hidden):not(.d-none)~[data-footer-item]:not(.footer-pref-hidden):not(.d-none) {
