@@ -9833,11 +9833,6 @@ body.compact-torrent-list .mobile-progress .torrent-progress {
   justify-content: flex-end;
 }
 
-.path-root-symbol {
-  font-family: var(--bs-font-monospace, ui-monospace, monospace);
-  font-weight: 900;
-}
-
 .path-picker-toolbar {
   margin: 0;
 }
