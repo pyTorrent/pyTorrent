@@ -1,7 +1,7 @@
 from __future__ import annotations
 import json
 from ..db import connect, utcnow, default_user_id
-from . import auth
+from . import auth, path_policy
 from .frontend_assets import BOOTSTRAP_THEME_LABELS, PYTORRENT_FRAMEWORK_EXTRA_THEMES
 from .deletion import purge_profile
 
@@ -526,6 +526,111 @@ def _clean_disk_paths(value) -> list[str]:
     return clean
 
 
+def _clean_storage_roots(value) -> list[str]:
+    """Normalize additional profile download roots without granting system-root access."""
+    # Note: Storage roots are absolute rTorrent-host paths; runtime permission checks are applied separately before persistence and use.
+    try:
+        parsed = json.loads(value if isinstance(value, str) else json.dumps(value or []))
+    except Exception:
+        parsed = []
+    if not isinstance(parsed, list):
+        parsed = []
+    clean: list[str] = []
+    for item in parsed:
+        try:
+            path = path_policy.normalize_remote_path(str(item or "").strip())
+        except ValueError:
+            continue
+        if path and path != "/" and path not in clean:
+            clean.append(path)
+    return clean
+
+
+def get_profile_storage_root_candidates(profile: dict) -> list[str]:
+    """Return the profile Default download path plus configured additional Storage browser roots."""
+    # Note: This is the shared source for download-root consumers so Storage browser, transfers and local torrent creation see the same configured locations.
+    if not profile:
+        return []
+    from . import rtorrent
+
+    roots: list[str] = []
+    try:
+        default_root = str(rtorrent.default_download_path(profile) or "").strip()
+    except Exception:
+        default_root = ""
+    if default_root:
+        roots.append(default_root)
+    try:
+        prefs = get_profile_disk_monitor_preferences(int(profile.get("id") or 0))
+        for item in json.loads(str((prefs or {}).get("storage_roots_json") or "[]")):
+            path = str(item or "").strip()
+            if path and path not in roots:
+                roots.append(path)
+    except Exception:
+        pass
+    return roots
+
+
+def get_profile_storage_roots(profile: dict) -> list[str]:
+    """Return currently accessible physical profile Storage browser roots."""
+    # Note: Physical resolution is performed by the rTorrent OS user so symlink aliases cannot widen the configured browser boundary.
+    from . import rtorrent
+
+    roots: list[str] = []
+    for configured in get_profile_storage_root_candidates(profile):
+        try:
+            physical = rtorrent.resolve_accessible_directory(profile, configured)
+        except Exception:
+            continue
+        if physical and physical != "/" and physical not in roots:
+            roots.append(physical)
+    return roots
+
+
+def _validate_storage_roots(profile_id: int, user_id: int, value) -> list[str]:
+    """Validate configured storage roots against the rTorrent host before saving them."""
+    # Note: A configured download root must already exist and be writable by the rTorrent OS user; invalid input is rejected instead of being silently dropped.
+    profile = get_profile(int(profile_id or 0), int(user_id or 0))
+    if not profile:
+        raise ValueError("Profile not found")
+    from . import rtorrent
+
+    try:
+        parsed = json.loads(value) if isinstance(value, str) else (value if value is not None else [])
+    except Exception as exc:
+        raise ValueError("Additional download locations must be a JSON array of absolute paths") from exc
+    if not isinstance(parsed, list):
+        raise ValueError("Additional download locations must be a JSON array of absolute paths")
+
+    try:
+        default_physical = rtorrent.resolve_accessible_directory(profile, rtorrent.default_download_path(profile))
+    except Exception:
+        default_physical = ""
+    validated: list[str] = []
+    for item in parsed:
+        raw = str(item or "").strip()
+        if not raw:
+            continue
+        try:
+            requested = path_policy.normalize_remote_path(raw)
+        except ValueError as exc:
+            raise ValueError(f"Invalid download location {raw}: {exc}") from exc
+        if requested == "/":
+            raise ValueError("System root cannot be used as a download location")
+        physical = rtorrent.resolve_accessible_directory(profile, requested)
+        if physical == "/":
+            raise ValueError("System root cannot be used as a download location")
+        if default_physical and physical == default_physical:
+            raise ValueError("The Default download location is already available in Storage browser")
+        write_check = rtorrent.remote_can_write_directory(profile, physical)
+        if not write_check.get("ok"):
+            reason = str(write_check.get("message") or write_check.get("error") or "directory is not writable")
+            raise ValueError(f"rTorrent cannot manage download location {requested}: {reason}")
+        if physical not in validated:
+            validated.append(physical)
+    return validated
+
+
 def _normalize_disk_monitor(data: dict | None) -> dict:
     data = data or {}
     mode = str(data.get("mode") or data.get("disk_monitor_mode") or "default")
@@ -538,6 +643,7 @@ def _normalize_disk_monitor(data: dict | None) -> dict:
     threshold = max(1, min(100, threshold))
     return {
         "disk_monitor_paths_json": json.dumps(_clean_disk_paths(data.get("paths_json") if data.get("paths_json") is not None else data.get("disk_monitor_paths_json"))),
+        "storage_roots_json": json.dumps(_clean_storage_roots(data.get("storage_roots_json"))),
         "disk_monitor_mode": mode,
         "disk_monitor_selected_path": str(data.get("selected_path") if data.get("selected_path") is not None else data.get("disk_monitor_selected_path") or "").strip(),
         "disk_monitor_stop_enabled": 1 if (data.get("stop_enabled") if data.get("stop_enabled") is not None else data.get("disk_monitor_stop_enabled")) else 0,
@@ -622,16 +728,19 @@ def save_disk_monitor_preferences(profile_id: int | None, data: dict, user_id: i
         raise PermissionError("No write access to profile")
     current = get_disk_monitor_preferences(profile_id, user_id)
     merged = dict(current)
-    for key in ("disk_monitor_paths_json", "disk_monitor_mode", "disk_monitor_selected_path", "disk_monitor_stop_enabled", "disk_monitor_stop_threshold"):
+    for key in ("disk_monitor_paths_json", "storage_roots_json", "disk_monitor_mode", "disk_monitor_selected_path", "disk_monitor_stop_enabled", "disk_monitor_stop_threshold"):
         if key in data:
             merged[key] = data.get(key)
+    if "storage_roots_json" in data:
+        # Note: Profile storage roots are canonicalized on the rTorrent host before they become browser authorization boundaries.
+        merged["storage_roots_json"] = _validate_storage_roots(profile_id, user_id, data.get("storage_roots_json"))
     clean = _normalize_disk_monitor(merged)
     now = utcnow()
     with connect() as conn:
         conn.execute(
-            "INSERT INTO disk_monitor_preferences(profile_id,updated_by_user_id,paths_json,mode,selected_path,stop_enabled,stop_threshold,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?) "
-            "ON CONFLICT(profile_id) DO UPDATE SET updated_by_user_id=excluded.updated_by_user_id, paths_json=excluded.paths_json, mode=excluded.mode, selected_path=excluded.selected_path, stop_enabled=excluded.stop_enabled, stop_threshold=excluded.stop_threshold, updated_at=excluded.updated_at",
-            (profile_id, user_id, clean["disk_monitor_paths_json"], clean["disk_monitor_mode"], clean["disk_monitor_selected_path"], clean["disk_monitor_stop_enabled"], clean["disk_monitor_stop_threshold"], now, now),
+            "INSERT INTO disk_monitor_preferences(profile_id,updated_by_user_id,paths_json,storage_roots_json,mode,selected_path,stop_enabled,stop_threshold,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?) "
+            "ON CONFLICT(profile_id) DO UPDATE SET updated_by_user_id=excluded.updated_by_user_id, paths_json=excluded.paths_json, storage_roots_json=excluded.storage_roots_json, mode=excluded.mode, selected_path=excluded.selected_path, stop_enabled=excluded.stop_enabled, stop_threshold=excluded.stop_threshold, updated_at=excluded.updated_at",
+            (profile_id, user_id, clean["disk_monitor_paths_json"], clean["storage_roots_json"], clean["disk_monitor_mode"], clean["disk_monitor_selected_path"], clean["disk_monitor_stop_enabled"], clean["disk_monitor_stop_threshold"], now, now),
         )
     clean["disk_monitor_updated_by_user_id"] = int(user_id)
     with connect() as conn:
@@ -821,6 +930,7 @@ def get_preferences(user_id: int | None = None, profile_id: int | None = None):
 
 SHARED_PROFILE_PREFERENCE_FIELDS = frozenset({
     "disk_monitor_paths_json",
+    "storage_roots_json",
     "disk_monitor_mode",
     "disk_monitor_selected_path",
     "disk_monitor_stop_enabled",
@@ -853,6 +963,7 @@ def save_preferences(data: dict, user_id: int | None = None, profile_id: int | N
     easter_egg_loading_image_url = data.get("easter_egg_loading_image_url")
     easter_egg_click_image_url = data.get("easter_egg_click_image_url")
     disk_monitor_paths_json = data.get("disk_monitor_paths_json")
+    storage_roots_json = data.get("storage_roots_json")
     disk_monitor_mode = data.get("disk_monitor_mode")
     disk_monitor_selected_path = data.get("disk_monitor_selected_path")
     disk_monitor_stop_enabled = data.get("disk_monitor_stop_enabled")
@@ -877,14 +988,10 @@ def save_preferences(data: dict, user_id: int | None = None, profile_id: int | N
     drop_location_mode = data.get("drop_location_mode")
     free_space_check_enabled = data.get("free_space_check_enabled")
     disk_payload = None
-    if any(value is not None for value in (disk_monitor_paths_json, disk_monitor_mode, disk_monitor_selected_path, disk_monitor_stop_enabled, disk_monitor_stop_threshold)):
-        disk_payload = {
-            "disk_monitor_paths_json": disk_monitor_paths_json,
-            "disk_monitor_mode": disk_monitor_mode,
-            "disk_monitor_selected_path": disk_monitor_selected_path,
-            "disk_monitor_stop_enabled": disk_monitor_stop_enabled,
-            "disk_monitor_stop_threshold": disk_monitor_stop_threshold,
-        }
+    disk_keys = ("disk_monitor_paths_json", "storage_roots_json", "disk_monitor_mode", "disk_monitor_selected_path", "disk_monitor_stop_enabled", "disk_monitor_stop_threshold")
+    if any(key in data for key in disk_keys):
+        # Note: Shared disk settings are patch-based so saving Storage roots cannot reset unrelated Disk Monitor fields, and vice versa.
+        disk_payload = {key: data.get(key) for key in disk_keys if key in data}
     with connect() as conn:
         now = utcnow()
         current_pref = conn.execute(

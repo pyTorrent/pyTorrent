@@ -184,6 +184,7 @@ CREATE TABLE IF NOT EXISTS disk_monitor_preferences (
   profile_id INTEGER PRIMARY KEY,
   updated_by_user_id INTEGER,
   paths_json TEXT,
+  storage_roots_json TEXT DEFAULT '[]',
   mode TEXT DEFAULT 'default',
   selected_path TEXT,
   stop_enabled INTEGER DEFAULT 0,

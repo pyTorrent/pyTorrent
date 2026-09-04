@@ -577,11 +577,13 @@ def _path_inside_root(path: str, root: str) -> bool:
 
 
 def _target_profile_allowed_roots(target_profile: dict, user_id: int) -> list[str]:
+    # Note: Explicit additional download locations are valid transfer roots; legacy Disk Monitor roots remain accepted for backward compatibility.
     roots = []
-    try:
-        roots.append(_clean_remote_transfer_path(rtorrent.default_download_path(target_profile)))
-    except Exception:
-        pass
+    for item in preferences.get_profile_storage_root_candidates(target_profile):
+        try:
+            roots.append(_clean_remote_transfer_path(item))
+        except Exception:
+            continue
     try:
         prefs = preferences.get_disk_monitor_preferences(int(target_profile.get("id") or 0), user_id=user_id)
         for item in json.loads((prefs or {}).get("disk_monitor_paths_json") or "[]"):
@@ -767,11 +769,11 @@ def torrent_create():
         return jsonify({"ok": False, "error": "No profile"}), 400
     form = request.form if request.content_type and request.content_type.startswith("multipart/form-data") else (request.get_json(silent=True) or {})
     try:
-        # Note: Torrent creation may hash only local files inside this profile's backend-owned download root.
+        # Note: Local torrent creation may hash files inside Default or any explicitly configured additional download root.
         if bool(profile.get("is_remote")):
             raise ValueError("Create Torrent from a local path is unavailable for remote rTorrent profiles")
-        root = rtorrent.default_download_path(profile)
-        source_path = path_policy.require_local_path(str(form.get("source_path") or ""), [root])
+        roots = preferences.get_profile_storage_root_candidates(profile)
+        source_path = path_policy.require_local_path(str(form.get("source_path") or ""), roots)
         created = torrent_creator.build_torrent(
             source_path=str(source_path),
             trackers=form.get("trackers", ""),

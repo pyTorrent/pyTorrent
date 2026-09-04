@@ -78,7 +78,7 @@ def _remote_accessible_directory(profile: dict, paths: list[str]) -> str:
 
 def resolve_accessible_directory(profile: dict, path: str) -> str:
     """Resolve an existing remote directory to its physical path through the rTorrent host."""
-    # Note: Resolving with cd -P prevents symlink traversal from escaping a backend-approved download root.
+    # Note: Resolving with cd -P gives callers a physical path so they can enforce either root isolation or permission-based external browsing safely.
     resolved = _remote_accessible_directory(profile, [path])
     if not resolved:
         raise ValueError("Directory does not exist or is not accessible")

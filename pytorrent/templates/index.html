@@ -646,6 +646,8 @@
               <div><span class="path-field-label">Current location</span><small>Type a path directly or navigate with the shortcuts.</small></div>
               <div class="path-quick-actions">
                 <button id="pathDefaultBtn" class="btn btn-sm btn-outline-secondary" type="button"><i class="fa-solid fa-house"></i> Default</button>
+                <!-- Note: Additional profile download roots are rendered here as direct shortcuts by the shared Storage browser runtime. -->
+                <span id="pathRootShortcuts" class="path-root-shortcuts" aria-label="Additional download locations"></span>
                 <button id="pathUpBtn" class="btn btn-sm btn-outline-secondary" type="button" title="Parent directory"><i class="fa-solid fa-arrow-up"></i> Up</button>
                 <button id="pathReloadBtn" class="btn btn-sm btn-outline-secondary" type="button" title="Reload"><i class="fa-solid fa-rotate"></i> Refresh</button>
               </div>
@@ -1344,7 +1346,7 @@
                     <div id="prefPane-downloads" class="tab-pane fade " role="tabpanel">
                       <div class="surface-section">
                         <div class="section-title"><i class="fa-solid fa-download"></i> Downloads</div>
-                        <div class="small text-muted mb-3">Defaults used by the Add Torrent dialog and drag-and-drop actions.</div>
+                        <div class="small text-muted mb-3">Download locations and defaults used by the Add Torrent dialog, Storage browser and drag-and-drop actions.</div>
                         <!-- Note: Download settings are grouped by the moment they affect the user instead of mixing paths, safety and drop behavior in one grid. -->
                         <section class="preference-subsection" aria-labelledby="downloadAddDefaultsTitle">
                           <div class="preference-subsection-heading"><b id="downloadAddDefaultsTitle">Add Torrent defaults</b><small>Choose the path behavior used when the Add Torrent dialog opens.</small></div>
@@ -1363,6 +1365,13 @@
                               <small>Used only when Location behavior is set to use the last selected location.</small>
                             </label>
                           </div>
+                        </section>
+                        <!-- Note: Additional download locations belong to Downloads because they are selectable managed download roots; they remain profile-shared and permission-checked by rTorrent. -->
+                        <section class="preference-subsection" aria-labelledby="storageRootsTitle">
+                          <div class="preference-subsection-heading"><b id="storageRootsTitle">Additional download locations</b><small>Add other disks or directories that rTorrent may use as managed download roots.</small></div>
+                          <div class="input-group input-group-sm"><input id="storageRootPathInput" class="form-control" placeholder="/mnt/disk2/rtorrent"><button id="addStorageRootBtn" class="btn btn-outline-primary" type="button"><i class="fa-solid fa-plus"></i> Add location</button></div>
+                          <div class="form-text mt-1">The directory must already exist and be writable by the rTorrent OS user. Locations are shared by the active profile, appear as direct shortcuts in Storage browser, and navigation cannot go above their configured roots.</div>
+                          <div id="storageRootsList" class="disk-monitor-path-list mt-2"></div>
                         </section>
                         <section class="preference-subsection" aria-labelledby="downloadBehaviorTitle">
                           <div class="preference-subsection-heading"><b id="downloadBehaviorTitle">Drag and drop &amp; safety</b><small>Controls dropped torrent files and the pre-add free-space check.</small></div>

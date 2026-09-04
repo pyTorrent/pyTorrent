@@ -7,7 +7,7 @@ import threading
 import uuid
 from ..db import connect, default_user_id, utcnow
 from . import rtorrent, auth
-from .preferences import active_profile, get_profile, get_profile_for_system, get_disk_monitor_preferences, get_profile_disk_monitor_preferences, get_profile_runtime_stats
+from .preferences import active_profile, get_profile, get_profile_for_system, get_disk_monitor_preferences, get_profile_disk_monitor_preferences, get_profile_runtime_stats, get_profile_storage_root_candidates
 from .profile_status_cache import get_status as get_profile_status
 from .torrent_cache import torrent_cache
 from .workers import enqueue_many
@@ -595,6 +595,11 @@ def _automation_profile_transfer_payload(profile: dict[str, Any], eff: dict[str,
     target_path = (requested_target_path or default_path) if requested_move_data else ''
     roots = [default_path] if default_path else []
     if requested_move_data:
+        # Note: Automation profile transfers accept explicitly configured download locations while preserving legacy Disk Monitor roots.
+        for item in get_profile_storage_root_candidates(target_profile):
+            clean = _safe_remote_path(str(item or ''))
+            if clean and clean not in roots:
+                roots.append(clean)
         try:
             prefs = get_profile_disk_monitor_preferences(target_id) if system_execution else get_disk_monitor_preferences(target_id, user_id=user_id)
             for item in json.loads((prefs or {}).get('disk_monitor_paths_json') or '[]'):

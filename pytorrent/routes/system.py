@@ -518,13 +518,19 @@ def _rename_state_for_path(profile: dict, item: dict, torrent_path_index: list[s
     return item
 
 
-def _annotate_path_directories(profile: dict, payload: dict) -> dict:
+def _annotate_path_directories(profile: dict, payload: dict, protected_roots: list[str] | None = None) -> dict:
+    # Note: Configured Storage browser roots are shown as navigation entries but never as renameable child directories.
     dirs = payload.get("dirs") or []
     if not dirs:
         return payload
     torrent_path_index = _build_torrent_path_index(int(profile.get("id") or 0))
+    protected = {posixpath.normpath(str(root or "").rstrip("/") or "/") for root in (protected_roots or []) if str(root or "").strip()}
     for item in dirs:
         _rename_state_for_path(profile, item, torrent_path_index)
+        item_path = posixpath.normpath(str(item.get("path") or "").rstrip("/") or "/")
+        if item_path in protected:
+            item["can_rename"] = False
+            item["rename_reason"] = "Configured storage root"
     return payload
 
 
@@ -540,30 +546,64 @@ def _path_profile_from_request(*, require_write_access: bool = False):
     return profile
 
 
+def _profile_storage_root_candidates(profile: dict) -> list[str]:
+    """Return the configured Default path plus additional profile download roots."""
+    # Note: Storage browser authorization consumes the shared profile root configuration instead of maintaining a route-local copy.
+    return preferences.get_profile_storage_root_candidates(profile)
+
+
 def _profile_download_roots(profile: dict) -> list[str]:
-    """Return physical backend-owned filesystem roots exposed through the path browser."""
-    # Note: User preferences and request payloads cannot expand filesystem authority beyond the rTorrent profile download root.
-    root = str(rtorrent.default_download_path(profile) or "").strip()
-    if not root:
+    """Return physical Storage browser roots currently accessible to the rTorrent OS user."""
+    # Note: Shared root resolution uses cd -P through rTorrent so symlink escapes cannot widen the browser authorization boundary.
+    return preferences.get_profile_storage_roots(profile)
+
+
+def _profile_storage_shortcuts(profile: dict, roots: list[str] | None = None) -> list[dict]:
+    """Build direct Storage browser shortcuts for the default and additional download roots."""
+    # Note: Shortcuts expose only authorized physical roots and identify Default by its resolved path rather than by list position.
+    physical_roots = roots if roots is not None else _profile_download_roots(profile)
+    if not physical_roots:
         return []
-    return [rtorrent.resolve_accessible_directory(profile, root)]
+    default_root = ""
+    candidates = _profile_storage_root_candidates(profile)
+    if candidates:
+        try:
+            default_root = rtorrent.resolve_accessible_directory(profile, candidates[0])
+        except Exception:
+            default_root = ""
+    shortcuts = []
+    for root in physical_roots:
+        is_default = bool(default_root and root == default_root)
+        label = "Default" if is_default else (posixpath.basename(root.rstrip("/")) or root)
+        shortcuts.append({"path": root, "label": label, "default": is_default})
+    return shortcuts
+
+
+def _profile_root_for_path(path: str, roots: list[str]) -> str:
+    """Return the outermost authorized root containing a physical browser path."""
+    # Note: Choosing the outermost matching root keeps Up navigation usable when an added root intentionally contains the default root.
+    matches = [root for root in roots if path_policy.remote_path_inside_roots(path, [root])]
+    return min(matches, key=lambda root: (len(root.rstrip("/")), root)) if matches else ""
 
 
 def _authorized_profile_path(profile: dict, value: str, *, default_to_root: bool = False) -> str:
-    """Resolve and authorize one existing remote filesystem path for the active profile."""
-    # Note: Physical-path comparison blocks symlink escapes while accepting both the configured root spelling and physical paths returned by the browser.
-    roots = _profile_download_roots(profile)
-    if not roots:
+    """Resolve one existing remote path and require it to stay inside a configured Storage browser root."""
+    # Note: Authorization accepts configured lexical paths and physical paths previously returned by the browser, then rechecks the resolved path against physical roots.
+    configured_roots = _profile_storage_root_candidates(profile)
+    physical_roots = _profile_download_roots(profile)
+    if not configured_roots or not physical_roots:
         raise PermissionError("Profile download root is unavailable")
-    configured_root = str(rtorrent.default_download_path(profile) or "").strip()
-    requested = str(value or "").strip() or (configured_root if default_to_root else "")
-    try:
-        lexical = path_policy.require_remote_path(requested, [configured_root], default_path=configured_root if default_to_root else "")
-    except PermissionError:
-        # Existing browse responses use cd -P paths; permit that spelling only when it is already inside the resolved backend root.
-        lexical = path_policy.require_remote_path(requested, roots)
+    requested = str(value or "").strip() or (configured_roots[0] if default_to_root else "")
+    lexical = path_policy.normalize_remote_path(requested)
+    if not lexical or not (
+        path_policy.remote_path_inside_roots(lexical, configured_roots)
+        or path_policy.remote_path_inside_roots(lexical, physical_roots)
+    ):
+        raise PermissionError("Path is outside the profile storage roots")
     physical = rtorrent.resolve_accessible_directory(profile, lexical)
-    return path_policy.require_remote_path(physical, roots)
+    if not path_policy.remote_path_inside_roots(physical, physical_roots):
+        raise PermissionError("Path is outside the profile storage roots")
+    return physical
 
 
 @bp.get("/path/default")
@@ -572,14 +612,15 @@ def path_default():
     if not profile:
         return jsonify({"ok": False, "error": "No profile"}), 400
     try:
-        # Note: The browser starts inside the backend-owned profile root even if an old user preference points elsewhere.
+        # Note: The configured rTorrent path remains Default, while a preferred path is accepted only inside Default or an explicitly added profile storage root.
         root = _authorized_profile_path(profile, "", default_to_root=True)
         preferred = str(active_default_download_path(profile) or "")
         try:
             preferred = _authorized_profile_path(profile, preferred)
         except Exception:
             preferred = root
-        return ok({"path": preferred, "profile_default_path": root, "profile_id": int(profile["id"])})
+        roots = _profile_download_roots(profile)
+        return ok({"path": preferred, "profile_default_path": root, "storage_roots": _profile_storage_shortcuts(profile, roots), "profile_id": int(profile["id"])})
     except PermissionError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 403
     except Exception as exc:
@@ -604,8 +645,21 @@ def path_browse():
     except Exception:
         parsed_max_dirs = None
     try:
+        # Note: Storage browsing is limited to Default plus profile-configured download roots; rTorrent permissions still decide whether each directory can actually be opened.
         base = _authorized_profile_path(profile, base, default_to_root=True)
-        return ok(_annotate_path_directories(profile, rtorrent.browse_path(profile, base, max_dirs=parsed_max_dirs, search=search, cache_only=cache_only, force_refresh=force_refresh)))
+        roots = _profile_download_roots(profile)
+        payload = _annotate_path_directories(profile, rtorrent.browse_path(profile, base, max_dirs=parsed_max_dirs, search=search, cache_only=cache_only, force_refresh=force_refresh), roots)
+        current = str(payload.get("path") or base)
+        active_root = _profile_root_for_path(current, roots) or current
+        parent = str(payload.get("parent") or current)
+        if not path_policy.remote_path_inside_roots(parent, roots):
+            parent = current
+        payload["parent"] = parent
+        payload["root"] = active_root
+        payload["allowed_roots"] = roots
+        payload["storage_roots"] = _profile_storage_shortcuts(profile, roots)
+        payload["outside_root_browse_allowed"] = False
+        return ok(payload)
     except PermissionError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 403
     except rtorrent.PathBrowseTimeoutError as exc:
@@ -625,7 +679,7 @@ def path_directory_create():
         return jsonify({"ok": False, "error": "No profile"}), 400
     data = request.get_json(silent=True) or {}
     try:
-        # Note: Directory creation is constrained to the same backend-owned root as browsing.
+        # Note: Folder creation is allowed inside any configured profile storage root and still requires the rTorrent OS user to have filesystem write permission.
         parent = _authorized_profile_path(profile, data.get("parent") or "", default_to_root=True)
         result = rtorrent.create_directory(profile, parent, data.get("name") or "")
         return ok({"directory": result})
@@ -643,10 +697,10 @@ def path_directory_check_rename():
         return jsonify({"ok": False, "error": "No profile"}), 400
     data = request.get_json(silent=True) or {}
     try:
-        # Note: Large directory listings skip per-folder empty checks; this endpoint checks one selected folder lazily inside the profile root.
+        # Note: Large directory listings skip per-folder empty checks; lazy checks use the same configured storage-root boundary as normal browsing.
         checked_path = _authorized_profile_path(profile, data.get("path") or "")
         if checked_path in _profile_download_roots(profile):
-            raise ValueError("Cannot rename the profile download root")
+            raise ValueError("Cannot rename a configured storage root")
         result = rtorrent.check_directory_rename_state(profile, checked_path)
         result = _rename_state_for_path(profile, result)
         return ok({"directory": result})
@@ -663,12 +717,13 @@ def path_directory_rename():
         return jsonify({"ok": False, "error": "No profile"}), 400
     data = request.get_json(silent=True) or {}
     try:
+        # Note: Eligible empty folders may be renamed only inside configured storage roots and only when the rTorrent OS user can perform the operation.
         path = _authorized_profile_path(profile, data.get("path") or "")
         if path in _profile_download_roots(profile):
-            raise ValueError("Cannot rename the profile download root")
+            raise ValueError("Cannot rename a configured storage root")
         if _path_has_cached_torrents(int(profile.get("id") or 0), path):
             return jsonify({"ok": False, "error": "Directory contains a known torrent path"}), 400
-        # Note: Rename stays inside the profile root and the service also verifies that the remote directory is empty.
+        # Note: The service still verifies that the remote directory is empty and that the rTorrent OS user can complete the rename.
         result = rtorrent.rename_empty_directory(profile, path, data.get("new_name") or "")
         return ok({"directory": result})
     except PermissionError as exc:

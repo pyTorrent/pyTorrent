@@ -1038,10 +1038,15 @@
                 "type": "string"
               },
               "allowed_roots": {
+                "description": "Physical Default and additional profile download roots that bound Storage browser navigation.",
                 "items": {
                   "type": "string"
                 },
                 "type": "array"
+              },
+              "outside_root_browse_allowed": {
+                "description": "Compatibility flag. False: Storage browser navigation is constrained to configured profile storage roots.",
+                "type": "boolean"
               },
               "default_max_dirs": {
                 "description": "Default number of directories returned before the user explicitly requests all results.",
@@ -1109,6 +1114,7 @@
                 "type": "string"
               },
               "root": {
+                "description": "Authorized storage root governing the current physical path.",
                 "type": "string"
               },
               "search": {
@@ -1134,6 +1140,13 @@
               "listing_truncated": {
                 "description": "True when the remote directory list reached the hard cache cap and additional entries were not retained.",
                 "type": "boolean"
+              },
+              "storage_roots": {
+                "description": "Direct Storage browser shortcuts for Default and currently accessible additional profile download locations.",
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/StorageRootShortcut"
+                }
               }
             },
             "type": "object"
@@ -1149,6 +1162,17 @@
             "properties": {
               "path": {
                 "type": "string"
+              },
+              "profile_default_path": {
+                "description": "Physical rTorrent profile Default download root.",
+                "type": "string"
+              },
+              "storage_roots": {
+                "description": "Direct Storage browser shortcuts for Default and currently accessible additional profile download locations.",
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/StorageRootShortcut"
+                }
               }
             },
             "type": "object"
@@ -1649,6 +1673,10 @@
           },
           "tracker_favicons_enabled": {
             "type": "boolean"
+          },
+          "storage_roots_json": {
+            "description": "JSON array of additional profile-shared download roots. Each root must already exist and be writable by the rTorrent OS user.",
+            "type": "string"
           }
         },
         "type": "object"
@@ -2860,6 +2888,26 @@
             "type": "boolean"
           }
         }
+      },
+      "StorageRootShortcut": {
+        "description": "One authorized Storage browser root exposed as a direct shortcut.",
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "default": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path",
+          "label",
+          "default"
+        ]
       }
     },
     "securitySchemes": {
@@ -6093,7 +6141,7 @@
     },
     "/api/path/browse": {
       "get": {
-        "description": "Browse directories only inside the selected profile download root; symlink escapes are rejected.",
+        "description": "Browse rTorrent-readable directories inside the profile Default download root or an explicitly configured additional download location. Filesystem access is still enforced by the rTorrent OS user permissions.",
         "parameters": [
           {
             "in": "query",
@@ -6189,7 +6237,7 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Browse rTorrent-readable directories"
+        "summary": "Browse authorized rTorrent storage directories"
       }
     },
     "/api/path/default": {
@@ -6226,13 +6274,13 @@
             "sessionCookie": []
           }
         ],
-        "summary": "Get active default download path",
-        "description": "Return a preferred directory constrained to the selected profile download root."
+        "summary": "Get default path and Storage browser roots",
+        "description": "Return the preferred directory when it is inside Default or an explicitly configured additional download location, plus the current Storage browser shortcuts."
       }
     },
     "/api/path/directories": {
       "post": {
-        "description": "Create a directory only inside the selected profile download root; requires profile write access.",
+        "description": "Create a directory inside Default or an explicitly configured additional download location; requires profile write access and the rTorrent OS user filesystem write permission.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -6290,7 +6338,7 @@
     },
     "/api/path/directories/check-rename": {
       "post": {
-        "description": "Read-only check of rename eligibility for a directory inside the selected profile download root. Profile read access is sufficient.",
+        "description": "Read-only check of rename eligibility inside Default or an explicitly configured additional download location. Configured storage roots themselves cannot be renamed.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -6348,7 +6396,7 @@
     },
     "/api/path/directories/rename": {
       "post": {
-        "description": "Rename a directory only inside the selected profile download root; requires profile write access.",
+        "description": "Rename an eligible empty directory inside Default or an explicitly configured additional download location; requires profile write access and rTorrent filesystem permission.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -8734,7 +8782,7 @@
     },
     "/api/torrents/create": {
       "post": {
-        "description": "Create a .torrent file from an existing local source path inside the selected profile download root. Symlink escapes and paths outside that root are rejected. Local hashing is unavailable for remote rTorrent profiles because pyTorrent cannot assume both processes share a filesystem.",
+        "description": "Create a .torrent file from an existing local source path inside Default or an explicitly configured additional download location. Symlink escapes and paths outside those roots are rejected. Local hashing is unavailable for remote rTorrent profiles because pyTorrent cannot assume both processes share a filesystem.",
         "parameters": [
           {
             "$ref": "#/components/parameters/ProfileId"
@@ -8780,7 +8828,7 @@
                   },
                   "source_path": {
                     "type": "string",
-                    "description": "Absolute local file/directory path inside the selected profile download root."
+                    "description": "Absolute local file/directory path inside Default or an explicitly configured additional download location."
                   },
                   "trackers": {
                     "type": "string"

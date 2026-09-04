@@ -9833,6 +9833,11 @@ body.compact-torrent-list .mobile-progress .torrent-progress {
   justify-content: flex-end;
 }
 
+/* Note: Dynamic storage-root shortcuts participate in the existing quick-action flex layout in both UI frameworks. */
+.path-root-shortcuts {
+  display: contents;
+}
+
 .path-picker-toolbar {
   margin: 0;
 }
