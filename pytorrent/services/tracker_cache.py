@@ -195,25 +195,67 @@ def warm_summary_cache(profile: dict, hashes: list[str], loader, batch_size: int
     return True
 
 
+def _existing_favicon_path(domain: str, cached=None) -> Path | None:
+    """Return an existing favicon file even when its cache metadata is stale."""
+    clean = tracker_domain(domain)
+    if not clean:
+        return None
+
+    candidates: list[Path] = []
+    if cached and cached.get("file_path"):
+        candidates.append(Path(str(cached.get("file_path") or "")))
+
+    # Note: The file is the source of truth for rendering. This also recovers icons
+    # left on disk when the database row is missing or contains an old path.
+    safe_name = _safe_filename(clean)
+    for ext in (".ico", ".png", ".jpg", ".jpeg", ".svg", ".webp"):
+        candidates.append(FAVICON_DIR / f"{safe_name}{ext}")
+
+    favicon_root = FAVICON_DIR.resolve()
+    seen: set[str] = set()
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve()
+            key = str(resolved)
+            if key in seen:
+                continue
+            seen.add(key)
+            resolved.relative_to(favicon_root)
+            if resolved.exists() and resolved.is_file() and resolved.stat().st_size > 0:
+                return resolved
+        except (OSError, ValueError):
+            continue
+    return None
+
+
+def _favicon_is_stale(cached, path: Path | None = None, now: float | None = None) -> bool:
+    current = _now_epoch() if now is None else float(now)
+    if path:
+        try:
+            # Note: File mtime represents the last successful icon write. A failed
+            # network refresh may update DB diagnostics but must not make old bytes fresh.
+            return current - float(path.stat().st_mtime) >= FAVICON_CACHE_TTL_SECONDS
+        except OSError:
+            return True
+    if not cached:
+        return True
+    return current - float(cached.get("updated_epoch") or 0) >= FAVICON_CACHE_TTL_SECONDS
+
+
 def favicon_public_url(domain: str, enabled: bool = True, create: bool = False, force: bool = False) -> str:
-    """Return the static URL for a cached tracker favicon, optionally creating or refreshing it first."""
-    # Note: Favicon files stay in data/tracker_favicons, but the browser loads them via the static/tracker_favicons symlink.
+    """Return an existing static favicon immediately; TTL controls refresh, not visibility."""
+    # Note: Stale-while-revalidate: an existing file remains visible while the
+    # background warmer refreshes stale metadata/content independently.
     clean = tracker_domain(domain)
     if not enabled or not clean:
         return ""
     if create:
         favicon_path(clean, enabled=True, force=force)
     cached = _cached_favicon(clean)
-    now = _now_epoch()
-    if not cached or now - float(cached.get("updated_epoch") or 0) >= FAVICON_CACHE_TTL_SECONDS:
+    path = _existing_favicon_path(clean, cached=cached)
+    if not path:
         return ""
-    path = Path(str(cached.get("file_path") or ""))
-    if not path.exists() or not path.is_file():
-        return ""
-    try:
-        rel = path.resolve().relative_to(FAVICON_DIR.resolve())
-    except Exception:
-        rel = Path(path.name)
+    rel = path.relative_to(FAVICON_DIR.resolve())
     return f"{PUBLIC_FAVICON_BASE}/{urllib.parse.quote(str(rel).replace(chr(92), '/'))}"
 
 def _fetch(url: str, limit: int = 262144) -> tuple[bytes, str, str]:
@@ -356,13 +398,13 @@ def favicon_path(domain: str, enabled: bool = True, force: bool = False) -> tupl
         return None, None
     cached = _cached_favicon(clean)
     now = _now_epoch()
-    if cached and not force and now - float(cached.get("updated_epoch") or 0) < FAVICON_CACHE_TTL_SECONDS:
-        path = Path(str(cached.get("file_path") or ""))
-        mime = str(cached.get("mime_type") or mimetypes.guess_type(path.name)[0] or "image/x-icon")
-        if path.exists() and path.is_file():
+    existing_path = _existing_favicon_path(clean, cached=cached)
+    if cached and not force and not _favicon_is_stale(cached, path=existing_path, now=now):
+        if existing_path:
+            mime = str(cached.get("mime_type") or mimetypes.guess_type(existing_path.name)[0] or "image/x-icon")
             try:
-                if _is_icon(path.read_bytes()[:524288], mime, str(cached.get("source_url") or path.name)):
-                    return path, mime
+                if _is_icon(existing_path.read_bytes()[:524288], mime, str(cached.get("source_url") or existing_path.name)):
+                    return existing_path, mime
             except Exception:
                 pass
         if cached.get("error"):
@@ -453,8 +495,9 @@ def domain_known_for_profile(profile_id: int, domain: str) -> bool:
     return clean in set(cached_domains_for_profile(int(profile_id), limit=5000))
 
 def warm_favicon_cache(domains: list[str], enabled: bool = True, limit: int = 20, force: bool = False) -> dict:
-    """Warm missing or stale tracker favicons for a bounded list of domains."""
-    # Note: Favicon lookup can perform network requests, so the caller must keep the batch size small.
+    """Refresh only missing/stale favicons, prioritizing missing files over stale files."""
+    # Note: Existing stale files remain renderable. Network work is bounded and
+    # ordered so fresh entries do not consume the batch before stale ones.
     clean_domains = []
     seen: set[str] = set()
     for domain in domains or []:
@@ -462,10 +505,33 @@ def warm_favicon_cache(domains: list[str], enabled: bool = True, limit: int = 20
         if clean and clean not in seen:
             seen.add(clean)
             clean_domains.append(clean)
+
+    now = _now_epoch()
+    refresh_queue: list[tuple[int, float, str]] = []
+    for domain in clean_domains:
+        row = _cached_favicon(domain)
+        path = _existing_favicon_path(domain, cached=row)
+        stale = _favicon_is_stale(row, path=path, now=now)
+        if not force:
+            if path and not stale:
+                continue
+            # Note: A recent failed lookup is a valid negative cache entry. Do not
+            # spend a network slot on it until its TTL expires.
+            if not path and row and row.get("error") and not stale:
+                continue
+
+        # Missing files first, then the oldest stale entries.
+        priority = 0 if not path else 1
+        updated_epoch = float(row.get("updated_epoch") or 0) if row else 0.0
+        refresh_queue.append((priority, updated_epoch, domain))
+
+    refresh_queue.sort(key=lambda item: (item[0], item[1], item[2]))
+    selected = refresh_queue[:max(0, int(limit or 0))]
+
     checked = 0
     cached = 0
     errors: list[dict] = []
-    for domain in clean_domains[:max(0, int(limit or 0))]:
+    for _priority, _updated_epoch, domain in selected:
         checked += 1
         try:
             path, _mime = favicon_path(domain, enabled=enabled, force=force)
@@ -473,4 +539,9 @@ def warm_favicon_cache(domains: list[str], enabled: bool = True, limit: int = 20
                 cached += 1
         except Exception as exc:
             errors.append({"domain": domain, "error": str(exc)})
-    return {"checked": checked, "cached": cached, "errors": errors[:10]}
+    return {
+        "checked": checked,
+        "cached": cached,
+        "pending": max(0, len(refresh_queue) - len(selected)),
+        "errors": errors[:10],
+    }
