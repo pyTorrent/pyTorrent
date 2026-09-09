@@ -384,13 +384,13 @@ def _remote_join(*parts: str) -> str:
     return posixpath.normpath(posixpath.join(*cleaned)) if cleaned else ""
 
 
-def _run_remote_move(c: ScgiRtorrentClient, src: str, dst: str, poll_interval: float = 2.0) -> None:
+def _run_remote_move(c: ScgiRtorrentClient, src: str, dst: str, poll_interval: float = 2.0, *, overwrite_existing: bool = True) -> None:
     """Run a remote mv without binding the transfer time to the SCGI timeout."""
     # Note: Fast same-filesystem renames are polled quickly first; longer cross-filesystem moves back off to the existing low-pressure interval.
     token = uuid.uuid4().hex
     status_path = f"/tmp/pytorrent-move-{token}.status"
     start_script = (
-        'src=$1; dst=$2; status=$3; tmp=${status}.tmp; '
+        'src=$1; dst=$2; status=$3; overwrite=$4; tmp=${status}.tmp; '
         'rm -f "$status" "$tmp"; '
         '( '
         'rc=0; '
@@ -400,7 +400,9 @@ def _run_remote_move(c: ScgiRtorrentClient, src: str, dst: str, poll_interval: f
         'if [ $rc -eq 0 ] && [ "$src" = "$dst" ]; then :; '
         'elif [ $rc -eq 0 ] && { [ -e "$dst" ] || [ -L "$dst" ]; } && [ ! -e "$src" ] && [ ! -L "$src" ]; then :; '
         'elif [ $rc -eq 0 ] && [ ! -e "$src" ] && [ ! -L "$src" ]; then echo "source missing: $src" >&2; rc=3; '
-        'elif [ $rc -eq 0 ] && { [ -e "$dst" ] || [ -L "$dst" ]; }; then rm -rf -- "$dst" && mv -f -- "$src" "$dst" || rc=$?; '
+        'elif [ $rc -eq 0 ] && { [ -e "$dst" ] || [ -L "$dst" ]; }; then '
+        'if [ "$overwrite" = "1" ]; then rm -rf -- "$dst" && mv -f -- "$src" "$dst" || rc=$?; '
+        'else echo "destination already exists: $dst" >&2; rc=6; fi; '
         'elif [ $rc -eq 0 ]; then mv -f -- "$src" "$dst" || rc=$?; '
         'fi; '
         'if [ $rc -eq 0 ]; then printf "OK\n" > "$status"; '
@@ -412,7 +414,10 @@ def _run_remote_move(c: ScgiRtorrentClient, src: str, dst: str, poll_interval: f
     poll_script = 'status=$1; [ -f "$status" ] && cat "$status" || true'
     cleanup_script = 'rm -f "$1"'
 
-    _rt_execute_allow_timeout(c, "execute.throw", "sh", "-c", start_script, "pytorrent-move-start", src, dst, status_path)
+    _rt_execute_allow_timeout(
+        c, "execute.throw", "sh", "-c", start_script, "pytorrent-move-start",
+        src, dst, status_path, "1" if overwrite_existing else "0",
+    )
 
     fast_poll_delays = (0.05, 0.1, 0.2, 0.4)
     poll_attempt = 0

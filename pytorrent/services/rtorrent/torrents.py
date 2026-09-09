@@ -1344,7 +1344,59 @@ def _read_exported_torrent_bytes(profile: dict, torrent_hash: str, *, export_con
     return data, item
 
 
-def _move_profile_transfer_data(source_client: ScgiRtorrentClient, torrent_hash: str, target_path: str, *, source_data_path: str = "") -> dict:
+def profile_transfer_destination_conflicts(source_profile: dict, torrent_hashes: list[str], target_path: str) -> list[dict]:
+    """Return existing destination paths that a physical profile transfer would replace."""
+    hashes = _unique_torrent_hashes(torrent_hashes)
+    clean_target = _remote_clean_path(target_path)
+    if not hashes or not clean_target:
+        return []
+
+    source_client = client_for(source_profile)
+    states = _profile_transfer_source_states(source_client, hashes)
+    candidates: list[dict] = []
+    for torrent_hash in hashes:
+        try:
+            src = _profile_transfer_data_path(states.get(torrent_hash) or {}, torrent_hash)
+        except Exception:
+            continue
+        dst = _remote_join(clean_target, posixpath.basename(src.rstrip("/")))
+        if not dst or src == dst:
+            continue
+        candidates.append({"hash": torrent_hash, "source": src, "destination": dst})
+
+    if not candidates:
+        return []
+
+    conflicts: list[dict] = []
+    script = (
+        'for p in "$@"; do '
+        'if [ -e "$p" ] || [ -L "$p" ]; then printf "1\n"; else printf "0\n"; fi; '
+        'done'
+    )
+    # Note: Keep each execute.capture call bounded for large bulk selections.
+    for offset in range(0, len(candidates), 64):
+        batch = candidates[offset:offset + 64]
+        output = str(
+            _rt_execute_capture_readonly(
+                source_client, "sh", "-c", script, "pytorrent-transfer-conflicts",
+                *[item["destination"] for item in batch],
+            ) or ""
+        )
+        flags = output.splitlines()
+        for index, item in enumerate(batch):
+            if index < len(flags) and flags[index].strip() == "1":
+                conflicts.append(item)
+    return conflicts
+
+
+def _move_profile_transfer_data(
+    source_client: ScgiRtorrentClient,
+    torrent_hash: str,
+    target_path: str,
+    *,
+    source_data_path: str = "",
+    overwrite_existing: bool = False,
+) -> dict:
     """Move one torrent data path for a profile transfer after backend permission checks."""
     # Note: Bulk transfers pass the already fetched live data path so move preparation does not re-query d.base_path/d.directory per torrent.
     src = _remote_clean_path(source_data_path or _torrent_data_path(source_client, torrent_hash))
@@ -1361,7 +1413,7 @@ def _move_profile_transfer_data(source_client: ScgiRtorrentClient, torrent_hash:
         pass
     if src == dst:
         return {"skipped_data_move": "source and destination are the same", "moved_to": dst}
-    _run_remote_move(source_client, src, dst)
+    _run_remote_move(source_client, src, dst, overwrite_existing=overwrite_existing)
     return {"moved_from": src, "moved_to": dst}
 
 
@@ -1373,6 +1425,7 @@ def transfer_profile(source_profile: dict, target_profile: dict, torrent_hashes:
     resume_state = resume_state or {}
     target_path = _remote_clean_path(payload.get("target_path") or payload.get("path") or "")
     move_data = bool(payload.get("move_data"))
+    overwrite_existing = bool(payload.get("overwrite_existing"))
     post_action = str(payload.get("post_action") or "none").strip().lower()
     if post_action not in {"none", "current", "start", "stop", "pause", "check", "recheck"}:
         raise ValueError("Unsupported post-transfer action")
@@ -1494,7 +1547,10 @@ def transfer_profile(source_profile: dict, target_profile: dict, torrent_hashes:
         if move_data:
             try:
                 source_data_path = _profile_transfer_data_path(source_state, h)
-                move_result = _move_profile_transfer_data(source_client, h, target_path, source_data_path=source_data_path)
+                move_result = _move_profile_transfer_data(
+                    source_client, h, target_path, source_data_path=source_data_path,
+                    overwrite_existing=overwrite_existing,
+                )
             except Exception as move_exc:
                 if not _is_missing_info_hash_error(move_exc):
                     raise

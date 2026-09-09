@@ -664,6 +664,7 @@ def _profile_transfer_payload(source_profile: dict, data: dict, *, require_hashe
         "target_inside_allowed_roots": inside_allowed_root,
         "target_outside_roots": target_outside_roots,
         "allow_outside_roots": allow_outside_roots,
+        "overwrite_existing": data.get("overwrite_existing") is True,
         "outside_roots_confirmation_required": bool(target_outside_roots and not allow_outside_roots),
         "outside_roots_can_confirm": bool(target_outside_roots and target_profile_write_check.get("ok")),
         "target_write_check": write_check,
@@ -675,6 +676,14 @@ def _profile_transfer_payload(source_profile: dict, data: dict, *, require_hashe
 
 def _validated_profile_transfer_payload(source_profile: dict, data: dict) -> dict:
     payload = _profile_transfer_payload(source_profile, data, require_hashes=True)
+    if payload.get("move_data"):
+        conflicts = rtorrent.profile_transfer_destination_conflicts(
+            source_profile, payload.get("hashes") or [], payload.get("target_path") or "",
+        )
+        if conflicts and not payload.get("overwrite_existing"):
+            raise ValueError(
+                f"Destination already exists for {len(conflicts)} selected torrent(s). Confirm overwrite before continuing"
+            )
     if payload.get("target_outside_roots"):
         # Note: Outside-root transfers remain blocked at the action endpoint until the target profile is writable and the caller sends an explicit confirmation flag.
         target_check = payload.get("target_profile_write_check") or {}
@@ -700,6 +709,13 @@ def profile_transfer_validate():
             if payload.get("move_data")
             else {"ok": True, "skipped": "metadata_only", "path": "", "warning": "Existing torrent data paths are preserved from the source profile."}
         )
+        conflicts = (
+            rtorrent.profile_transfer_destination_conflicts(
+                profile, payload.get("hashes") or [], payload.get("target_path") or "",
+            )
+            if payload.get("move_data") and payload.get("hashes")
+            else []
+        )
         return ok({
             "target_profile_id": payload["target_profile_id"],
             "target_path": payload["target_path"],
@@ -715,6 +731,9 @@ def profile_transfer_validate():
             "allow_outside_roots": bool(payload.get("allow_outside_roots")),
             "outside_roots_confirmation_required": bool(payload.get("outside_roots_confirmation_required")),
             "outside_roots_can_confirm": bool(payload.get("outside_roots_can_confirm")),
+            "destination_conflicts": conflicts,
+            "destination_conflict_count": len(conflicts),
+            "overwrite_existing": bool(payload.get("overwrite_existing")),
             "disk": disk,
             "target_allowed_roots": payload.get("target_allowed_roots") or [],
         })
