@@ -336,6 +336,7 @@ CREATE TABLE IF NOT EXISTS smart_queue_settings (
   min_peers INTEGER DEFAULT 0,
   ignore_seed_peer INTEGER DEFAULT 0,
   ignore_speed INTEGER DEFAULT 0,
+  enforce_active_limit_immediately INTEGER DEFAULT 1,
   manage_stopped INTEGER DEFAULT 0,
   cooldown_minutes INTEGER DEFAULT 10,
   last_run_at TEXT,

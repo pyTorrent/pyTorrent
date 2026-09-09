@@ -30,6 +30,7 @@ def _simulation_settings(current: dict[str, Any], data: dict[str, Any] | None = 
         'enabled',
         'ignore_seed_peer',
         'ignore_speed',
+        'enforce_active_limit_immediately',
         'protect_active_below_cap',
         'prefer_partial_progress',
         'auto_stop_idle',
@@ -358,6 +359,7 @@ def _limit_simulation_timeline(timeline: list[dict[str, Any]], maximum: int = 10
 
 def dry_run(profile: dict | None = None, user_id: int | None = None, data: dict[str, Any] | None = None) -> dict[str, Any]:
     """Return a read-only Smart Queue execution plan for current torrents and draft settings."""
+    # Note: Dry-run mirrors the live overflow switch and always ranks active-limit stops from the lowest progress upward.
     profile = profile or queue.active_profile()
     if not profile:
         return {'ok': False, 'error': 'No active rTorrent profile'}
@@ -387,6 +389,7 @@ def dry_run(profile: dict | None = None, user_id: int | None = None, data: dict[
     min_peers = int(settings.get('min_peers') or 0)
     stalled_seconds = int(settings.get('stalled_seconds') or 300)
     stop_batch_size = max(1, int(settings.get('stop_batch_size') or 50))
+    enforce_active_limit_immediately = bool(int(settings.get('enforce_active_limit_immediately', 1)))
     start_grace_seconds = max(0, int(settings.get('start_grace_seconds') or 0))
     ignore_seed_peer = bool(int(settings.get('ignore_seed_peer') or 0))
     ignore_speed = bool(int(settings.get('ignore_speed') or 0))
@@ -436,19 +439,23 @@ def dry_run(profile: dict | None = None, user_id: int | None = None, data: dict[
     def dry_run_sort_speed(t: dict[str, Any]) -> int:
         return int(simulated_current_share if simulated_current_share is not None else int(t.get('down_rate') or 0))
 
-    stop_rank = sorted(
-        stop_eligible,
+    hard_limit_rank = sorted(
+        downloading,
         key=lambda t: (
+            queue._progress_value(t),
             0 if str(t.get('hash') or '') in stalled_hashes else 1,
             dry_run_sort_speed(t),
             int(t.get('seeds') or 0),
             int(t.get('peers') or 0),
+            str(t.get('hash') or ''),
         ),
     )
-    capped_over_limit = min(over_limit, len(stop_rank))
-    to_stop = stop_rank[:min(capped_over_limit, stop_batch_size)]
+    capped_over_limit = min(over_limit, len(hard_limit_rank))
+    # Note: Dry-run mirrors the live overflow switch and still ranks target-limit stops from the lowest progress upward.
+    hard_limit_stop_count = capped_over_limit if enforce_active_limit_immediately else min(capped_over_limit, stop_batch_size)
+    to_stop = hard_limit_rank[:hard_limit_stop_count]
     stop_hashes = {str(t.get('hash') or '') for t in to_stop}
-    remaining_stop_budget = max(0, stop_batch_size - len(to_stop))
+    remaining_stop_budget = stop_batch_size if enforce_active_limit_immediately else max(0, stop_batch_size - len(to_stop))
     free_slots_before_stop = max(0, max_active - len(downloading))
     replacement_capacity = max(0, len(candidates) - free_slots_before_stop)
     stalled_replacement_allowed = not (protect_active_below_cap and len(downloading) < max_active and over_limit == 0)
@@ -508,6 +515,8 @@ def dry_run(profile: dict | None = None, user_id: int | None = None, data: dict[
             'available_slots': available_slots,
             'over_limit': over_limit,
             'stoppable_over_limit': capped_over_limit,
+            'hard_limit_stops_planned': hard_limit_stop_count,
+            'enforce_active_limit_immediately': enforce_active_limit_immediately,
             'stalled_detected': len(stalled),
             'stalled_protected': protected_stalled,
             'waiting_candidates': len(candidates),

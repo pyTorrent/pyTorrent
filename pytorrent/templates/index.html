@@ -1935,8 +1935,7 @@
                               min="30" value="300"><small>How long a matching active torrent must stay stalled before it
                               can be replaced.</small></label><label class="smart-input-field"><span>Max stops per
                               check</span><input id="smartStopBatch" class="form-control form-control-sm" type="number"
-                              min="1" value="50"><small>Maximum stalled/overflow downloads Smart Queue may stop in one
-                              pass.</small></label><label class="smart-input-field"><span>Start grace
+                              min="1" value="50"><small>Maximum stops per pass when immediate active-limit enforcement is disabled; otherwise this limits stalled replacements.</small></label><label class="smart-input-field"><span>Start grace
                               seconds</span><input id="smartStartGrace" class="form-control form-control-sm"
                               type="number" min="0" value="900"><small>Newly queue-started torrents are protected from
                               stalled cleanup during this warm-up.</small></label><label
@@ -1947,6 +1946,14 @@
                             class="smart-input-field"><span>Min peers</span><input id="smartMinPeers"
                               class="form-control form-control-sm" type="number" min="0" value="0"><small>0 means only
                               seed threshold is required.</small></label></div>
+                        <!-- Note: This switch decides whether active overflow bypasses Max stops per check while preserving the same lowest-progress ranking. -->
+                        <div class="smart-setting-row smart-enforce-active-limit-row">
+                          <div><label class="form-check-label" for="smartEnforceActiveLimitImmediately">Enforce active limit immediately</label>
+                            <div class="form-text">When enabled, Smart Queue ignores Max stops per check only for downloads above the active target and stops the lowest-progress overflow in the same pass. When disabled, overflow also respects Max stops per check.</div>
+                          </div>
+                          <div class="form-check form-switch"><input id="smartEnforceActiveLimitImmediately"
+                              class="form-check-input" type="checkbox" checked></div>
+                        </div>
                         <div class="smart-setting-row smart-protect-active-row">
                           <div><label class="form-check-label" for="smartProtectActiveBelowCap">Protect active count
                               below cap</label>

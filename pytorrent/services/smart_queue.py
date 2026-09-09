@@ -147,6 +147,7 @@ def _default_settings(profile_id: int) -> dict[str, Any]:
         'min_peers': 0,
         'ignore_seed_peer': 0,
         'ignore_speed': 0,
+        'enforce_active_limit_immediately': 1,
         'manage_stopped': 1,
         'cooldown_minutes': 10,
         'last_run_at': None,
@@ -190,6 +191,8 @@ def save_settings(profile_id: int, data: dict[str, Any], user_id: int | None = N
         'ignore_seed_peer': 1 if data.get('ignore_seed_peer', current.get('ignore_seed_peer')) else 0,
         # Note: Ignore speed removes low transfer rate from stalled detection; with both ignores enabled only the stalled timer matters.
         'ignore_speed': 1 if data.get('ignore_speed', current.get('ignore_speed')) else 0,
+        # Note: Immediate active-limit enforcement may bypass Max stops per check only for overflow above the configured target.
+        'enforce_active_limit_immediately': 1 if data.get('enforce_active_limit_immediately', current.get('enforce_active_limit_immediately', 1)) else 0,
         # Note: Compatibility field retained; enabled Smart Queue always manages stopped torrents and never manages user-paused torrents.
         'manage_stopped': 1,
         # Note: User-visible cooldown limits noisy Smart Queue runs while manual checks can still force execution.
@@ -223,8 +226,8 @@ def save_settings(profile_id: int, data: dict[str, Any], user_id: int | None = N
     now = utcnow()
     with connect() as conn:
         conn.execute(
-            '''INSERT INTO smart_queue_settings(profile_id,enabled,max_active_downloads,stalled_seconds,min_speed_bytes,min_seeds,min_peers,ignore_seed_peer,ignore_speed,manage_stopped,cooldown_minutes,stop_batch_size,start_grace_seconds,protect_active_below_cap,prefer_partial_progress,auto_stop_idle,refill_enabled,refill_interval_minutes,surge_refill_enabled,surge_refill_interval_minutes,surge_refill_batch_size,updated_at)
-               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            '''INSERT INTO smart_queue_settings(profile_id,enabled,max_active_downloads,stalled_seconds,min_speed_bytes,min_seeds,min_peers,ignore_seed_peer,ignore_speed,enforce_active_limit_immediately,manage_stopped,cooldown_minutes,stop_batch_size,start_grace_seconds,protect_active_below_cap,prefer_partial_progress,auto_stop_idle,refill_enabled,refill_interval_minutes,surge_refill_enabled,surge_refill_interval_minutes,surge_refill_batch_size,updated_at)
+               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                ON CONFLICT(profile_id) DO UPDATE SET
                enabled=excluded.enabled,
                max_active_downloads=excluded.max_active_downloads,
@@ -234,6 +237,7 @@ def save_settings(profile_id: int, data: dict[str, Any], user_id: int | None = N
                min_peers=excluded.min_peers,
                ignore_seed_peer=excluded.ignore_seed_peer,
                ignore_speed=excluded.ignore_speed,
+               enforce_active_limit_immediately=excluded.enforce_active_limit_immediately,
                manage_stopped=excluded.manage_stopped,
                cooldown_minutes=excluded.cooldown_minutes,
                stop_batch_size=excluded.stop_batch_size,
@@ -247,7 +251,7 @@ def save_settings(profile_id: int, data: dict[str, Any], user_id: int | None = N
                surge_refill_interval_minutes=excluded.surge_refill_interval_minutes,
                surge_refill_batch_size=excluded.surge_refill_batch_size,
                updated_at=excluded.updated_at''',
-            (profile_id, settings['enabled'], settings['max_active_downloads'], settings['stalled_seconds'], settings['min_speed_bytes'], settings['min_seeds'], settings['min_peers'], settings['ignore_seed_peer'], settings['ignore_speed'], settings['manage_stopped'], settings['cooldown_minutes'], settings['stop_batch_size'], settings['start_grace_seconds'], settings['protect_active_below_cap'], settings['prefer_partial_progress'], settings['auto_stop_idle'], settings['refill_enabled'], settings['refill_interval_minutes'], settings['surge_refill_enabled'], settings['surge_refill_interval_minutes'], settings['surge_refill_batch_size'], now),
+            (profile_id, settings['enabled'], settings['max_active_downloads'], settings['stalled_seconds'], settings['min_speed_bytes'], settings['min_seeds'], settings['min_peers'], settings['ignore_seed_peer'], settings['ignore_speed'], settings['enforce_active_limit_immediately'], settings['manage_stopped'], settings['cooldown_minutes'], settings['stop_batch_size'], settings['start_grace_seconds'], settings['protect_active_below_cap'], settings['prefer_partial_progress'], settings['auto_stop_idle'], settings['refill_enabled'], settings['refill_interval_minutes'], settings['surge_refill_enabled'], settings['surge_refill_interval_minutes'], settings['surge_refill_batch_size'], now),
         )
     return get_settings(profile_id, user_id)
 
@@ -1502,6 +1506,7 @@ def _disable_when_idle(profile_id: int, user_id: int, torrents: list[dict[str, A
     return {'ok': True, 'enabled': False, 'auto_stopped_idle': True, 'paused': [], 'resumed': [], 'stopped': [], 'started': [], 'checked': len(torrents), 'settings': settings, 'message': 'Smart Queue stopped because there is no active or waiting work.'}
 
 def check(profile: dict | None = None, user_id: int | None = None, force: bool = False, cleanup_disabled: bool = True, torrents_snapshot: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    # Note: Target overflow always uses lowest-progress ranking; the dedicated setting decides whether it is enforced in one pass or shares the stop batch limit.
     profile = profile or active_profile()
     if not profile:
         return {'ok': False, 'error': 'No active rTorrent profile'}
@@ -1597,6 +1602,7 @@ def check(profile: dict | None = None, user_id: int | None = None, force: bool =
     ignore_speed = bool(int(settings.get('ignore_speed') or 0))
     stalled_seconds = int(settings.get('stalled_seconds') or 300)
     stop_batch_size = max(1, int(settings.get('stop_batch_size') or 50))
+    enforce_active_limit_immediately = bool(int(settings.get('enforce_active_limit_immediately', 1)))
     start_grace_seconds = max(0, int(settings.get('start_grace_seconds') or 0))
     protect_active_below_cap = bool(int(settings.get('protect_active_below_cap', 1) or 0))
     timer_key = _stalled_timer_key(min_speed, min_seeds, min_peers, stalled_seconds, ignore_seed_peer, ignore_speed)
@@ -1620,7 +1626,7 @@ def check(profile: dict | None = None, user_id: int | None = None, force: bool =
             if ignore_speed and int(t.get('down_rate') or 0) <= max(0, int(min_speed or 0)):
                 ignored_speed_count += 1
             is_stalled = _is_stalled_download(t, min_speed, min_seeds, min_peers, stalled_seconds, ignore_seed_peer, ignore_speed)
-            # Note: Hard-limit enforcement uses only non-ignored weak criteria before choosing weak items.
+            # Note: Keep the weak-activity count for diagnostics; hard-limit enforcement no longer depends on it.
             if _is_low_activity_download(t, min_speed, min_seeds, min_peers, stalled_seconds, ignore_seed_peer, ignore_speed):
                 stop_eligible.append(t)
             h = str(t.get('hash') or '')
@@ -1655,29 +1661,28 @@ def check(profile: dict | None = None, user_id: int | None = None, force: bool =
     max_active = max(1, int(settings.get('max_active_downloads') or 5))
     stalled_hashes = {str(t.get('hash') or '') for t in stalled}
 
-    # Enforce the active-download cap using only torrents that the current snapshot already proves idle/weak.
-    # Note: A transferring or recently active torrent is never stopped just because the cap is exceeded.
+    # Note: The configured active target is enforced from the least-progressed downloads, regardless of current transfer activity.
+    # Immediate mode drains the whole overflow in one pass; compatibility mode spreads it across Max stops per check.
     over_limit = max(0, len(downloading) - max_active)
-    stop_eligible_hashes = {str(t.get('hash') or '') for t in stop_eligible}
-    def stop_rank_speed(t: dict[str, Any]) -> int:
-        # Note: Live checks rank stop candidates by current speed only; simulated speed belongs to dry-run planning.
-        return int(t.get('down_rate') or 0)
-
-    stop_rank = sorted(
-        stop_eligible,
+    hard_limit_rank = sorted(
+        downloading,
         key=lambda t: (
+            _progress_value(t),
             0 if str(t.get('hash') or '') in stalled_hashes else 1,
-            stop_rank_speed(t),
+            int(t.get('down_rate') or 0),
             int(t.get('seeds') or 0),
             int(t.get('peers') or 0),
+            str(t.get('hash') or ''),
         ),
     )
-    capped_over_limit = min(over_limit, len(stop_rank))
-    # Note: The user-defined batch limit caps all automatic stops in one pass.
-    # Hard cap overflow is handled first, then stalled replacement uses only proven spare candidate capacity.
-    to_stop: list[dict[str, Any]] = stop_rank[:min(capped_over_limit, stop_batch_size)]
-    stop_hashes = {str(t.get('hash') or '') for t in to_stop}
-    remaining_stop_budget = max(0, stop_batch_size - len(to_stop))
+    capped_over_limit = min(over_limit, len(hard_limit_rank))
+    # Note: The dedicated switch controls whether target overflow bypasses Max stops per check; ranking always keeps lowest-progress torrents first.
+    hard_limit_stop_count = capped_over_limit if enforce_active_limit_immediately else min(capped_over_limit, stop_batch_size)
+    to_stop: list[dict[str, Any]] = hard_limit_rank[:hard_limit_stop_count]
+    hard_limit_stop_hashes = {str(t.get('hash') or '') for t in to_stop if str(t.get('hash') or '')}
+    stop_hashes = set(hard_limit_stop_hashes)
+    # Note: When immediate enforcement is disabled, overflow consumes the same stop budget as stalled replacements.
+    remaining_stop_budget = stop_batch_size if enforce_active_limit_immediately else max(0, stop_batch_size - len(hard_limit_stop_hashes))
     free_slots_before_stop = max(0, max_active - len(downloading))
     replacement_capacity = max(0, len(candidates) - free_slots_before_stop)
     stalled_replacement_allowed = not (protect_active_below_cap and len(downloading) < max_active and over_limit == 0)
@@ -1703,9 +1708,10 @@ def check(profile: dict | None = None, user_id: int | None = None, force: bool =
         if not h or not _has_stalled_label(str(t.get('label') or '')):
             continue
         if _has_recent_transfer_activity(t, stalled_seconds):
-            # Note: Snapshot activity is enough to remove Stalled; no per-torrent live RPC guard is needed.
-            snapshot_activity_protected.append(h)
-            snapshot_activity_protected_hashes.add(h)
+            # Note: Clear stale Stalled state for active transfers, but hard-limit selections still have to leave the queue.
+            if h not in hard_limit_stop_hashes:
+                snapshot_activity_protected.append(h)
+                snapshot_activity_protected_hashes.add(h)
             _clear_stalled_label(c, h, str(t.get('label') or ''))
             with connect() as conn:
                 conn.execute('DELETE FROM smart_queue_stalled WHERE profile_id=? AND torrent_hash=?', (profile_id, h))
@@ -1721,11 +1727,12 @@ def check(profile: dict | None = None, user_id: int | None = None, force: bool =
 
     for t in to_stop:
         h = str(t.get('hash') or '')
+        is_hard_limit_stop = h in hard_limit_stop_hashes
         try:
-            if not h or h in snapshot_activity_protected_hashes:
+            if not h or (h in snapshot_activity_protected_hashes and not is_hard_limit_stop):
                 continue
-            if _has_recent_transfer_activity(t, stalled_seconds):
-                # Note: Snapshot activity wins; active torrents are protected without slow per-item live checks.
+            if not is_hard_limit_stop and _has_recent_transfer_activity(t, stalled_seconds):
+                # Note: Recent activity protects only optional stalled cleanup; hard-cap enforcement must still reach the configured target.
                 snapshot_activity_protected.append(h)
                 snapshot_activity_protected_hashes.add(h)
                 _clear_stalled_label(c, h, str(t.get('label') or ''))
@@ -1802,6 +1809,7 @@ def check(profile: dict | None = None, user_id: int | None = None, force: bool =
         'active_after_expected': active_after_stop + len(started_by_queue),
         'over_limit': over_limit,
         'stoppable_over_limit': capped_over_limit,
+        'hard_limit_stops_planned': len(hard_limit_stop_hashes),
         'stopped': stopped_by_queue,
         'started': started_by_queue,
         'start_requested': start_requested,
@@ -1831,6 +1839,7 @@ def check(profile: dict | None = None, user_id: int | None = None, force: bool =
         'ignored_speed_count': ignored_speed_count if ignore_speed else 0,
         'stalled_seconds': stalled_seconds,
         'stop_batch_size': stop_batch_size,
+        'enforce_active_limit_immediately': enforce_active_limit_immediately,
         'start_grace_seconds': start_grace_seconds,
         'start_grace_protected': len(start_grace_hashes),
         'replacement_capacity': replacement_capacity,
@@ -1852,6 +1861,7 @@ def check(profile: dict | None = None, user_id: int | None = None, force: bool =
             'max_active_downloads': max_active,
             'over_limit': over_limit,
             'stoppable_over_limit': capped_over_limit,
+            'hard_limit_stops_planned': len(hard_limit_stop_hashes),
             'stopped': len(stopped_by_queue),
             'stalled': len(stalled),
             'protected_stalled': protected_stalled,
@@ -1881,12 +1891,14 @@ def check(profile: dict | None = None, user_id: int | None = None, force: bool =
                 'ignore_speed': ignore_speed,
                 'stalled_seconds': stalled_seconds,
                 'stop_batch_size': stop_batch_size,
+                'enforce_active_limit_immediately': enforce_active_limit_immediately,
                 'start_grace_seconds': start_grace_seconds,
                 'protect_active_below_cap': protect_active_below_cap,
                 'auto_stop_idle': bool(int(settings.get('auto_stop_idle') or 0)),
                 'prefer_partial_progress': prefer_partial_progress,
             },
             'rtorrent_cap': rtorrent_cap,
+            'hard_limit_to_stop': _diagnostics_torrents([t for t in to_stop if str(t.get('hash') or '') in hard_limit_stop_hashes]),
             'to_stop': _diagnostics_torrents(to_stop),
             'snapshot_activity_protected': _diagnostics_sample(snapshot_activity_protected),
             'stalled': _diagnostics_torrents(stalled),
@@ -1906,4 +1918,4 @@ def check(profile: dict | None = None, user_id: int | None = None, force: bool =
     mark_run(profile_id, user_id)
     settings = get_settings(profile_id, user_id)
     remaining = cooldown_remaining(settings)
-    return {'ok': True, 'enabled': bool(settings.get('enabled')), 'paused': stopped_by_queue, 'resumed': started_by_queue, 'stopped': stopped_by_queue, 'started': started_by_queue, 'start_requested': start_requested, 'start_batch_size': start_summary['start_batch_size'], 'start_verify_attempts': start_summary['start_verify_attempts'], 'start_verify_delay_seconds': start_summary['start_verify_delay_seconds'], 'waiting_labeled': len(to_label_waiting), 'stalled_labeled': stalled_labeled, 'excluded_stalled': len(stalled_label_hashes), 'manual_labeled_running': len(manual_labeled_running), 'labels_restored': restored, 'labels_failed': label_failed, 'stop_failed': stop_failed, 'start_failed': start_failed, 'start_no_effect': start_no_effect, 'start_pending_confirmation': start_pending_confirmation, 'active_verified': active_verified, 'active_before': len(downloading), 'active_after_stop': active_after_stop, 'over_limit': over_limit, 'stoppable_over_limit': capped_over_limit, 'stop_eligible': len(stop_eligible), 'start_source_skipped': len(source_skipped), 'ignore_seed_peer': ignore_seed_peer, 'ignore_speed': ignore_speed, 'ignored_seed_peer_count': ignored_seed_peer_count if ignore_seed_peer else 0, 'ignored_speed_count': ignored_speed_count if ignore_speed else 0, 'stalled_seconds': stalled_seconds, 'stalled_timer_key': timer_key, 'stop_batch_size': stop_batch_size, 'start_grace_seconds': start_grace_seconds, 'protect_active_below_cap': protect_active_below_cap, 'prefer_partial_progress': prefer_partial_progress, 'auto_stop_idle': bool(int(settings.get('auto_stop_idle') or 0)), 'stalled_replacement_allowed': stalled_replacement_allowed, 'start_grace_protected': len(start_grace_hashes), 'replacement_capacity': replacement_capacity, 'protected_stalled': protected_stalled, 'healthy_active_protected': len(snapshot_activity_protected), 'snapshot_activity_protected': snapshot_activity_protected, 'rtorrent_cap': rtorrent_cap, 'checked': len(torrents), 'excluded': len(user_excluded), 'settings': settings, 'cooldown_remaining_seconds': remaining, 'surge_refill_remaining_seconds': surge_refill_remaining(settings)}
+    return {'ok': True, 'enabled': bool(settings.get('enabled')), 'paused': stopped_by_queue, 'resumed': started_by_queue, 'stopped': stopped_by_queue, 'started': started_by_queue, 'start_requested': start_requested, 'start_batch_size': start_summary['start_batch_size'], 'start_verify_attempts': start_summary['start_verify_attempts'], 'start_verify_delay_seconds': start_summary['start_verify_delay_seconds'], 'waiting_labeled': len(to_label_waiting), 'stalled_labeled': stalled_labeled, 'excluded_stalled': len(stalled_label_hashes), 'manual_labeled_running': len(manual_labeled_running), 'labels_restored': restored, 'labels_failed': label_failed, 'stop_failed': stop_failed, 'start_failed': start_failed, 'start_no_effect': start_no_effect, 'start_pending_confirmation': start_pending_confirmation, 'active_verified': active_verified, 'active_before': len(downloading), 'active_after_stop': active_after_stop, 'over_limit': over_limit, 'stoppable_over_limit': capped_over_limit, 'hard_limit_stops_planned': len(hard_limit_stop_hashes), 'stop_eligible': len(stop_eligible), 'start_source_skipped': len(source_skipped), 'ignore_seed_peer': ignore_seed_peer, 'ignore_speed': ignore_speed, 'ignored_seed_peer_count': ignored_seed_peer_count if ignore_seed_peer else 0, 'ignored_speed_count': ignored_speed_count if ignore_speed else 0, 'stalled_seconds': stalled_seconds, 'stalled_timer_key': timer_key, 'stop_batch_size': stop_batch_size, 'enforce_active_limit_immediately': enforce_active_limit_immediately, 'start_grace_seconds': start_grace_seconds, 'protect_active_below_cap': protect_active_below_cap, 'prefer_partial_progress': prefer_partial_progress, 'auto_stop_idle': bool(int(settings.get('auto_stop_idle') or 0)), 'stalled_replacement_allowed': stalled_replacement_allowed, 'start_grace_protected': len(start_grace_hashes), 'replacement_capacity': replacement_capacity, 'protected_stalled': protected_stalled, 'healthy_active_protected': len(snapshot_activity_protected), 'snapshot_activity_protected': snapshot_activity_protected, 'rtorrent_cap': rtorrent_cap, 'checked': len(torrents), 'excluded': len(user_excluded), 'settings': settings, 'cooldown_remaining_seconds': remaining, 'surge_refill_remaining_seconds': surge_refill_remaining(settings)}

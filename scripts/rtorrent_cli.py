@@ -46,13 +46,18 @@ class SCGITransport(xmlrpc.client.Transport):
         self.timeout = timeout
 
     def request(self, host: str, handler: str, request_body: bytes, verbose: bool = False):
+        # Note: Match pyTorrent's SCGI envelope and accept both CRLF and LF response headers so rTorrent/proxy variants yield a clean XML-RPC body.
         body = request_body.encode("utf-8") if isinstance(request_body, str) else request_body
+        rpc_path = handler or "/RPC2"
 
         headers = {
             "CONTENT_LENGTH": str(len(body)),
             "SCGI": "1",
             "REQUEST_METHOD": "POST",
-            "REQUEST_URI": handler or "/RPC2",
+            "REQUEST_URI": rpc_path,
+            "SCRIPT_NAME": rpc_path,
+            "SERVER_PROTOCOL": "HTTP/1.1",
+            "CONTENT_TYPE": "text/xml",
         }
 
         header_bytes = b""
@@ -70,10 +75,16 @@ class SCGITransport(xmlrpc.client.Transport):
                     break
                 response += chunk
 
-        # rTorrent over SCGI usually returns raw XML body,
-        # but some proxies may prepend HTTP headers.
         if b"\r\n\r\n" in response:
             response = response.split(b"\r\n\r\n", 1)[1]
+        elif b"\n\n" in response:
+            response = response.split(b"\n\n", 1)[1]
+        response = response.strip()
+        if not response:
+            raise ConnectionError("Empty response body from rTorrent SCGI")
+        if not response.startswith(b"<"):
+            first_line = response.splitlines()[0][:160].decode("utf-8", errors="replace")
+            raise ConnectionError(f"Invalid XML-RPC response from rTorrent SCGI: {first_line}")
 
         return self.parse_response_bytes(response)
 
@@ -91,8 +102,10 @@ def make_rpc_client(url: str, timeout: int):
         if not parsed.hostname:
             raise ValueError("SCGI URL must include a host, e.g. scgi://127.0.0.1:5000")
         transport = SCGITransport(parsed.hostname, parsed.port or 5000, timeout=timeout)
+        # Note: Preserve the SCGI route from the saved profile URL; proxies may expose rTorrent below paths other than /RPC2.
+        rpc_path = parsed.path or "/RPC2"
         return xmlrpc.client.ServerProxy(
-            "http://rtorrent/RPC2",
+            f"http://rtorrent{rpc_path}",
             transport=transport,
             allow_none=True,
         )

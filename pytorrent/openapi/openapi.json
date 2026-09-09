@@ -1932,6 +1932,10 @@
           "ignore_speed": {
             "type": "boolean"
           },
+          "enforce_active_limit_immediately": {
+            "description": "When enabled, active-download overflow above the target is reduced immediately instead of being limited by Max stops per check.",
+            "type": "boolean"
+          },
           "max_active_downloads": {
             "minimum": 1,
             "type": "integer"

@@ -91,6 +91,7 @@ SMART_QUEUE_COPY_KEYS = (
     "min_peers",
     "ignore_seed_peer",
     "ignore_speed",
+    "enforce_active_limit_immediately",
     "manage_stopped",
     "cooldown_minutes",
     "refill_enabled",
